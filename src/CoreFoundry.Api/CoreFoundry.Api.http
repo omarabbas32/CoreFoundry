@@ -1,0 +1,7 @@
+@api = http://localhost:5172
+
+### Liveness (no database)
+GET {{api}}/health/live
+
+### Readiness (both MySQL accounts)
+GET {{api}}/health
