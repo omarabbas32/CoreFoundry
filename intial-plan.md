@@ -27,6 +27,10 @@ backend architecture.
 | D6 | **Foreign keys / relationships: roadmap only** | FKs complicate diffing, drop ordering and type changes considerably. |
 | D7 | Stack: **.NET 10 LTS, MySQL 8.4 LTS, Next.js (latest, App Router, TS)** | Current LTS versions. |
 | D8 | Columns and tables have **stable metadata Ids + `AppliedName`** | Lets the differ tell a *rename* (`RENAME COLUMN`, keeps data) from a *drop + add* (loses data). |
+| D9 | EF Core provider: **Oracle `MySql.EntityFrameworkCore` 10.x** (decided in M0) | Pomelo has no EF Core 10 release (latest is 9.0.0). |
+| D10 | **Local MySQL for development, no Docker for now**. Develop on MySQL 9.2, stay compatible with 8.4 LTS | Uses the MySQL server already installed. A test container setup for the full app comes later. |
+| D11 | Dev secrets in **.NET user-secrets** (`corefoundry-api-dev`), never in the repo | Standard for ASP.NET Core local development. |
+| D12 | Tests run on **Microsoft.Testing.Platform** (`global.json` `test.runner`) with xunit v3 + Shouldly | .NET 10 SDK no longer runs VSTest for these packages. FluentAssertions v8 is paid. |
 
 ---
 
