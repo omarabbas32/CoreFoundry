@@ -6,6 +6,11 @@ and manage who else has access, with role checks enforced on every route.
 
 **Depends on:** M0.
 
+> **Progress:** data model (all 7 metadata tables, see plan D13–D15) and auth endpoints are done.
+> Auth integration tests run against a local `corefoundry_test` database (`db/setup-test.sql`) and
+> skip when it isn't configured. Two refreshes racing with the same token: the loser gets 401
+> (optimistic concurrency on `RefreshTokens.RevokedAt`), which is **not** treated as theft.
+
 ---
 
 ## 1. Data (EF Core, `corefoundry` database)
@@ -13,13 +18,13 @@ and manage who else has access, with role checks enforced on every route.
 Tables: `Users`, `RefreshTokens`, `Projects`, `ProjectMembers`.
 Full columns and delete rules are in the [data model](../corefoundry-erd.html).
 
-- [ ] Entities in `Domain`, EF configurations (`IEntityTypeConfiguration<T>`)
+- [x] Entities in `Domain`, EF configurations (`IEntityTypeConfiguration<T>`)
       in `Infrastructure`. No data annotations on domain entities.
-- [ ] Enums stored as `TINYINT`: `ProjectRole { Owner=1, Admin=2, Developer=3 }`,
+- [x] Enums stored as `TINYINT`: `ProjectRole { Owner=1, Admin=2, Developer=3 }`,
       `ProjectStatus { Provisioning=0, Active=1, Failed=2, Deleting=3 }`
-- [ ] Unique indexes: `Users.Email`, `RefreshTokens.TokenHash`, `Projects.Slug`.
+- [x] Unique indexes: `Users.Email`, `RefreshTokens.TokenHash`, `Projects.Slug`.
       Plain index: `ProjectMembers.UserId`.
-- [ ] `CreatedAt` / `UpdatedAt` set by a `SaveChanges` interceptor using an
+- [x] `CreatedAt` / `UpdatedAt` set by a `SaveChanges` interceptor using an
       injected `TimeProvider` (testable time)
 - [ ] First migration `InitialAuthAndProjects`, applied on startup in
       Development only. Other environments use `dotnet ef migrations bundle`.
@@ -38,23 +43,23 @@ Full columns and delete rules are in the [data model](../corefoundry-erd.html).
 | GET  | `/api/auth/me` | Bearer | 200 `{ id, email }` |
 
 ### Rules
-- [ ] Emails are trimmed and lower-cased before they are saved. Passwords must be
+- [x] Emails are trimmed and lower-cased before they are saved. Passwords must be
       at least 10 characters (no composition rules, per NIST 800-63B).
-- [ ] Passwords are hashed with `PasswordHasher<User>` (PBKDF2).
-- [ ] Access token: JWT, HS256, 15 min, claims `sub`, `email`, `jti`.
+- [x] Passwords are hashed with `PasswordHasher<User>` (PBKDF2).
+- [x] Access token: JWT, HS256, 15 min, claims `sub`, `email`, `jti`.
       **No project roles in the token.** Roles are read from the database on each
       request, so revoking a role takes effect immediately.
-- [ ] Refresh token: 32 random bytes, base64url. Only `SHA-256(token)` is stored.
+- [x] Refresh token: 32 random bytes, base64url. Only `SHA-256(token)` is stored.
       It expires after 7 days.
-- [ ] Cookie: `cf_refresh`, `HttpOnly`, `Secure`, `SameSite=Strict`,
+- [x] Cookie: `cf_refresh`, `HttpOnly`, `Secure`, `SameSite=Strict`,
       `Path=/api/auth`
-- [ ] **Rotation** (one transaction): look up the token by hash. If it's valid, revoke it,
+- [x] **Rotation** (one transaction): look up the token by hash. If it's valid, revoke it,
       insert a new one and set `ReplacedByTokenId`.
-- [ ] **Replay detection:** if the token is already revoked, follow
+- [x] **Replay detection:** if the token is already revoked, follow
       `ReplacedByTokenId` to the end of the chain, revoke every token in it, and return 401.
-- [ ] Login and register rate-limited with the built-in
+- [x] Login and register rate-limited with the built-in
       `AddRateLimiter` (for example a fixed window of 10 requests/min per IP)
-- [ ] Login failure returns the same 401 whether the email or the password was
+- [x] Login failure returns the same 401 whether the email or the password was
       wrong, so accounts can't be discovered by trying emails
 
 ---
@@ -162,8 +167,8 @@ Turn "not a member" into 404 with a custom `IAuthorizationMiddlewareResultHandle
 - [ ] Slug generation, role comparison, refresh-token hashing
 
 **Integration (Testcontainers + WebApplicationFactory)**
-- [ ] Register → login → `/me` works. Wrong password and unknown email return the same 401.
-- [ ] Refresh rotates the cookie. The old cookie is then rejected. Replaying a revoked
+- [x] Register → login → `/me` works. Wrong password and unknown email return the same 401.
+- [x] Refresh rotates the cookie. The old cookie is then rejected. Replaying a revoked
       token revokes the chain, and the newest token stops working too.
 - [ ] Creating a project creates `cf_p_<id>` (checked via `INFORMATION_SCHEMA.SCHEMATA`)
 - [ ] Deleting a project drops the database

@@ -41,6 +41,10 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
             .HasForeignKey(token => token.ReplacedByTokenId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // Revoking is a compare-and-set: UPDATE ... WHERE RevokedAt IS NULL. If two requests rotate the
+        // same token at once, the second save fails instead of minting a second valid successor.
+        builder.Property(token => token.RevokedAt).IsConcurrencyToken();
+
         builder.Ignore(token => token.IsRevoked);
     }
 }

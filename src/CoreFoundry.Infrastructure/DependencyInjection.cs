@@ -1,3 +1,6 @@
+using CoreFoundry.Application.Auth;
+using CoreFoundry.Application.Common;
+using CoreFoundry.Infrastructure.Auth;
 using CoreFoundry.Infrastructure.HealthChecks;
 using CoreFoundry.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +27,17 @@ public static class DependencyInjection
         services.AddDbContext<MetadataDbContext>((provider, options) => options
             .UseMySQL(metadata)
             .AddInterceptors(provider.GetRequiredService<TimestampsInterceptor>()));
+
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<ITokenService, JwtTokenService>();
+        services.AddSingleton<IPasswordHasher, PasswordHasherAdapter>();
 
         services.AddHealthChecks()
             .AddCheck("mysql-metadata", new MySqlConnectionHealthCheck(metadata), tags: [ReadyTag])
