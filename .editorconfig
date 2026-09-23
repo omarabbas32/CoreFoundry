@@ -44,3 +44,7 @@ dotnet_diagnostic.CA2007.severity = none
 [tests/**.cs]
 # Test names read as sentences: Liveness_returns_200_without_a_database
 dotnet_diagnostic.CA1707.severity = none
+
+[src/**/Migrations/*.cs]
+# EF Core generated; regenerated rather than hand-edited, so style/quality rules do not apply
+generated_code = true

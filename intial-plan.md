@@ -31,6 +31,9 @@ backend architecture.
 | D10 | **Local MySQL for development, no Docker for now**. Develop on MySQL 9.2, stay compatible with 8.4 LTS | Uses the MySQL server already installed. A test container setup for the full app comes later. |
 | D11 | Dev secrets in **.NET user-secrets** (`corefoundry-api-dev`), never in the repo | Standard for ASP.NET Core local development. |
 | D12 | Tests run on **Microsoft.Testing.Platform** (`global.json` `test.runner`) with xunit v3 + Shouldly | .NET 10 SDK no longer runs VSTest for these packages. FluentAssertions v8 is paid. |
+| D13 | `Projects.DatabaseName` is **computed** (`cf_p_{Id}`), not a column | The Id only exists after insert; a derived name can never drift from it. |
+| D14 | `SchemaMigrations.StatementCount` column added | Lets the journal validate progress and refuse `Applied` before every statement ran. |
+| D15 | EF Core's provider runs on Oracle's **MySql.Data** driver; the schema engine/Data API use **MySqlConnector** | Consequence of D9: two drivers, one per data-access strategy. |
 
 ---
 
@@ -139,7 +142,7 @@ Rotation on every refresh; reuse of a revoked token revokes the whole chain
 
 **Projects**
 ```
-Id, Name, Slug (unique), OwnerId, DatabaseName (cf_p_<id>),
+Id, Name, Slug (unique), OwnerId,
 SchemaVersion, Status, CreatedAt, UpdatedAt
 ```
 
@@ -168,7 +171,7 @@ No `IsPrimaryKey` — the system `id` column is always the PK (D4).
 **SchemaMigrations**
 ```
 Id, ProjectId, Version, Status (Pending | Applied | Failed),
-StatementsJson, StatementsApplied, SnapshotJson, Error,
+StatementsJson, StatementCount, StatementsApplied, SnapshotJson, Error,
 RequestedBy, CreatedAt, CompletedAt
 ```
 `SnapshotJson` = full applied schema after success. The Data API reads the

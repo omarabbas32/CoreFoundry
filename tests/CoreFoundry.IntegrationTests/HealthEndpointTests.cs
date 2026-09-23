@@ -29,6 +29,7 @@ public class HealthEndpointTests(HealthEndpointTests.ApiFactory factory)
         {
             builder.UseSetting("ConnectionStrings:Metadata", "Server=127.0.0.1;Port=1;Database=none;User=none;Password=none");
             builder.UseSetting("ConnectionStrings:Engine", "Server=127.0.0.1;Port=1;User=none;Password=none");
+            builder.UseSetting("Jwt:SigningKey", "health-test-signing-key-at-least-32-bytes!");
         }
     }
 }

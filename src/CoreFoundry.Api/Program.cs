@@ -1,14 +1,33 @@
 using System.Text.Json;
+using CoreFoundry.Api.Auth;
+using CoreFoundry.Api.Errors;
+using CoreFoundry.Application;
 using CoreFoundry.Infrastructure;
+using CoreFoundry.Infrastructure.Auth;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((bearer, jwt) =>
+    {
+        bearer.TokenValidationParameters = jwt.Value.CreateValidationParameters();
+        bearer.MapInboundClaims = false; // keep "sub"/"email" as-is
+    });
+builder.Services.AddAuthorization();
+builder.Services.AddCoreFoundryRateLimiting(builder.Configuration);
 
 const string WebCorsPolicy = "web";
 builder.Services.AddCors(options => options.AddPolicy(WebCorsPolicy, policy => policy
@@ -28,6 +47,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(WebCorsPolicy);
+app.UseRateLimiter();
+app.UseAuthentication();
 app.UseAuthorization();
 
 // Liveness: the process is up. No dependencies, so it works without a database.
@@ -40,7 +61,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 // Readiness: both MySQL accounts can connect.
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
-    Predicate = check => check.Tags.Contains(DependencyInjection.ReadyTag),
+    Predicate = check => check.Tags.Contains(CoreFoundry.Infrastructure.DependencyInjection.ReadyTag),
     ResponseWriter = WriteHealthResponse,
 });
 

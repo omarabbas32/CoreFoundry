@@ -1,4 +1,9 @@
+using CoreFoundry.Application.Auth;
+using CoreFoundry.Application.Common;
+using CoreFoundry.Infrastructure.Auth;
 using CoreFoundry.Infrastructure.HealthChecks;
+using CoreFoundry.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,10 +17,27 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services, IConfiguration configuration)
     {
-        // cf_meta: the metadata database (EF Core from M1).
+        // cf_meta: the metadata database (EF Core).
         var metadata = RequiredConnectionString(configuration, "Metadata");
         // cf_engine: project databases cf_p_* (schema engine + Data API).
         var engine = RequiredConnectionString(configuration, "Engine");
+
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<TimestampsInterceptor>();
+        services.AddDbContext<MetadataDbContext>((provider, options) => options
+            .UseMySQL(metadata)
+            .AddInterceptors(provider.GetRequiredService<TimestampsInterceptor>()));
+
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<ITokenService, JwtTokenService>();
+        services.AddSingleton<IPasswordHasher, PasswordHasherAdapter>();
 
         services.AddHealthChecks()
             .AddCheck("mysql-metadata", new MySqlConnectionHealthCheck(metadata), tags: [ReadyTag])

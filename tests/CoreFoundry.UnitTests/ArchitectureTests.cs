@@ -6,8 +6,8 @@ namespace CoreFoundry.UnitTests;
 /// <summary>Guards the Clean Architecture dependency rule at the assembly level.</summary>
 public class ArchitectureTests
 {
-    private static readonly Assembly DomainAssembly = typeof(Domain.AssemblyMarker).Assembly;
-    private static readonly Assembly ApplicationAssembly = typeof(Application.AssemblyMarker).Assembly;
+    private static readonly Assembly DomainAssembly = typeof(global::CoreFoundry.Domain.AssemblyMarker).Assembly;
+    private static readonly Assembly ApplicationAssembly = typeof(global::CoreFoundry.Application.AssemblyMarker).Assembly;
 
     [Theory]
     [InlineData("CoreFoundry.Application")]

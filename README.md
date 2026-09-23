@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M0 — setup**. See [the phases](docs/phases/README.md).
+> Status: **M1 — auth done; projects & members next**. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -53,6 +53,25 @@ Open http://localhost:3000. The page shows the API and database health.
 ```bash
 dotnet test
 ```
+Auth and other database tests use a separate local database, `corefoundry_test`, which is
+dropped and re-created on every run (your `corefoundry` dev data is never touched). One-time setup:
+
+```bash
+mysql -u root -p < db/setup-test.sql
+```
+The tests reuse the API's `ConnectionStrings:Metadata` user-secret with the database swapped to
+`corefoundry_test`. Without it (e.g. in CI) those tests are skipped.
+
+## API so far
+| Method | Route | Notes |
+|---|---|---|
+| POST | `/api/auth/register` | `{ email, password }` → 201 + access token; refresh token in `cf_refresh` cookie |
+| POST | `/api/auth/login` | same response; rate-limited per IP |
+| POST | `/api/auth/refresh` | cookie → new access token + rotated cookie |
+| POST | `/api/auth/logout` | revokes the cookie's token → 204 |
+| GET | `/api/auth/me` | Bearer token → `{ id, email }` |
+
+After pulling new migrations: `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`
 
 ## Docs
 - [Plan](intial-plan.md)
