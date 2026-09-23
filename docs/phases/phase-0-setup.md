@@ -6,6 +6,12 @@ CI is green. No features yet.
 
 **Depends on:** nothing.
 
+> **Built differently from the original spec (see plan D9–D12):** MySQL runs locally
+> instead of in Docker (`db/setup-local.sql` replaces the Docker init script and
+> `docker-compose.yml`), secrets are in .NET user-secrets instead of `.env`, the
+> EF provider is Oracle's `MySql.EntityFrameworkCore`, and the integration smoke test
+> checks `/health/live` without a database. Testcontainers comes later.
+
 ---
 
 ## 1. Repository layout
