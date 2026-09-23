@@ -1,0 +1,8 @@
+* text=auto
+
+# Shell scripts run inside Linux containers: must keep LF endings
+*.sh text eol=lf
+docker/** text eol=lf
+
+*.cs  text diff=csharp
+*.sln text eol=crlf

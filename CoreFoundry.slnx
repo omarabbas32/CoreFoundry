@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CoreFoundry.Api/CoreFoundry.Api.csproj" />
+    <Project Path="src/CoreFoundry.Application/CoreFoundry.Application.csproj" />
+    <Project Path="src/CoreFoundry.Domain/CoreFoundry.Domain.csproj" />
+    <Project Path="src/CoreFoundry.Infrastructure/CoreFoundry.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CoreFoundry.IntegrationTests/CoreFoundry.IntegrationTests.csproj" />
+    <Project Path="tests/CoreFoundry.UnitTests/CoreFoundry.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MySqlConnector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CoreFoundry.Application\CoreFoundry.Application.csproj" />
+    <ProjectReference Include="..\CoreFoundry.Domain\CoreFoundry.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
