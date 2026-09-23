@@ -17,8 +17,8 @@ Full columns and delete rules are in the [data model](../corefoundry-erd.html).
       in `Infrastructure`. No data annotations on domain entities.
 - [ ] Enums stored as `TINYINT`: `ProjectRole { Owner=1, Admin=2, Developer=3 }`,
       `ProjectStatus { Provisioning=0, Active=1, Failed=2, Deleting=3 }`
-- [ ] Unique indexes: `Users.Email`, `RefreshTokens.TokenHash`, `Projects.Slug`,
-      `Projects.DatabaseName`. Plain index: `ProjectMembers.UserId`.
+- [ ] Unique indexes: `Users.Email`, `RefreshTokens.TokenHash`, `Projects.Slug`.
+      Plain index: `ProjectMembers.UserId`.
 - [ ] `CreatedAt` / `UpdatedAt` set by a `SaveChanges` interceptor using an
       injected `TimeProvider` (testable time)
 - [ ] First migration `InitialAuthAndProjects`, applied on startup in
@@ -73,8 +73,8 @@ Full columns and delete rules are in the [data model](../corefoundry-erd.html).
 
 ### Create flow
 1. EF transaction: insert `Project { Status = Provisioning }` and the
-   `ProjectMember { Role = Owner }` row. After insert, set
-   `DatabaseName = $"cf_p_{Id}"` and save.
+   `ProjectMember { Role = Owner }` row. The database name `cf_p_{Id}` is computed
+   from the Id (`Project.DatabaseName`), so nothing else needs saving.
 2. Outside the transaction, connect as `cf_engine` and run
    ``CREATE DATABASE IF NOT EXISTS `cf_p_{Id}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci``.
 3. Success → `Status = Active`. Failure → `Status = Failed`, log the error, and

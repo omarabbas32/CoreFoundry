@@ -143,7 +143,7 @@ table.rules td:first-child{font-family:var(--mono);font-size:13px;white-space:no
     <div class="sechead">
       <div class="eyebrow">Metadata database</div>
       <h2>corefoundry: entity relationships</h2>
-      <p>Seven tables, managed by EF Core migrations. The dashed copper link is the only connection to a project database. It's a name stored in <code>Projects.DatabaseName</code>, not a foreign key, because MySQL can't enforce keys across databases here.</p>
+      <p>Seven tables, managed by EF Core migrations. The dashed copper link is the only connection to a project database. The database name is derived from <code>Projects.Id</code> (<code>cf_p_{Id}</code>) rather than stored, and it isn't a foreign key, because MySQL can't enforce keys across databases here.</p>
     </div>
     <figure class="diagram">
       <div class="scroll"><svg id="erdSvg" viewBox="0 0 1260 760" role="img" aria-label="Entity relationship diagram of the corefoundry metadata database: Users owns RefreshTokens, Projects, ProjectMembers and SchemaMigrations; Projects has ProjectMembers, ProjectTables and SchemaMigrations; ProjectTables has ProjectColumns; Projects points to its physical cf_p database by name." style="min-width:960px"></svg></div>
@@ -160,11 +160,11 @@ table.rules td:first-child{font-family:var(--mono);font-size:13px;white-space:no
     <div class="notes">
       <div class="note"><h3>Users</h3><ul><li>Email is lower-cased before it's saved, and unique.</li><li><code>PasswordHash</code> uses ASP.NET Core <code>PasswordHasher</code> (PBKDF2).</li></ul></div>
       <div class="note"><h3>RefreshTokens</h3><ul><li>Only the SHA-256 hash is stored, never the raw token.</li><li>Each refresh revokes the old row and links it to the new one.</li><li>If a revoked token is used again, every token in its chain is revoked.</li></ul></div>
-      <div class="note"><h3>Projects</h3><ul><li><code>DatabaseName = cf_p_{Id}</code> is generated and never user input.</li><li><code>SchemaVersion</code> goes up by one on every successful apply.</li><li><code>Status</code>: Provisioning · Active · Failed · Deleting.</li></ul></div>
+      <div class="note"><h3>Projects</h3><ul><li>The database name <code>cf_p_{Id}</code> is computed from the Id, never stored and never user input.</li><li><code>SchemaVersion</code> goes up by one on every successful apply.</li><li><code>Status</code>: Provisioning · Active · Failed · Deleting.</li></ul></div>
       <div class="note"><h3>ProjectMembers</h3><ul><li>Composite PK <code>(ProjectId, UserId)</code>; index on <code>UserId</code> for "my projects".</li><li>Exactly one <code>Owner</code> row per project, matching <code>Projects.OwnerId</code>. Update both in one transaction.</li></ul></div>
       <div class="note"><h3>ProjectTables</h3><ul><li><code>UQ (ProjectId, Name)</code>.</li><li><code>AppliedName</code> null means the table was never created.</li><li><code>PendingDrop</code> marks a delete that waits for the next apply.</li></ul></div>
       <div class="note"><h3>ProjectColumns</h3><ul><li><code>UQ (TableId, Name)</code>. The stable <code>Id</code> is what makes rename detection work.</li><li>Length, Precision and Scale are checked against <code>DataType</code>.</li><li><code>DefaultValue</code> is stored as text and written into SQL as a typed literal.</li></ul></div>
-      <div class="note"><h3>SchemaMigrations</h3><ul><li>Journal of every apply. <code>UQ (ProjectId, Version)</code>.</li><li><code>StatementsApplied</code> shows how far a failed apply got.</li><li><code>SnapshotJson</code> is the applied schema. The Data API reads it, never the draft.</li></ul></div>
+      <div class="note"><h3>SchemaMigrations</h3><ul><li>Journal of every apply. <code>UQ (ProjectId, Version)</code>.</li><li><code>StatementsApplied</code> of <code>StatementCount</code> shows how far a failed apply got.</li><li><code>SnapshotJson</code> is the applied schema. The Data API reads it, never the draft.</li></ul></div>
     </div>
   </section>
 
@@ -249,10 +249,10 @@ table.rules td:first-child{font-family:var(--mono);font-size:13px;white-space:no
     refresh:{x:C0,y:20,t:'RefreshTokens',rows:[['PK','Id','BIGINT'],['FK','UserId','BIGINT'],['UQ','TokenHash','CHAR(64)'],['','ExpiresAt','DATETIME(6)'],['','CreatedAt','DATETIME(6)'],['','RevokedAt','DATETIME(6) ?'],['FK','ReplacedByTokenId','BIGINT ?']]},
     users:{x:C1,y:20,t:'Users',rows:[['PK','Id','BIGINT'],['UQ','Email','VARCHAR(254)'],['','PasswordHash','VARCHAR(255)'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]},
     members:{x:C0,y:250,t:'ProjectMembers',rows:[['PK FK','ProjectId','BIGINT'],['PK FK','UserId','BIGINT'],['','Role','TINYINT  Owner|Admin|Dev'],['','CreatedAt','DATETIME(6)']]},
-    projects:{x:C1,y:250,t:'Projects',rows:[['PK','Id','BIGINT'],['','Name','VARCHAR(100)'],['UQ','Slug','VARCHAR(64)'],['FK','OwnerId','BIGINT'],['UQ','DatabaseName','VARCHAR(64)'],['','SchemaVersion','INT'],['','Status','TINYINT'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]},
-    migrations:{x:C2,y:20,t:'SchemaMigrations',rows:[['PK','Id','BIGINT'],['FK','ProjectId','BIGINT'],['','Version','INT'],['','Status','TINYINT'],['','StatementsJson','JSON'],['','StatementsApplied','INT'],['','SnapshotJson','JSON ?'],['','Error','TEXT ?'],['FK','RequestedBy','BIGINT ?'],['','CreatedAt','DATETIME(6)'],['','CompletedAt','DATETIME(6) ?']]},
+    projects:{x:C1,y:250,t:'Projects',rows:[['PK','Id','BIGINT'],['','Name','VARCHAR(100)'],['UQ','Slug','VARCHAR(64)'],['FK','OwnerId','BIGINT'],['','SchemaVersion','INT'],['','Status','TINYINT'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]},
+    migrations:{x:C2,y:20,t:'SchemaMigrations',rows:[['PK','Id','BIGINT'],['FK','ProjectId','BIGINT'],['','Version','INT'],['','Status','TINYINT'],['','StatementsJson','JSON'],['','StatementCount','INT'],['','StatementsApplied','INT'],['','SnapshotJson','JSON ?'],['','Error','TEXT ?'],['FK','RequestedBy','BIGINT ?'],['','CreatedAt','DATETIME(6)'],['','CompletedAt','DATETIME(6) ?']]},
     tables:{x:C1,y:540,t:'ProjectTables',rows:[['PK','Id','BIGINT'],['FK','ProjectId','BIGINT'],['','Name','VARCHAR(64)'],['','AppliedName','VARCHAR(64) ?'],['','PendingDrop','BOOL'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]},
-    columns:{x:C2,y:340,t:'ProjectColumns',rows:[['PK','Id','BIGINT'],['FK','TableId','BIGINT'],['','Name','VARCHAR(64)'],['','AppliedName','VARCHAR(64) ?'],['','DataType','TINYINT'],['','Length','INT ?'],['','Precision','TINYINT ?'],['','Scale','TINYINT ?'],['','IsNullable','BOOL'],['','IsUnique','BOOL'],['','DefaultValue','VARCHAR(255) ?'],['','OrdinalPosition','INT'],['','PendingDrop','BOOL'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]}
+    columns:{x:C2,y:370,t:'ProjectColumns',rows:[['PK','Id','BIGINT'],['FK','TableId','BIGINT'],['','Name','VARCHAR(64)'],['','AppliedName','VARCHAR(64) ?'],['','DataType','TINYINT'],['','Length','INT ?'],['','Precision','TINYINT ?'],['','Scale','TINYINT ?'],['','IsNullable','BOOL'],['','IsUnique','BOOL'],['','DefaultValue','VARCHAR(255) ?'],['','OrdinalPosition','INT'],['','PendingDrop','BOOL'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]}
   };
   const eh = e => H + e.rows.length*R + 8;
 
@@ -320,9 +320,9 @@ table.rules td:first-child{font-family:var(--mono);font-size:13px;white-space:no
   erd += edge([[C1,304],[C0+W,304]], 'ProjectId', {ly:296});
   erd += edge([[C1+W,290],[C2,290]], 'ProjectId', {ly:282});
   erd += edge([[C1+W,100],[C2,100]], 'RequestedBy', {ly:92});
-  erd += edge([[C1+170,492],[C1+170,540]], 'ProjectId');
+  erd += edge([[C1+170,470],[C1+170,540]], 'ProjectId');
   erd += edge([[C1+W,600],[C2,600]], 'TableId', {ly:592});
-  erd += edge([[C1,460],[C0+W,460]], 'DatabaseName', {cross:true, end:markOne, ly:452});
+  erd += edge([[C1,440],[C0+W,440]], 'cf_p_{Id}', {cross:true, end:markOne, ly:432});
   Object.values(E).forEach(e=>{ erd += entity(e); });
   // physical database stub
   erd += `<rect class="phys-box" x="40" y="420" width="340" height="176" rx="7"/>
