@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CoreFoundry Data Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Schibsted+Grotesk:wght@600;700&display=swap">
+<style>
+:root{
+  --bg:#EDF0EF; --surface:#FFFFFF; --surface-2:#F4F6F6; --ink:#141B20; --muted:#5A6670; --line:#CAD2D5;
+  --meta:#2E48B0; --meta-soft:#E3E8FA; --gen:#A94F1E; --gen-soft:#F8E7DA;
+  --ok:#1D7646; --ok-soft:#DFF1E6; --warn:#8F5B00; --warn-soft:#FBEFD6; --bad:#B42318; --bad-soft:#FBE3E0;
+  --display:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0D1316; --surface:#141C21; --surface-2:#19232A; --ink:#E3E8EA; --muted:#93A0A8; --line:#2B3941;
+    --meta:#93A5FF; --meta-soft:#1C2548; --gen:#EE9C66; --gen-soft:#3A2416;
+    --ok:#62C98E; --ok-soft:#14301F; --warn:#E3A945; --warn-soft:#352812; --bad:#F2786E; --bad-soft:#3A1916;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0D1316; --surface:#141C21; --surface-2:#19232A; --ink:#E3E8EA; --muted:#93A0A8; --line:#2B3941;
+  --meta:#93A5FF; --meta-soft:#1C2548; --gen:#EE9C66; --gen-soft:#3A2416;
+  --ok:#62C98E; --ok-soft:#14301F; --warn:#E3A945; --warn-soft:#352812; --bad:#F2786E; --bad-soft:#3A1916;
+}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--body)}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:44px 88px;display:grid;gap:56px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(30px,5vw,44px);letter-spacing:-.01em}
+h2{font-size:26px}
+h3{font-size:16px}
+p{margin:0;max-width:68ch}
+code,.mono{font-family:var(--mono);font-size:.88em}
+.eyebrow{font:600 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header{display:grid;gap:14px}
+.lede{font-size:17px;color:var(--muted)}
+.dbtag{display:inline-block;font:600 12px var(--mono);padding:1px 7px;border-radius:4px;white-space:nowrap}
+.dbtag.meta{background:var(--meta-soft);color:var(--meta)}
+.dbtag.gen{background:var(--gen-soft);color:var(--gen)}
+section{display:grid;gap:18px}
+.sechead{display:grid;gap:8px}
+figure.diagram{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.scroll{overflow-x:auto}
+figure.diagram svg{display:block;width:100%;height:auto}
+figcaption{padding:12px 18px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 22px;padding:12px 18px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+figure.diagram .legend svg{width:34px;height:16px;flex:none}
+.notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.note{background:var(--surface);padding:16px 18px;display:grid;gap:6px;align-content:start}
+.note h3{font-family:var(--mono);font-size:14px;color:var(--meta)}
+.note ul{margin:0;padding-left:18px;font-size:14px;color:var(--ink)}
+.note li+li{margin-top:3px}
+.conv{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.conv div{border-top:2px solid var(--gen);padding-top:10px;display:grid;gap:4px}
+.conv b{font-family:var(--display);font-size:15px}
+.conv p{font-size:14px;color:var(--muted)}
+pre.sql{margin:0;padding:16px 18px;background:var(--surface-2);border-top:1px solid var(--line);font:13px/1.65 var(--mono);overflow-x:auto;color:var(--ink)}
+.k{color:var(--meta);font-weight:600}.i{color:var(--gen)}.c{color:var(--muted)}.d{color:var(--bad);font-weight:600}
+table.rules{width:100%;border-collapse:collapse;font-size:14px;background:var(--surface)}
+.tablebox{border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table.rules th,table.rules td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+table.rules th{font:600 12px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--surface-2)}
+table.rules tr:last-child td{border-bottom:0}
+table.rules td:first-child{font-family:var(--mono);font-size:13px;white-space:nowrap}
+.pill{display:inline-block;font:600 11px var(--mono);padding:1px 7px;border-radius:99px;white-space:nowrap}
+.pill.cascade{background:var(--bad-soft);color:var(--bad)}
+.pill.restrict{background:var(--meta-soft);color:var(--meta)}
+.pill.setnull{background:var(--warn-soft);color:var(--warn)}
+
+/* SVG parts */
+.ent-box{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.ent-head{fill:var(--meta-soft)}
+.ent-title{fill:var(--meta);font:700 14px var(--display)}
+.ent-stripe{fill:var(--surface-2)}
+.col-name{fill:var(--ink);font:12px var(--mono)}
+.col-type{fill:var(--muted);font:11.5px var(--mono)}
+.key{font:600 10px var(--mono);letter-spacing:.04em}
+.key-PK{fill:var(--ink)}.key-FK{fill:var(--meta)}.key-UQ{fill:var(--muted)}.key-PKFK{fill:var(--meta)}
+.edge{fill:none;stroke:var(--muted);stroke-width:1.4}
+.edge.cross{stroke:var(--gen);stroke-dasharray:6 4}
+.mark{fill:none;stroke:var(--muted);stroke-width:1.4}
+.mark.cross{stroke:var(--gen)}
+.mark-o{fill:var(--surface);stroke:var(--muted);stroke-width:1.4}
+.elabel{font:11px var(--mono);fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
+.elabel.cross{fill:var(--gen)}
+.phys-box{fill:var(--gen-soft);stroke:var(--gen);stroke-width:1.3;stroke-dasharray:6 4}
+.phys-title{fill:var(--gen);font:700 14px var(--mono)}
+.phys-text{fill:var(--ink);font:12px var(--body)}
+.phys-sub{fill:var(--muted);font:11.5px var(--mono)}
+.box{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.box-meta{fill:var(--meta-soft);stroke:var(--meta);stroke-width:1.2}
+.box-gen{fill:var(--gen-soft);stroke:var(--gen);stroke-width:1.2}
+.server{fill:var(--surface-2);stroke:var(--line);stroke-width:1.2}
+.t-title{fill:var(--ink);font:700 14px var(--display)}
+.t-body{fill:var(--ink);font:12.5px var(--body)}
+.t-muted{fill:var(--muted);font:12px var(--body)}
+.t-mono{fill:var(--ink);font:12px var(--mono)}
+.t-mono-m{fill:var(--muted);font:11.5px var(--mono)}
+.t-meta{fill:var(--meta);font:600 13px var(--mono)}
+.t-gen{fill:var(--gen);font:600 13px var(--mono)}
+.arrow-meta{stroke:var(--meta);stroke-width:1.6;fill:none}
+.arrow-gen{stroke:var(--gen);stroke-width:1.6;fill:none}
+.arrow-deny{stroke:var(--bad);stroke-width:1.4;fill:none;stroke-dasharray:5 4}
+.fill-meta{fill:var(--meta)}.fill-gen{fill:var(--gen)}.fill-bad{fill:var(--bad)}
+.lbl-meta{fill:var(--meta);font:11.5px var(--mono);paint-order:stroke;stroke:var(--surface);stroke-width:5px}
+.lbl-gen{fill:var(--gen);font:11.5px var(--mono);paint-order:stroke;stroke:var(--surface);stroke-width:5px}
+.lbl-bad{fill:var(--bad);font:600 11.5px var(--mono);paint-order:stroke;stroke:var(--surface);stroke-width:5px}
+.row-bg{fill:var(--surface-2);stroke:var(--line)}
+.row-sys{fill:var(--surface);stroke:var(--line);stroke-dasharray:3 3}
+.ghost{fill:none;stroke:var(--ok);stroke-dasharray:5 4}
+.chip-sync{fill:var(--surface);stroke:var(--line)}.chip-sync-t{fill:var(--muted);font:600 11px var(--mono)}
+.chip-rename{fill:var(--warn-soft)}.chip-rename-t{fill:var(--warn);font:600 11px var(--mono)}
+.chip-add{fill:var(--ok-soft)}.chip-add-t{fill:var(--ok);font:600 11px var(--mono)}
+.chip-drop{fill:var(--bad-soft)}.chip-drop-t{fill:var(--bad);font:600 11px var(--mono)}
+.ln-sync{stroke:var(--line);stroke-width:1.4}
+.ln-rename{stroke:var(--warn);stroke-width:1.6}
+.ln-add{stroke:var(--ok);stroke-width:1.6;stroke-dasharray:5 4}
+.ln-drop{stroke:var(--bad);stroke-width:1.6}
+.lt-rename{fill:var(--warn);font:600 11px var(--mono)}
+.lt-add{fill:var(--ok);font:600 11px var(--mono)}
+.lt-drop{fill:var(--bad);font:600 11px var(--mono)}
+.strike{text-decoration:line-through}
+@media (max-width:700px){ .wrap{gap:44px} h2{font-size:22px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">CoreFoundry · data model · v1</div>
+    <h1>Two kinds of database, one MySQL server</h1>
+    <p class="lede"><span class="dbtag meta">corefoundry</span> stores what users <em>designed</em>: accounts, projects, members, draft tables and columns, and the history of every schema change. Each project also gets its own <span class="dbtag gen">cf_p_&lt;id&gt;</span> database, which holds the real tables built from that design. The requests that read and write these tables are drawn in <a href="corefoundry-flows.html" style="color:var(--meta)">backend flows</a>.</p>
+  </header>
+
+  <section id="erd">
+    <div class="sechead">
+      <div class="eyebrow">Metadata database</div>
+      <h2>corefoundry: entity relationships</h2>
+      <p>Seven tables, managed by EF Core migrations. The dashed copper link is the only connection to a project database. It's a name stored in <code>Projects.DatabaseName</code>, not a foreign key, because MySQL can't enforce keys across databases here.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="erdSvg" viewBox="0 0 1260 760" role="img" aria-label="Entity relationship diagram of the corefoundry metadata database: Users owns RefreshTokens, Projects, ProjectMembers and SchemaMigrations; Projects has ProjectMembers, ProjectTables and SchemaMigrations; ProjectTables has ProjectColumns; Projects points to its physical cf_p database by name." style="min-width:960px"></svg></div>
+      <div class="legend">
+        <span><svg viewBox="0 0 34 16"><line x1="2" y1="8" x2="32" y2="8" class="mark"/><line x1="8" y1="2" x2="8" y2="14" class="mark"/><line x1="13" y1="2" x2="13" y2="14" class="mark"/></svg>exactly one</span>
+        <span><svg viewBox="0 0 34 16"><line x1="2" y1="8" x2="32" y2="8" class="mark"/><circle cx="14" cy="8" r="4" class="mark-o"/><line x1="22" y1="8" x2="32" y2="2" class="mark"/><line x1="22" y1="8" x2="32" y2="14" class="mark"/></svg>zero or many</span>
+        <span><svg viewBox="0 0 34 16"><line x1="2" y1="8" x2="32" y2="8" class="edge cross"/></svg>reference by name, across databases (no FK)</span>
+        <span><b class="mono">PK FK UQ</b>&nbsp;primary, foreign, unique key</span>
+        <span><b class="mono">?</b>&nbsp;nullable</span>
+      </div>
+      <figcaption>ProjectTables and ProjectColumns hold the <em>draft</em>. <code>AppliedName</code> records what the object is called in the real database. It stays null until the object has been applied once, and is how the engine tells a rename from a drop followed by an add. The self-link on RefreshTokens (<code>ReplacedByTokenId</code>) forms the rotation chain.</figcaption>
+    </figure>
+
+    <div class="notes">
+      <div class="note"><h3>Users</h3><ul><li>Email is lower-cased before it's saved, and unique.</li><li><code>PasswordHash</code> uses ASP.NET Core <code>PasswordHasher</code> (PBKDF2).</li></ul></div>
+      <div class="note"><h3>RefreshTokens</h3><ul><li>Only the SHA-256 hash is stored, never the raw token.</li><li>Each refresh revokes the old row and links it to the new one.</li><li>If a revoked token is used again, every token in its chain is revoked.</li></ul></div>
+      <div class="note"><h3>Projects</h3><ul><li><code>DatabaseName = cf_p_{Id}</code> is generated and never user input.</li><li><code>SchemaVersion</code> goes up by one on every successful apply.</li><li><code>Status</code>: Provisioning · Active · Failed · Deleting.</li></ul></div>
+      <div class="note"><h3>ProjectMembers</h3><ul><li>Composite PK <code>(ProjectId, UserId)</code>; index on <code>UserId</code> for "my projects".</li><li>Exactly one <code>Owner</code> row per project, matching <code>Projects.OwnerId</code>. Update both in one transaction.</li></ul></div>
+      <div class="note"><h3>ProjectTables</h3><ul><li><code>UQ (ProjectId, Name)</code>.</li><li><code>AppliedName</code> null means the table was never created.</li><li><code>PendingDrop</code> marks a delete that waits for the next apply.</li></ul></div>
+      <div class="note"><h3>ProjectColumns</h3><ul><li><code>UQ (TableId, Name)</code>. The stable <code>Id</code> is what makes rename detection work.</li><li>Length, Precision and Scale are checked against <code>DataType</code>.</li><li><code>DefaultValue</code> is stored as text and written into SQL as a typed literal.</li></ul></div>
+      <div class="note"><h3>SchemaMigrations</h3><ul><li>Journal of every apply. <code>UQ (ProjectId, Version)</code>.</li><li><code>StatementsApplied</code> shows how far a failed apply got.</li><li><code>SnapshotJson</code> is the applied schema. The Data API reads it, never the draft.</li></ul></div>
+    </div>
+  </section>
+
+  <section id="server">
+    <div class="sechead">
+      <div class="eyebrow">Physical layout</div>
+      <h2>Where the generated tables live</h2>
+      <p>One MySQL 8.4 server, two login accounts. The metadata code and the schema engine connect as different users, so a bug in the engine can't touch the metadata.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="srvSvg" viewBox="0 0 960 340" role="img" aria-label="The API connects to MySQL with two accounts: cf_meta reaches only the corefoundry database; cf_engine reaches only cf_p_ databases and has no grant on corefoundry." style="min-width:760px"></svg></div>
+      <figcaption>The account <code>cf_engine</code> is granted <code>CREATE, ALTER, DROP, SELECT, INSERT, UPDATE, DELETE ON `cf_p\_%`.*</code>, so it can create and drop project databases that match the pattern and nothing else.</figcaption>
+    </figure>
+  </section>
+
+  <section id="mapping">
+    <div class="sechead">
+      <div class="eyebrow">Worked example · project “Bookshop”, id 7</div>
+      <h2>How a draft becomes a real table</h2>
+      <p>The draft is compared with what <code>INFORMATION_SCHEMA</code> reports for <code>cf_p_7.books</code>. Each column's <code>Name</code> and <code>AppliedName</code> are enough to classify the change.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="mapSvg" viewBox="0 0 960 336" role="img" aria-label="Draft columns of table books matched against the real table: title in sync, price renamed to price_usd, isbn to be added, legacy_code to be dropped, published_on in sync." style="min-width:780px"></svg></div>
+      <pre class="sql"><span class="c">-- plan for cf_p_7 · 1 statement · 1 destructive change</span>
+<span class="k">ALTER TABLE</span> <span class="i">`cf_p_7`</span>.<span class="i">`books`</span>
+  <span class="k">RENAME COLUMN</span> <span class="i">`price`</span> <span class="k">TO</span> <span class="i">`price_usd`</span>,
+  <span class="k">ADD COLUMN</span> <span class="i">`isbn`</span> <span class="k">VARCHAR</span>(13) <span class="k">NULL</span>,
+  <span class="k">ADD UNIQUE KEY</span> <span class="i">`uq_books_isbn`</span> (<span class="i">`isbn`</span>),
+  <span class="d">DROP COLUMN</span> <span class="i">`legacy_code`</span>;   <span class="c">-- ⚠ destructive: data in this column is lost</span></pre>
+      <figcaption>Every change to one table goes into a single <code>ALTER TABLE</code>, which InnoDB runs as one atomic unit. Without <code>AppliedName</code>, the <code>price → price_usd</code> rename would look like a drop plus an add and wipe every price.</figcaption>
+    </figure>
+  </section>
+
+  <section id="conventions">
+    <div class="sechead">
+      <div class="eyebrow">Generated databases</div>
+      <h2>Rules every cf_p_&lt;id&gt; database follows</h2>
+    </div>
+    <div class="conv">
+      <div><b>System primary key</b><p>Every table starts with <code>`id` BIGINT AUTO_INCREMENT PRIMARY KEY</code>. It's not in the metadata and can't be edited, and the Data API uses it to identify rows.</p></div>
+      <div><b>Names come from metadata</b><p>Table and column names are the validated <code>Name</code> (<code>^[a-z][a-z0-9_]{0,62}$</code>, not a reserved word) and are always wrapped in backticks.</p></div>
+      <div><b>Engine and charset</b><p><code>ENGINE=InnoDB</code>, <code>utf8mb4</code> / <code>utf8mb4_0900_ai_ci</code> for every database and table.</p></div>
+      <div><b>Unique keys</b><p>Named <code>uq_&lt;table&gt;_&lt;column&gt;</code> so the differ can find and drop them by name.</p></div>
+      <div><b>No foreign keys (v1)</b><p>Relationships between generated tables are planned for later. Without them, the order of drops and type changes doesn't matter.</p></div>
+      <div><b>Column order</b><p><code>OrdinalPosition</code> only controls display order. The engine doesn't physically reorder columns, which would rebuild the table for no benefit.</p></div>
+    </div>
+  </section>
+
+  <section id="rules">
+    <div class="sechead">
+      <div class="eyebrow">Integrity</div>
+      <h2>Foreign keys and delete rules</h2>
+      <p>Deleting a project also deletes everything under it in the metadata. The physical database is dropped separately, while the project is in the <code>Deleting</code> status.</p>
+    </div>
+    <div class="tablebox">
+      <table class="rules">
+        <thead><tr><th>Foreign key</th><th>References</th><th>On delete</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>RefreshTokens.UserId</td><td>Users.Id</td><td><span class="pill cascade">CASCADE</span></td><td>Tokens mean nothing without their user.</td></tr>
+          <tr><td>RefreshTokens.ReplacedByTokenId</td><td>RefreshTokens.Id</td><td><span class="pill setnull">SET NULL</span></td><td>Cleaning up expired tokens mustn't fail on a chain link.</td></tr>
+          <tr><td>Projects.OwnerId</td><td>Users.Id</td><td><span class="pill restrict">RESTRICT</span></td><td>Ownership must be transferred before an owner can be deleted.</td></tr>
+          <tr><td>ProjectMembers.ProjectId</td><td>Projects.Id</td><td><span class="pill cascade">CASCADE</span></td><td>Memberships go with the project.</td></tr>
+          <tr><td>ProjectMembers.UserId</td><td>Users.Id</td><td><span class="pill cascade">CASCADE</span></td><td>A deleted user leaves every project.</td></tr>
+          <tr><td>ProjectTables.ProjectId</td><td>Projects.Id</td><td><span class="pill cascade">CASCADE</span></td><td>The draft goes with the project.</td></tr>
+          <tr><td>ProjectColumns.TableId</td><td>ProjectTables.Id</td><td><span class="pill cascade">CASCADE</span></td><td>Columns belong to exactly one table.</td></tr>
+          <tr><td>SchemaMigrations.ProjectId</td><td>Projects.Id</td><td><span class="pill cascade">CASCADE</span></td><td>History goes with the project.</td></tr>
+          <tr><td>SchemaMigrations.RequestedBy</td><td>Users.Id</td><td><span class="pill setnull">SET NULL</span></td><td>The history stays even after the user who applied it is deleted.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  /* ---------- ERD ---------- */
+  const H=36, R=22, W=340;
+  const C0=40, C1=460, C2=880;
+  const E = {
+    refresh:{x:C0,y:20,t:'RefreshTokens',rows:[['PK','Id','BIGINT'],['FK','UserId','BIGINT'],['UQ','TokenHash','CHAR(64)'],['','ExpiresAt','DATETIME(6)'],['','CreatedAt','DATETIME(6)'],['','RevokedAt','DATETIME(6) ?'],['FK','ReplacedByTokenId','BIGINT ?']]},
+    users:{x:C1,y:20,t:'Users',rows:[['PK','Id','BIGINT'],['UQ','Email','VARCHAR(254)'],['','PasswordHash','VARCHAR(255)'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]},
+    members:{x:C0,y:250,t:'ProjectMembers',rows:[['PK FK','ProjectId','BIGINT'],['PK FK','UserId','BIGINT'],['','Role','TINYINT  Owner|Admin|Dev'],['','CreatedAt','DATETIME(6)']]},
+    projects:{x:C1,y:250,t:'Projects',rows:[['PK','Id','BIGINT'],['','Name','VARCHAR(100)'],['UQ','Slug','VARCHAR(64)'],['FK','OwnerId','BIGINT'],['UQ','DatabaseName','VARCHAR(64)'],['','SchemaVersion','INT'],['','Status','TINYINT'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]},
+    migrations:{x:C2,y:20,t:'SchemaMigrations',rows:[['PK','Id','BIGINT'],['FK','ProjectId','BIGINT'],['','Version','INT'],['','Status','TINYINT'],['','StatementsJson','JSON'],['','StatementsApplied','INT'],['','SnapshotJson','JSON ?'],['','Error','TEXT ?'],['FK','RequestedBy','BIGINT ?'],['','CreatedAt','DATETIME(6)'],['','CompletedAt','DATETIME(6) ?']]},
+    tables:{x:C1,y:540,t:'ProjectTables',rows:[['PK','Id','BIGINT'],['FK','ProjectId','BIGINT'],['','Name','VARCHAR(64)'],['','AppliedName','VARCHAR(64) ?'],['','PendingDrop','BOOL'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]},
+    columns:{x:C2,y:340,t:'ProjectColumns',rows:[['PK','Id','BIGINT'],['FK','TableId','BIGINT'],['','Name','VARCHAR(64)'],['','AppliedName','VARCHAR(64) ?'],['','DataType','TINYINT'],['','Length','INT ?'],['','Precision','TINYINT ?'],['','Scale','TINYINT ?'],['','IsNullable','BOOL'],['','IsUnique','BOOL'],['','DefaultValue','VARCHAR(255) ?'],['','OrdinalPosition','INT'],['','PendingDrop','BOOL'],['','CreatedAt','DATETIME(6)'],['','UpdatedAt','DATETIME(6)']]}
+  };
+  const eh = e => H + e.rows.length*R + 8;
+
+  function entity(e){
+    const h = eh(e);
+    let s = `<rect class="ent-box" x="${e.x}" y="${e.y}" width="${W}" height="${h}" rx="7"/>`;
+    s += `<path class="ent-head" d="M${e.x+1} ${e.y+H} V${e.y+7} a6 6 0 0 1 6 -6 H${e.x+W-7} a6 6 0 0 1 6 6 V${e.y+H} Z"/>`;
+    s += `<line x1="${e.x}" y1="${e.y+H}" x2="${e.x+W}" y2="${e.y+H}" stroke="var(--line)"/>`;
+    s += `<text class="ent-title" x="${e.x+14}" y="${e.y+23}">${e.t}</text>`;
+    e.rows.forEach((r,i)=>{
+      const ry = e.y + H + 4 + i*R;
+      if(i%2===1) s += `<rect class="ent-stripe" x="${e.x+1}" y="${ry}" width="${W-2}" height="${R}"/>`;
+      const by = ry + 15;
+      if(r[0]) s += `<text class="key key-${r[0].replace(' ','')}" x="${e.x+12}" y="${by}">${r[0]}</text>`;
+      s += `<text class="col-name" x="${e.x+56}" y="${by}">${esc(r[1])}</text>`;
+      s += `<text class="col-type" x="${e.x+W-12}" y="${by}" text-anchor="end">${esc(r[2])}</text>`;
+    });
+    return s;
+  }
+
+  const unit = (a,b) => { const dx=a[0]-b[0], dy=a[1]-b[1], l=Math.hypot(dx,dy)||1; return [dx/l,dy/l]; };
+  function markOne(P,d,cls){ // d points into entity
+    const p=[-d[1],d[0]]; let s='';
+    [8,13].forEach(k=>{ const c=[P[0]-d[0]*k,P[1]-d[1]*k];
+      s+=`<line class="mark ${cls}" x1="${c[0]+p[0]*7}" y1="${c[1]+p[1]*7}" x2="${c[0]-p[0]*7}" y2="${c[1]-p[1]*7}"/>`; });
+    return s;
+  }
+  function markZeroOne(P,d,cls){
+    const p=[-d[1],d[0]]; const c=[P[0]-d[0]*8,P[1]-d[1]*8]; const o=[P[0]-d[0]*18,P[1]-d[1]*18];
+    return `<line class="mark ${cls}" x1="${c[0]+p[0]*7}" y1="${c[1]+p[1]*7}" x2="${c[0]-p[0]*7}" y2="${c[1]-p[1]*7}"/><circle class="mark-o" cx="${o[0]}" cy="${o[1]}" r="4"/>`;
+  }
+  function markMany(P,d,cls){
+    const p=[-d[1],d[0]]; const q=[P[0]-d[0]*13,P[1]-d[1]*13]; const o=[P[0]-d[0]*21,P[1]-d[1]*21];
+    let s='';
+    [1,0,-1].forEach(k=>{ s+=`<line class="mark ${cls}" x1="${q[0]}" y1="${q[1]}" x2="${P[0]+p[0]*7*k}" y2="${P[1]+p[1]*7*k}"/>`; });
+    s+=`<circle class="mark-o" cx="${o[0]}" cy="${o[1]}" r="4"/>`;
+    return s;
+  }
+  function edge(pts, label, opt={}){
+    const cls = opt.cross ? 'cross' : '';
+    let s = `<polyline class="edge ${cls}" points="${pts.map(p=>p.join(',')).join(' ')}"/>`;
+    const n = pts.length;
+    const d0 = unit(pts[0],pts[1]), d1 = unit(pts[n-1],pts[n-2]);
+    s += (opt.start||markOne)(pts[0], d0, cls);
+    s += (opt.end||markMany)(pts[n-1], d1, cls);
+    if(label){
+      let best=0, bl=-1;
+      for(let i=0;i<n-1;i++){ const l=Math.hypot(pts[i+1][0]-pts[i][0],pts[i+1][1]-pts[i][1]); if(l>bl){bl=l;best=i;} }
+      const a=pts[best], b=pts[best+1];
+      const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
+      const vertical = a[0]===b[0];
+      const lx = opt.lx!=null ? opt.lx : (vertical ? mx+8 : mx);
+      const ly = opt.ly!=null ? opt.ly : (vertical ? my+4 : my-6);
+      s += `<text class="elabel ${cls}" x="${lx}" y="${ly}" text-anchor="${vertical?'start':'middle'}">${label}</text>`;
+    }
+    return s;
+  }
+
+  let erd = '';
+  // edges first so boxes sit on top of line ends
+  erd += edge([[C1,80],[C0+W,80]], 'UserId', {ly:72});
+  erd += edge([[C0,71],[C0-16,71],[C0-16,203],[C0,203]], '', {end:markZeroOne});
+  erd += edge([[C1+200,174],[C1+200,250]], 'OwnerId');
+  erd += edge([[C1+80,174],[C1+80,232],[C0+170,232],[C0+170,250]], 'UserId', {lx:C0+300, ly:226});
+  erd += edge([[C1,304],[C0+W,304]], 'ProjectId', {ly:296});
+  erd += edge([[C1+W,290],[C2,290]], 'ProjectId', {ly:282});
+  erd += edge([[C1+W,100],[C2,100]], 'RequestedBy', {ly:92});
+  erd += edge([[C1+170,492],[C1+170,540]], 'ProjectId');
+  erd += edge([[C1+W,600],[C2,600]], 'TableId', {ly:592});
+  erd += edge([[C1,460],[C0+W,460]], 'DatabaseName', {cross:true, end:markOne, ly:452});
+  Object.values(E).forEach(e=>{ erd += entity(e); });
+  // physical database stub
+  erd += `<rect class="phys-box" x="40" y="420" width="340" height="176" rx="7"/>
+    <text class="phys-title" x="56" y="448">cf_p_&lt;Projects.Id&gt;</text>
+    <text class="phys-sub" x="56" y="468">separate MySQL database</text>
+    <text class="phys-text" x="56" y="500">• one table per applied ProjectTable</text>
+    <text class="phys-text" x="56" y="522">• one column per applied ProjectColumn</text>
+    <text class="phys-text" x="56" y="544">• plus system column  id BIGINT PK</text>
+    <text class="phys-sub" x="56" y="576">read via INFORMATION_SCHEMA</text>`;
+  document.getElementById('erdSvg').innerHTML = erd;
+
+  /* ---------- Server layout ---------- */
+  function cyl(x,y,w,h,cls,title,sub,tcls){
+    const e=9;
+    return `<path class="${cls}" d="M${x} ${y+e} A${w/2} ${e} 0 0 0 ${x+w} ${y+e} V${y+h-e} A${w/2} ${e} 0 0 1 ${x} ${y+h-e} Z"/>
+      <ellipse class="${cls}" cx="${x+w/2}" cy="${y+e}" rx="${w/2}" ry="${e}"/>
+      <text class="${tcls}" x="${x+w/2}" y="${y+h/2+8}" text-anchor="middle">${title}</text>
+      ${sub?`<text class="t-mono-m" x="${x+w/2}" y="${y+h/2+26}" text-anchor="middle">${sub}</text>`:''}`;
+  }
+  const arrowHead = (x,y,dir,cls) => {
+    // dir: 'r' right
+    return `<polygon class="${cls}" points="${x},${y} ${x-9},${y-5} ${x-9},${y+5}"/>`;
+  };
+  let srv = '';
+  srv += `<rect class="box" x="20" y="30" width="270" height="280" rx="8"/>
+    <text class="t-title" x="38" y="56">CoreFoundry API</text>
+    <text class="t-muted" x="38" y="74">ASP.NET Core · .NET 10</text>
+    <rect class="box-meta" x="38" y="92" width="234" height="84" rx="6"/>
+    <text class="t-meta" x="52" y="116">MetadataDbContext</text>
+    <text class="t-body" x="52" y="136">EF Core · migrations</text>
+    <text class="t-mono-m" x="52" y="158">login: cf_meta</text>
+    <rect class="box-gen" x="38" y="200" width="234" height="92" rx="6"/>
+    <text class="t-gen" x="52" y="224">Schema engine + Data API</text>
+    <text class="t-body" x="52" y="244">MySqlConnector · Dapper</text>
+    <text class="t-mono-m" x="52" y="266">login: cf_engine</text>`;
+  srv += `<rect class="server" x="420" y="16" width="520" height="308" rx="10"/>
+    <text class="t-title" x="440" y="42">MySQL 8.4 server</text>`;
+  srv += cyl(460,64,190,92,'box-meta','corefoundry','7 metadata tables','t-meta');
+  srv += cyl(460,206,130,92,'box-gen','cf_p_1','','t-gen');
+  srv += cyl(610,206,130,92,'box-gen','cf_p_7','books, authors','t-gen');
+  srv += cyl(760,206,130,92,'box-gen','cf_p_…','one per project','t-gen');
+  srv += `<text class="t-muted" x="700" y="98">metadata</text><text class="t-muted" x="700" y="116">(what users designed)</text>`;
+  srv += `<text class="t-muted" x="460" y="316">generated (what actually exists)</text>`;
+  // arrows
+  srv += `<path class="arrow-meta" d="M272 124 H451"/>` + arrowHead(460,124,'r','fill-meta');
+  srv += `<text class="lbl-meta" x="366" y="116" text-anchor="middle">ALL ON corefoundry.*</text>`;
+  srv += `<path class="arrow-gen" d="M272 262 H451"/>` + arrowHead(460,262,'r','fill-gen');
+  srv += `<text class="lbl-gen" x="366" y="254" text-anchor="middle">DDL + DML ON cf_p\\_%</text>`;
+  srv += `<path class="arrow-deny" d="M272 222 C340 222 360 150 452 146"/>`;
+  srv += `<g transform="translate(360 186)"><circle r="10" fill="var(--surface)" stroke="var(--bad)" stroke-width="1.4"/><path d="M-4 -4 L4 4 M4 -4 L-4 4" stroke="var(--bad)" stroke-width="1.8"/></g>`;
+  srv += `<text class="lbl-bad" x="378" y="190">no grant</text>`;
+  document.getElementById('srvSvg').innerHTML = srv;
+
+  /* ---------- Draft → real mapping ---------- */
+  const rows = [
+    {n:'id', a:'—', st:'sys', real:'id  BIGINT PK AUTO_INCREMENT'},
+    {n:'title', a:'title', st:'sync', real:'title  VARCHAR(200)'},
+    {n:'price_usd', a:'price', st:'rename', real:'price  DECIMAL(10,2)'},
+    {n:'isbn', a:'null', st:'add', real:null},
+    {n:'legacy_code', a:'legacy_code', st:'drop', real:'legacy_code  VARCHAR(20)'},
+    {n:'published_on', a:'published_on', st:'sync', real:'published_on  DATE NULL'}
+  ];
+  const chipText = {sync:'IN SYNC', rename:'RENAME', add:'ADD', drop:'DROP', sys:'SYSTEM'};
+  const lineText = {rename:'RENAME COLUMN', add:'ADD COLUMN', drop:'DROP COLUMN'};
+  let m = '';
+  m += `<text class="t-meta" x="20" y="26">ProjectColumns (draft) · table books</text>`;
+  m += `<text class="t-gen" x="680" y="26">cf_p_7.books (real)</text>`;
+  m += `<text class="t-mono-m" x="36" y="52">Name</text><text class="t-mono-m" x="196" y="52">AppliedName</text><text class="t-mono-m" x="366" y="52">change</text>`;
+  m += `<text class="t-mono-m" x="696" y="52">INFORMATION_SCHEMA.COLUMNS</text>`;
+  rows.forEach((r,i)=>{
+    const y = 64 + i*44, cy = y+17;
+    m += `<rect class="${r.st==='sys'?'row-sys':'row-bg'}" x="20" y="${y}" width="470" height="34" rx="5"/>`;
+    if(r.st==='sys'){
+      m += `<text class="t-mono-m" x="36" y="${cy+4}">id</text><text class="t-muted" x="196" y="${cy+4}">system column, not stored in metadata</text>`;
+    } else {
+      m += `<text class="t-mono ${r.st==='drop'?'strike':''}" x="36" y="${cy+4}">${r.n}</text>`;
+      m += `<text class="${r.a==='null'?'t-mono-m':'t-mono'}" x="196" y="${cy+4}">${r.a}</text>`;
+      const cw = chipText[r.st].length*7.4+16;
+      m += `<rect class="chip-${r.st}" x="366" y="${cy-10}" width="${cw}" height="20" rx="10"/>`;
+      m += `<text class="chip-${r.st}-t" x="${366+cw/2}" y="${cy+4}" text-anchor="middle">${chipText[r.st]}</text>`;
+      if(r.st==='drop') m += `<text class="t-mono-m" x="${372+cw}" y="${cy+4}">PendingDrop</text>`;
+    }
+    if(r.real){
+      m += `<rect class="row-bg" x="680" y="${y}" width="260" height="34" rx="5"/>`;
+      m += `<text class="t-mono" x="696" y="${cy+4}">${r.real}</text>`;
+    } else {
+      m += `<rect class="ghost" x="680" y="${y}" width="260" height="34" rx="5"/>`;
+      m += `<text class="lt-add" x="696" y="${cy+4}">isbn  VARCHAR(13) NULL UQ</text>`;
+    }
+    const lc = r.st==='sys' ? 'sync' : r.st;
+    m += `<line class="ln-${lc}" x1="490" y1="${cy}" x2="680" y2="${cy}"/>`;
+    if(lineText[r.st]) m += `<text class="lt-${r.st} elabel" x="585" y="${cy-6}" text-anchor="middle">${lineText[r.st]}</text>`;
+    if(r.st==='drop') m += `<g transform="translate(666 ${cy})"><circle r="8" fill="var(--surface)" stroke="var(--bad)" stroke-width="1.4"/><path d="M-3 -3 L3 3 M3 -3 L-3 3" stroke="var(--bad)" stroke-width="1.6"/></g>`;
+  });
+  document.getElementById('mapSvg').innerHTML = m;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CoreFoundry Backend Flows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Schibsted+Grotesk:wght@600;700&display=swap">
+<style>
+:root{
+  --bg:#EDF0EF; --surface:#FFFFFF; --surface-2:#F4F6F6; --ink:#141B20; --muted:#5A6670; --line:#CAD2D5;
+  --meta:#2E48B0; --meta-soft:#E3E8FA; --gen:#A94F1E; --gen-soft:#F8E7DA;
+  --ok:#1D7646; --ok-soft:#DFF1E6; --warn:#8F5B00; --warn-soft:#FBEFD6; --bad:#B42318; --bad-soft:#FBE3E0;
+  --display:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0D1316; --surface:#141C21; --surface-2:#19232A; --ink:#E3E8EA; --muted:#93A0A8; --line:#2B3941;
+    --meta:#93A5FF; --meta-soft:#1C2548; --gen:#EE9C66; --gen-soft:#3A2416;
+    --ok:#62C98E; --ok-soft:#14301F; --warn:#E3A945; --warn-soft:#352812; --bad:#F2786E; --bad-soft:#3A1916;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0D1316; --surface:#141C21; --surface-2:#19232A; --ink:#E3E8EA; --muted:#93A0A8; --line:#2B3941;
+  --meta:#93A5FF; --meta-soft:#1C2548; --gen:#EE9C66; --gen-soft:#3A2416;
+  --ok:#62C98E; --ok-soft:#14301F; --warn:#E3A945; --warn-soft:#352812; --bad:#F2786E; --bad-soft:#3A1916;
+}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--body)}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:44px 88px;display:grid;gap:60px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(30px,5vw,44px);letter-spacing:-.01em}
+h2{font-size:26px}
+h3{font-size:16px}
+p{margin:0;max-width:70ch}
+a{color:var(--meta)}
+a:focus-visible{outline:2px solid var(--meta);outline-offset:2px;border-radius:3px}
+code,.mono{font-family:var(--mono);font-size:.88em}
+.eyebrow{font:600 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header{display:grid;gap:14px}
+.lede{font-size:17px;color:var(--muted)}
+nav.toc{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:-20px;padding:10px 20px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin}
+nav.toc a{flex:none;font:500 13px var(--body);color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid transparent}
+nav.toc a:hover{color:var(--ink);border-color:var(--line);background:var(--surface)}
+section{display:grid;gap:18px;scroll-margin-top:64px}
+.sechead{display:grid;gap:8px}
+figure.diagram{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.scroll{overflow-x:auto}
+figure.diagram svg{display:block;width:100%;height:auto}
+figcaption{padding:12px 18px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px}
+.key{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 18px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.key i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px;border:1.2px solid}
+.key .m{background:var(--meta-soft);border-color:var(--meta)}
+.key .g{background:var(--gen-soft);border-color:var(--gen)}
+.key .n{background:var(--surface);border-color:var(--line)}
+pre.code{margin:0;padding:16px 18px;background:var(--surface-2);border-top:1px solid var(--line);font:13px/1.65 var(--mono);overflow-x:auto;color:var(--ink)}
+.k{color:var(--meta);font-weight:600}.i{color:var(--gen)}.c{color:var(--muted)}.s{color:var(--ok)}
+.tablebox{border:1px solid var(--line);border-radius:10px;overflow-x:auto;background:var(--surface)}
+table.grid{width:100%;border-collapse:collapse;font-size:14px}
+table.grid th,table.grid td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+table.grid th{font:600 12px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--surface-2)}
+table.grid tr:last-child td{border-bottom:0}
+table.grid td.c1{font-family:var(--mono);font-size:13px;white-space:nowrap}
+table.grid td.y,table.grid td.n{text-align:center;font-weight:600}
+table.grid td.y{color:var(--ok)} table.grid td.n{color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
+.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.why div{border-top:2px solid var(--meta);padding-top:10px;display:grid;gap:4px}
+.why div.g{border-color:var(--gen)}
+.why b{font-family:var(--display);font-size:15px}
+.why p{font-size:14px;color:var(--muted)}
+
+/* SVG parts */
+.bx{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.bx-m{fill:var(--meta-soft);stroke:var(--meta);stroke-width:1.2}
+.bx-g{fill:var(--gen-soft);stroke:var(--gen);stroke-width:1.2}
+.bx-ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2}
+.bx-bad{fill:var(--bad-soft);stroke:var(--bad);stroke-width:1.2}
+.bx-ghost{fill:none;stroke:var(--muted);stroke-width:1.2;stroke-dasharray:5 4}
+.zone{fill:none;stroke:var(--meta);stroke-width:1.2;stroke-dasharray:6 5}
+.tt{fill:var(--ink);font:700 14px var(--display)}
+.tt-m{fill:var(--meta);font:700 14px var(--display)}
+.tt-g{fill:var(--gen);font:700 14px var(--display)}
+.tt-ok{fill:var(--ok);font:700 14px var(--display)}
+.tt-bad{fill:var(--bad);font:700 14px var(--display)}
+.ts{fill:var(--muted);font:12px var(--body)}
+.tm{fill:var(--ink);font:11.5px var(--mono)}
+.tmm{fill:var(--muted);font:11px var(--mono)}
+.zl{fill:var(--meta);font:600 11px var(--mono);letter-spacing:.04em}
+.ln{fill:none;stroke:var(--muted);stroke-width:1.4}
+.ln-m{fill:none;stroke:var(--meta);stroke-width:1.5}
+.ln-g{fill:none;stroke:var(--gen);stroke-width:1.5}
+.ln-ok{fill:none;stroke:var(--ok);stroke-width:1.5}
+.ln-bad{fill:none;stroke:var(--bad);stroke-width:1.5}
+.dash{stroke-dasharray:5 4}
+.ah{fill:var(--muted)}.ah-m{fill:var(--meta)}.ah-g{fill:var(--gen)}.ah-ok{fill:var(--ok)}.ah-bad{fill:var(--bad)}
+.al{fill:var(--muted);font:11px var(--mono);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
+.al-m{fill:var(--meta)}.al-g{fill:var(--gen)}.al-ok{fill:var(--ok)}.al-bad{fill:var(--bad)}
+.life{stroke:var(--line);stroke-width:1.4;stroke-dasharray:4 4}
+.divl{stroke:var(--line);stroke-width:1}
+.divt{fill:var(--muted);font:600 11px var(--mono);letter-spacing:.06em;paint-order:stroke;stroke:var(--surface);stroke-width:8px}
+.pill-bad{fill:var(--bad-soft);stroke:var(--bad);stroke-width:1}
+.pill-t{fill:var(--bad);font:600 11.5px var(--mono)}
+.dia{fill:var(--surface);stroke:var(--ink);stroke-width:1.2}
+@media (max-width:700px){ .wrap{gap:48px} h2{font-size:22px} }
+@media (prefers-reduced-motion:no-preference){ html{scroll-behavior:smooth} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">CoreFoundry · app flow &amp; backend logic · v1</div>
+    <h1>What happens between a click and a CREATE TABLE</h1>
+    <p class="lede">This page follows every request in CoreFoundry through its layers, checks and SQL: signing in, authorization, project setup, the schema engine, and the Data API. The tables and columns referenced here are defined in the <a href="corefoundry-erd.html">data model</a>.</p>
+  </header>
+  <nav class="toc" aria-label="Sections">
+      <a href="#layers">Layers</a><a href="#journey">User journey</a><a href="#auth">Sign-in &amp; refresh</a><a href="#authz">Authorization</a><a href="#lifecycle">Project lifecycle</a><a href="#plan">Schema plan</a><a href="#apply">Apply</a><a href="#data">Data API</a>
+  </nav>
+
+  <section id="layers">
+    <div class="sechead">
+      <div class="eyebrow">Architecture</div>
+      <h2>Four layers, dependencies point inward</h2>
+      <p>The Domain layer does no I/O, so the most dangerous logic (diffing a schema and deciding what to drop) can be tested with plain unit tests. Infrastructure implements interfaces defined by Application and is wired in by the Api layer at startup.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-layers" viewBox="0 0 1000 400" role="img" aria-label="Next.js calls the Api over HTTPS; Api depends on Application, Application on Domain; Infrastructure implements Application's ports and talks to MySQL." style="min-width:820px"></svg></div>
+      <figcaption>Arrows mean "depends on". The dashed arrow is the Api layer registering Infrastructure classes at startup (dependency injection). Infrastructure also uses Domain types such as <code>SchemaModel</code>; that arrow is left out to keep the picture readable.</figcaption>
+    </figure>
+  </section>
+
+  <section id="journey">
+    <div class="sechead">
+      <div class="eyebrow">App flow</div>
+      <h2>The user journey, screen by screen</h2>
+      <p>Six screens, each backed by a small set of endpoints. Nothing touches the project's real database until someone presses Apply.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-journey" viewBox="0 0 1100 230" role="img" aria-label="Sign in, Projects, Table designer, Review plan, Apply, Data. Loops: from Review plan back to the designer to edit more, and from a failed Apply back to Review plan." style="min-width:900px"></svg></div>
+      <div class="key"><span><i class="n"></i>account &amp; project screens</span><span><i class="m"></i>changes metadata only</span><span><i class="g"></i>touches the project's real database</span></div>
+      <figcaption>Review plan is read-only: it shows the exact SQL and flags destructive steps. Apply is limited to Owners and Admins. If an apply fails, the user goes back to Review plan, which compares the draft with the real schema again.</figcaption>
+    </figure>
+  </section>
+
+  <section id="auth">
+    <div class="sechead">
+      <div class="eyebrow">Authentication</div>
+      <h2>Sign-in, refresh rotation and replay detection</h2>
+      <p>The access token lasts 15 minutes and is kept in memory, never in <code>localStorage</code>. The refresh token is in an httpOnly cookie, and only its hash is stored in the database. Each refresh replaces the refresh token with a new one, so presenting an old token again is treated as theft.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-auth" viewBox="0 0 1000 700" role="img" aria-label="Sequence: login issues an access token and a refresh cookie; refresh revokes the old token and issues a new one; replaying a revoked token revokes the whole chain and returns 401." style="min-width:820px"></svg></div>
+      <figcaption>Refreshing revokes the old row, inserts the new one and sets <code>ReplacedByTokenId</code> in a single transaction. When a revoked token comes back, the API follows <code>ReplacedByTokenId</code> to the newest token and revokes all of them. Both the attacker and the real user are signed out.</figcaption>
+    </figure>
+  </section>
+
+  <section id="authz">
+    <div class="sechead">
+      <div class="eyebrow">Authorization</div>
+      <h2>One check covers every project route</h2>
+      <p>Every route starts with <code>/api/projects/{projectId}</code>, so one <code>ProjectRoleRequirement</code> handler reads <code>ProjectMembers</code> and decides. Each endpoint only declares the minimum role it needs.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-authz" viewBox="0 0 1000 250" role="img" aria-label="A request passes three checks in order: valid JWT (else 401), member of the project (else 404), role allowed (else 403), then the use case runs." style="min-width:820px"></svg></div>
+      <figcaption>Non-members get <b>404</b>, not 403, so nobody can find out which project ids exist by trying them.</figcaption>
+    </figure>
+    <div class="tablebox">
+      <table class="grid">
+        <thead><tr><th>Action</th><th>Owner</th><th>Admin</th><th>Developer</th></tr></thead>
+        <tbody>
+          <tr><td>Delete project · transfer ownership</td><td class="y">✔</td><td class="n">—</td><td class="n">—</td></tr>
+          <tr><td>Manage members</td><td class="y">✔</td><td class="y">✔ <span class="mono" style="font-weight:400;color:var(--muted)">not Owner</span></td><td class="n">—</td></tr>
+          <tr><td>Edit draft schema · view plan</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td></tr>
+          <tr><td><b>Apply schema</b></td><td class="y">✔</td><td class="y">✔</td><td class="n">—</td></tr>
+          <tr><td>Read / write data</td><td class="y">✔</td><td class="y">✔</td><td class="y">✔</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="lifecycle">
+    <div class="sechead">
+      <div class="eyebrow">Projects</div>
+      <h2>Project lifecycle: metadata first, database second</h2>
+      <p>A database can't be created inside the same transaction as the metadata, so <code>Projects.Status</code> records where the process has got to. <code>POST /projects</code> inserts the project with <code>Provisioning</code> status, plus its Owner member row, in one EF transaction. After that it runs <code>CREATE DATABASE</code>.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-life" viewBox="0 0 1100 230" role="img" aria-label="Project states: Provisioning to Active when the database is created, or to Failed which can be retried; Active to Deleting on delete; Deleting to removed after DROP DATABASE and metadata cleanup." style="min-width:880px"></svg></div>
+      <figcaption>Every step can be safely run again: <code>CREATE DATABASE IF NOT EXISTS</code> and <code>DROP DATABASE IF EXISTS</code>. If the API crashes partway, a startup check finds projects stuck in Provisioning or Deleting and finishes the job.</figcaption>
+    </figure>
+  </section>
+
+  <section id="plan">
+    <div class="sechead">
+      <div class="eyebrow">Schema engine · part 1</div>
+      <h2>Plan: compare the draft with reality</h2>
+      <p><code>GET …/schema/plan</code> turns both sides into the same <code>SchemaModel</code> shape and compares them. It reads the real schema from <code>INFORMATION_SCHEMA</code>, not from the last snapshot, so anything a failed apply left behind is picked up automatically.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-plan" viewBox="0 0 1100 320" role="img" aria-label="Draft metadata becomes a desired SchemaModel, INFORMATION_SCHEMA becomes an actual SchemaModel; SchemaDiffer produces operations; SqlRenderer turns them into SQL; the result is a plan with statements, warnings and a hash." style="min-width:900px"></svg></div>
+      <figcaption>Everything inside the dashed box is a pure function, the same idea as <code>terraform plan</code>. <code>planHash</code> is a SHA-256 of the statements plus <code>SchemaVersion</code>. The client sends it back with Apply, so the SQL that runs is exactly the SQL that was reviewed.</figcaption>
+    </figure>
+    <div class="why">
+      <div><b>Rename or drop?</b><p><code>Name ≠ AppliedName</code> on the same column <code>Id</code> is a rename. A column whose <code>AppliedName</code> is missing from the draft is a drop.</p></div>
+      <div><b>Destructive changes are flagged</b><p>Dropping a table or column, making a type narrower (e.g. <code>VARCHAR(200)→(50)</code>) and changing <code>NULL→NOT NULL</code> each add a warning that Review plan shows in red.</p></div>
+      <div><b>One statement per table</b><p>All changes to a table go into one <code>ALTER TABLE</code>. New tables get one <code>CREATE TABLE</code> with every column. Each statement then either succeeds completely or does nothing.</p></div>
+    </div>
+  </section>
+
+  <section id="apply">
+    <div class="sechead">
+      <div class="eyebrow">Schema engine · part 2</div>
+      <h2>Apply: no transaction to rely on, so keep a journal</h2>
+      <p>MySQL commits each DDL statement immediately, so a failed batch can't be rolled back. Instead, every statement is atomic on its own, and a <code>SchemaMigrations</code> row records exactly how far the apply got.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-apply" viewBox="0 0 1100 410" role="img" aria-label="Apply flow: check plan hash (409 if changed), take a per-project lock (409 if busy), insert a Pending migration, run statements one by one; success marks Applied and updates metadata in one transaction, failure marks Failed; both release the lock; after a failure the user re-plans." style="min-width:900px"></svg></div>
+      <figcaption>Metadata changes only after every statement has succeeded, all in one EF transaction: <code>AppliedName</code> set, <code>PendingDrop</code> rows deleted, <code>SchemaVersion + 1</code>, and <code>SnapshotJson</code> saved. <code>GET_LOCK('cf_apply_7', 0)</code> fails immediately if someone else is applying, instead of waiting.</figcaption>
+    </figure>
+  </section>
+
+  <section id="data">
+    <div class="sechead">
+      <div class="eyebrow">Data API</div>
+      <h2>Reading and writing rows in generated tables</h2>
+      <p>The Data API only accepts names that exist in the latest <em>applied</em> snapshot, never names from the draft or the request. Every value is sent as a query parameter. Table and column names can't be parameters, so each one is checked against the snapshot and then wrapped in backticks.</p>
+    </div>
+    <figure class="diagram">
+      <div class="scroll"><svg id="s-data" viewBox="0 0 1100 230" role="img" aria-label="A data request passes the auth gate, loads the cached applied snapshot, resolves table and sort names against it (404 or 400 if unknown), then runs a parameterized Dapper query as cf_engine." style="min-width:900px"></svg></div>
+      <pre class="code"><span class="c">-- GET /api/projects/7/data/books?sort=-price_usd&amp;page=2&amp;pageSize=25</span>
+<span class="k">SELECT</span> <span class="i">`id`</span>, <span class="i">`title`</span>, <span class="i">`price_usd`</span>, <span class="i">`isbn`</span>, <span class="i">`published_on`</span>
+<span class="k">FROM</span>   <span class="i">`cf_p_7`</span>.<span class="i">`books`</span>
+<span class="k">ORDER BY</span> <span class="i">`price_usd`</span> <span class="k">DESC</span>, <span class="i">`id`</span>
+<span class="k">LIMIT</span> <span class="s">@take</span> <span class="k">OFFSET</span> <span class="s">@skip</span>;          <span class="c">-- @take = 25, @skip = 25</span></pre>
+      <figcaption>The snapshot cache is keyed on <code>(ProjectId, SchemaVersion)</code>, so a successful apply automatically invalidates it. Sorting always ends with <code>`id`</code> so the page order is stable.</figcaption>
+    </figure>
+    <div class="two">
+      <div class="tablebox">
+        <table class="grid">
+          <thead><tr><th>Column type</th><th>Accepted JSON</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td class="c1">Int · BigInt</td><td>integer number, range-checked</td><td class="c1">42</td></tr>
+            <tr><td class="c1">Decimal(p,s)</td><td>number or numeric string, scale-checked</td><td class="c1">"19.99"</td></tr>
+            <tr><td class="c1">Bool</td><td><code>true</code> / <code>false</code></td><td class="c1">true</td></tr>
+            <tr><td class="c1">Varchar(n) · Text</td><td>string, length-checked</td><td class="c1">"Dune"</td></tr>
+            <tr><td class="c1">Date · DateTime</td><td>ISO-8601 string</td><td class="c1">"1965-08-01"</td></tr>
+            <tr><td class="c1">Uuid</td><td>UUID string</td><td class="c1">"3f2c…e9"</td></tr>
+            <tr><td class="c1">Json</td><td>any JSON value</td><td class="c1">{"tags":[…]}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="why" style="grid-template-columns:1fr">
+        <div class="g"><b>Writes</b><p><code>POST</code> / <code>PUT</code> bodies are checked field by field against the snapshot. An unknown field, <code>id</code> in the body, or a value of the wrong type gets <b>400 ProblemDetails</b> with one error per field. Inserts return the new row's <code>LAST_INSERT_ID()</code>.</p></div>
+        <div class="g"><b>Constraint errors</b><p>MySQL error 1062 (duplicate key) becomes <b>409</b> naming the unique column, and 1048 (NULL in a NOT NULL column) becomes <b>400</b>. Raw MySQL messages never reach the client.</p></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const suf = c => c ? '-'+c : '';
+  // box with title + sub lines
+  function box(x,y,w,h,kind,title,subs=[],o={}){
+    const tcls = {m:'tt-m',g:'tt-g',ok:'tt-ok',bad:'tt-bad'}[kind]||'tt';
+    const bcls = {m:'bx-m',g:'bx-g',ok:'bx-ok',bad:'bx-bad',ghost:'bx-ghost'}[kind]||'bx';
+    const n = 1 + subs.length;
+    const ty = o.top ? y+24 : y + h/2 - (n-1)*8 + 5;
+    let s = `<rect class="${bcls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="${o.rx||7}"/>`;
+    const ax = o.left ? x+14 : x+w/2, anc = o.left ? 'start':'middle';
+    s += `<text class="${tcls}" x="${ax}" y="${ty}" text-anchor="${anc}">${esc(title)}</text>`;
+    subs.forEach((t,i)=>{ const mono = t.startsWith('`'); s += `<text class="${mono?'tm':'ts'}" x="${ax}" y="${ty+18+i*16}" text-anchor="${anc}">${esc(mono?t.slice(1):t)}</text>`; });
+    return s;
+  }
+  // arrow along points; head at last point
+  function arrow(pts, c='', o={}){
+    let d = 'M'+pts.map(p=>p.join(' ')).join(' L');
+    if(o.d) d = o.d;
+    const endP = o.end || pts[pts.length-1], prev = o.prev || pts[pts.length-2];
+    const dx=endP[0]-prev[0], dy=endP[1]-prev[1], l=Math.hypot(dx,dy)||1, ux=dx/l, uy=dy/l;
+    const bx=endP[0]-ux*9, by=endP[1]-uy*9;
+    let s = `<path class="ln${suf(c)} ${o.dash?'dash':''}" d="${d}"/>`;
+    s += `<polygon class="ah${suf(c)}" points="${endP[0]},${endP[1]} ${bx-uy*4.5},${by+ux*4.5} ${bx+uy*4.5},${by-ux*4.5}"/>`;
+    if(o.label){ const lines = [].concat(o.label);
+      lines.forEach((t,i)=>{ s += `<text class="al ${c?'al-'+c:''}" x="${o.lx}" y="${o.ly+i*14}" text-anchor="${o.anchor||'middle'}">${esc(t)}</text>`; }); }
+    return s;
+  }
+  function pill(cx,y,text){
+    const w = text.length*7+18;
+    return `<rect class="pill-bad" x="${cx-w/2}" y="${y}" width="${w}" height="24" rx="12"/><text class="pill-t" x="${cx}" y="${y+16}" text-anchor="middle">${esc(text)}</text>`;
+  }
+  function cyl(x,y,w,h,title,sub){
+    const e=9;
+    return `<path class="bx-g" d="M${x} ${y+e} A${w/2} ${e} 0 0 0 ${x+w} ${y+e} V${y+h-e} A${w/2} ${e} 0 0 1 ${x} ${y+h-e} Z"/><ellipse class="bx-g" cx="${x+w/2}" cy="${y+e}" rx="${w/2}" ry="${e}"/>
+      <text class="tt-g" x="${x+w/2}" y="${y+h/2+6}" text-anchor="middle">${title}</text><text class="tm" x="${x+w/2}" y="${y+h/2+24}" text-anchor="middle">${sub}</text>`;
+  }
+  const put = (id,s) => { document.getElementById(id).innerHTML = s; };
+
+  /* 1. Layers */
+  let L = '';
+  L += arrow([[230,82],[318,82]],'',{label:'HTTPS · Bearer JWT',lx:274,ly:72});
+  L += arrow([[480,122],[480,168]],'',{label:'calls use cases',lx:490,ly:150,anchor:'start'});
+  L += arrow([[480,252],[480,298]],'',{label:'uses',lx:490,ly:280,anchor:'start'});
+  L += arrow([[730,210],[642,210]],'m',{label:'implements ports',lx:686,ly:200});
+  L += arrow([[640,70],[855,70],[855,168]],'',{dash:true,label:'registers (DI)',lx:750,ly:62});
+  L += arrow([[855,252],[855,308]],'g',{label:['cf_meta','cf_engine'],lx:866,ly:274,anchor:'start'});
+  L += box(20,40,210,110,'','Next.js dashboard',['App Router · TypeScript','access token: in memory','refresh token: httpOnly cookie']);
+  L += box(320,40,320,82,'','Api',['controllers · auth policies · ProblemDetails']);
+  L += box(320,170,320,82,'m','Application',['use cases · DTOs · validators','ports: IMetadataStore, ISchemaIntrospector…']);
+  L += box(320,300,320,82,'m','Domain',['entities · SchemaModel · SchemaDiffer','no I/O: pure and unit-tested']);
+  L += box(730,170,250,82,'','Infrastructure',['EF Core · Dapper · SqlRenderer','Introspector · JWT · hashing']);
+  L += cyl(730,310,250,76,'MySQL 8.4','corefoundry + cf_p_*');
+  put('s-layers',L);
+
+  /* 2. Journey */
+  let J = '';
+  const scr = [
+    ['Sign in','register · login','',['POST /auth/register','POST /auth/login']],
+    ['Projects','list · create · members','',['GET  /projects','POST /projects','…/members']],
+    ['Table designer','draft tables & columns','m',['…/tables','…/tables/{t}/columns']],
+    ['Review plan','SQL preview · warnings','',['GET  …/schema/plan']],
+    ['Apply','Owner / Admin only','g',['POST …/schema/apply','GET  …/migrations']],
+    ['Data','browse · add · edit rows','g',['…/data/{table}','…/data/{table}/{id}']]
+  ];
+  const X = i => 20 + i*182;
+  for(let i=0;i<5;i++) J += arrow([[X(i)+148,95],[X(i+1)-2,95]]);
+  J += arrow([],'',{d:'M606 60 C606 22 490 22 490 58',end:[490,58],prev:[490,40],label:'edit more',lx:548,ly:30});
+  J += arrow([],'bad',{d:'M788 60 C788 22 672 22 672 58',end:[672,58],prev:[672,40],label:'failed → re-plan',lx:730,ly:30});
+  scr.forEach((s,i)=>{
+    J += box(X(i),60,148,70,s[2],s[0],[s[1]]);
+    s[3].forEach((e,k)=>{ J += `<text class="tmm" x="${X(i)+4}" y="${160+k*17}">${esc(e)}</text>`; });
+  });
+  J += `<line class="divl" x1="20" y1="142" x2="1076" y2="142"/><text class="tmm" x="20" y="222">endpoints under /api/projects/{projectId} shortened to …</text>`;
+  put('s-journey',J);
+
+  /* 3. Auth sequence */
+  let A = '';
+  const LX = {b:150,a:500,d:850};
+  [['b','Browser · Next.js'],['a','CoreFoundry API'],['d','MySQL · corefoundry']].forEach(([k,t])=>{
+    A += `<line class="life" x1="${LX[k]}" y1="58" x2="${LX[k]}" y2="690"/>`;
+  });
+  function msg(f,t,y,label,sub,c,dash){
+    const x1=LX[f], x2=LX[t], dir = x2>x1?1:-1;
+    let s = arrow([[x1,y],[x2-dir*2,y]],c,{dash});
+    const mx=(x1+x2)/2;
+    s += `<text class="al ${c?'al-'+c:''}" x="${mx}" y="${y-8}" text-anchor="middle">${esc(label)}</text>`;
+    if(sub) s += `<text class="al" x="${mx}" y="${y+18}" text-anchor="middle">${esc(sub)}</text>`;
+    return s;
+  }
+  function divider(y,t){
+    return `<line class="divl" x1="20" y1="${y}" x2="980" y2="${y}"/><text class="divt" x="500" y="${y+4}" text-anchor="middle">${esc(t)}</text>`;
+  }
+  A += msg('b','a',100,'POST /auth/login  { email, password }');
+  A += msg('a','d',150,'SELECT user WHERE Email = @email','','m');
+  A += `<rect class="bx" x="512" y="172" width="230" height="30" rx="5"/><text class="tm" x="524" y="191">verify with PasswordHasher (PBKDF2)</text>`;
+  A += msg('a','d',235,'INSERT RefreshTokens (TokenHash = SHA-256)','','m');
+  A += msg('a','b',285,'200 { accessToken · 15 min }','Set-Cookie: refresh · httpOnly · Secure · 7 d','',true);
+  A += divider(335,'15 MINUTES LATER · ACCESS TOKEN EXPIRED');
+  A += msg('b','a',380,'POST /auth/refresh   (cookie sent)');
+  A += msg('a','d',430,'revoke old · insert new · set ReplacedByTokenId','one transaction','m');
+  A += msg('a','b',480,'200 { new accessToken } + rotated cookie','','',true);
+  A += divider(525,'A REVOKED TOKEN IS PRESENTED AGAIN');
+  A += msg('b','a',570,'POST /auth/refresh   (old, revoked token)','','bad');
+  A += msg('a','d',620,'revoke every token in the chain','','bad');
+  A += msg('a','b',670,'401 → sign in again','','bad',true);
+  [['b','Browser · Next.js',''],['a','CoreFoundry API',''],['d','MySQL · corefoundry','m']].forEach(([k,t,c])=>{
+    A += box(LX[k]-95,20,190,38,c,t,[]);
+  });
+  put('s-auth',A);
+
+  /* 4. Authorization gate */
+  let Z = '';
+  function diamond(cx,cy,l1,l2){
+    return `<polygon class="dia" points="${cx},${cy-46} ${cx+78},${cy} ${cx},${cy+46} ${cx-78},${cy}"/><text class="tt" style="font-size:13px" x="${cx}" y="${cy-3}" text-anchor="middle">${l1}</text><text class="tt" style="font-size:13px" x="${cx}" y="${cy+14}" text-anchor="middle">${l2}</text>`;
+  }
+  Z += arrow([[180,110],[222,110]],'',{});
+  Z += arrow([[378,110],[442,110]],'ok',{label:'yes',lx:410,ly:102});
+  Z += arrow([[598,110],[662,110]],'ok',{label:'yes',lx:630,ly:102});
+  Z += arrow([[818,110],[838,110]],'ok',{});
+  [[300,'401 Unauthorized'],[520,'404 Not Found'],[740,'403 Forbidden']].forEach(([cx,t])=>{
+    Z += arrow([[cx,156],[cx,196]],'bad',{label:'no',lx:cx+8,ly:180,anchor:'start'});
+    Z += pill(cx,198,t);
+  });
+  Z += box(20,78,160,64,'','Request',['`/api/projects/7/…']);
+  Z += diamond(300,110,'valid','JWT?');
+  Z += diamond(520,110,'member of','project 7?');
+  Z += diamond(740,110,'role','allowed?');
+  Z += box(840,78,140,64,'ok','Use case runs',['`ProjectRole ≥ min']);
+  put('s-authz',Z);
+
+  /* 5. Project lifecycle */
+  let P = '';
+  P += arrow([[170,80],[328,80]],'ok',{label:'CREATE DATABASE ok',lx:249,ly:70});
+  P += arrow([[480,80],[638,80]],'',{label:'DELETE /projects/7',lx:559,ly:70});
+  P += arrow([[790,80],[948,80]],'',{label:'DROP DATABASE',lx:869,ly:70});
+  P += `<text class="al" x="869" y="100" text-anchor="middle">then delete metadata</text>`;
+  P += arrow([[70,106],[70,158]],'bad',{label:'error',lx:62,ly:136,anchor:'end'});
+  P += arrow([[120,158],[120,106]],'',{label:'retry',lx:128,ly:136,anchor:'start'});
+  P += box(20,54,150,52,'m','Provisioning',['`Status = 0']);
+  P += box(330,54,150,52,'ok','Active',['`Status = 1']);
+  P += box(640,54,150,52,'','Deleting',['`Status = 3']);
+  P += box(950,54,130,52,'ghost','removed',[]);
+  P += box(20,160,150,52,'bad','Failed',['`Status = 2']);
+  P += `<text class="ts" x="200" y="186">DB name reserved, nothing to clean up · shown with a Retry button</text>`;
+  put('s-life',P);
+
+  /* 6. Plan pipeline */
+  let N = '';
+  N += `<rect class="zone" x="262" y="14" width="620" height="292" rx="10"/><text class="zl" x="278" y="34">PURE · NO I/O · UNIT-TESTED</text>`;
+  N += arrow([[220,80],[288,80]],'m',{label:'EF query',lx:254,ly:70});
+  N += arrow([[220,230],[288,230]],'g',{label:'introspect',lx:254,ly:220});
+  N += arrow([[470,80],[505,80],[505,140],[548,140]],'');
+  N += arrow([[470,230],[505,230],[505,170],[548,170]],'');
+  N += arrow([[698,155],[728,155]],'',{label:'ops',lx:713,ly:145});
+  N += arrow([[868,155],[938,155]],'',{label:'SQL',lx:903,ly:145});
+  N += box(20,50,200,60,'m','Draft metadata',['ProjectTables · Columns']);
+  N += box(20,200,200,60,'g','INFORMATION_SCHEMA',['real cf_p_7 schema']);
+  N += box(290,50,180,60,'m','Desired model',['`SchemaModel']);
+  N += box(290,200,180,60,'g','Actual model',['`SchemaModel']);
+  N += box(550,125,148,60,'m','SchemaDiffer',['`(desired, actual)']);
+  N += box(730,125,138,60,'m','SqlRenderer',['`ops → DDL']);
+  N += box(940,95,140,120,'','Plan',['`statements[]','`warnings[]','`planHash']);
+  N += `<text class="tmm" x="550" y="228">CreateTable · DropTable · RenameTable</text><text class="tmm" x="550" y="245">AddColumn · DropColumn · RenameColumn</text><text class="tmm" x="550" y="262">ModifyColumn  (+ destructive flag)</text>`;
+  put('s-plan',N);
+
+  /* 7. Apply */
+  let Y = '';
+  Y += arrow([[180,70],[228,70]]);
+  Y += arrow([[400,70],[448,70]],'ok',{label:'match',lx:424,ly:60});
+  Y += arrow([[620,70],[668,70]],'ok',{label:'locked',lx:644,ly:60});
+  Y += arrow([[860,70],[908,70]],'',{label:'start',lx:884,ly:60});
+  Y += arrow([[340,100],[340,146]],'bad',{label:'changed',lx:348,ly:128,anchor:'start'});
+  Y += pill(340,148,'409 plan is stale');
+  Y += arrow([[535,100],[535,146]],'bad',{label:'busy',lx:543,ly:128,anchor:'start'});
+  Y += pill(535,148,'409 apply running');
+  Y += arrow([],'',{d:'M965 40 C965 4 1035 4 1035 38',end:[1035,38],prev:[1035,24],label:'i < n: next',lx:1000,ly:14});
+  Y += arrow([[1030,100],[1030,228]],'ok',{label:'all ok',lx:1038,ly:170,anchor:'start'});
+  Y += arrow([[945,100],[945,160],[700,160],[700,228]],'bad',{label:'statement throws',lx:822,ly:152});
+  Y += arrow([[1030,300],[1030,370],[932,370]],'');
+  Y += arrow([[700,300],[700,370],[748,370]],'');
+  Y += arrow([[598,264],[250,264],[250,102]],'bad',{dash:true,label:'user re-plans → diff runs against the real schema',lx:440,ly:256});
+  Y += box(20,40,160,60,'','POST …/apply',['`{ planHash }']);
+  Y += box(230,40,170,60,'','Re-plan',['compare planHash']);
+  Y += box(450,40,170,60,'','Project lock',['`GET_LOCK(…, 0)']);
+  Y += box(670,40,190,60,'m','Journal row',['`SchemaMigrations: Pending']);
+  Y += box(910,40,170,60,'g','Run statement i',['`StatementsApplied = i']);
+  Y += box(920,230,170,70,'ok','Applied',['metadata updated','in one EF transaction']);
+  Y += box(600,230,200,70,'bad','Failed',['Error + StatementsApplied','saved on the journal row']);
+  Y += box(750,350,180,40,'','RELEASE_LOCK',[]);
+  put('s-apply',Y);
+
+  /* 8. Data API */
+  let D = '';
+  D += arrow([[220,80],[258,80]]);
+  D += arrow([[390,80],[428,80]],'ok');
+  D += arrow([[610,80],[648,80]]);
+  D += arrow([[840,80],[878,80]],'ok');
+  D += arrow([[745,118],[745,160]],'bad',{label:'unknown name',lx:753,ly:144,anchor:'start'});
+  D += pill(745,162,'404 table · 400 sort column');
+  D += arrow([[520,118],[520,160]],'',{label:'cache miss',lx:528,ly:144,anchor:'start'});
+  D += `<text class="tm" x="520" y="180" text-anchor="middle">latest Applied</text><text class="tm" x="520" y="196" text-anchor="middle">SchemaMigrations.SnapshotJson</text>`;
+  D += box(20,42,200,76,'','Request',['`GET …/data/books','`?sort=-price_usd&page=2']);
+  D += box(260,42,130,76,'','Auth gate',['Developer or above']);
+  D += box(430,42,180,76,'m','Load snapshot',['`key (7, SchemaVersion)']);
+  D += box(650,42,190,76,'m','Resolve names',['table, columns, sort','must exist in snapshot']);
+  D += box(880,42,200,76,'g','Dapper query',['`login cf_engine','values as @parameters']);
+  put('s-data',D);
+})();
+</script>
+</body>
+</html>
