@@ -44,6 +44,8 @@ backend architecture.
 | D23 | Column reordering uses **@dnd-kit** (core + sortable) | Animated sorting with pointer, touch and keyboard support built in. |
 | D24 | MySQL duplicate-key errors (1062) on save map to **409** | Unique indexes are the backstop for name races the services can't see; they were surfacing as 500s. |
 | D25 | **Foreign keys are in scope** (replaces D6): many-to-one references to another table's `id`, on delete `Restrict`/`Cascade`/`SetNull`, plus a schema diagram (React Flow). Added as M2.5, before M3 | Relations are what make the generated schema a real data model. Designing the M3 differ with constraint ordering from the start is cheaper than retrofitting it. Composite keys and non-`id` targets stay on the roadmap. |
+| D26 | Schema-engine integration tests run against the **local MySQL** (like M1/M2), creating and dropping `cf_p_<id ≥ 1,000,000>` databases; Testcontainers stays deferred | Consequence of D10: no Docker yet. The tests skip themselves when no connection string is configured (CI). |
+| D27 | Coverage via **Microsoft.Testing.Extensions.CodeCoverage**, reported in CI for `SchemaDiffer` + `SqlRenderer` (target ≥ 90%) | Native to Microsoft.Testing.Platform (D12); no extra runner. |
 
 ---
 
