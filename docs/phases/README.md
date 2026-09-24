@@ -5,8 +5,8 @@ Finish a phase's **Definition of done** before starting the next one.
 
 | Phase | Name | Delivers | Depends on |
 |---|---|---|---|
-| [M0](phase-0-setup.md) | Setup | Repo, solution skeleton, MySQL in Docker, CI | — |
-| [M1](phase-1-auth-projects.md) | Auth, projects, members | Sign in, create a project (and its `cf_p_<id>` database), manage members | M0 |
+| [M0](phase-0-setup.md) ✅ | Setup | Repo, solution skeleton, local MySQL accounts, CI | — |
+| [M1](phase-1-auth-projects.md) ✅ | Auth, projects, members | Sign in, create a project (and its `cf_p_<id>` database), manage members | M0 |
 | [M2](phase-2-table-designer.md) | Table designer | Draft tables & columns with full validation, designer UI | M1 |
 | [M3](phase-3-schema-engine.md) ⭐ | Schema engine | Plan (diff + SQL preview), Apply, migration history, drift | M2 |
 | [M4](phase-4-data-api.md) | Data API | Browse / add / edit / delete rows of generated tables | M3 |
@@ -15,6 +15,7 @@ Finish a phase's **Definition of done** before starting the next one.
 **If time gets tight:** M3 > M4 > M2 UI polish. M3 is the differentiator.
 
 ## Reference
+- [Progress](../PROGRESS.md): current status, verification and known gaps
 - [Plan](../../intial-plan.md): scope and decisions log
 - [Data model](../corefoundry-erd.html): ERD, physical layout, draft → real mapping
 - [Backend flows](../corefoundry-flows.html): layers, auth, authorization, lifecycle, plan/apply, Data API

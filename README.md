@@ -94,5 +94,6 @@ After pulling new migrations: `dotnet ef database update --project src/CoreFound
 
 ## Docs
 - [Plan](intial-plan.md)
+- [Progress](docs/PROGRESS.md): what's done, how it's verified, and what's next
 - [Phases](docs/phases/README.md)
 - [Data model](docs/corefoundry-erd.html) · [Backend flows](docs/corefoundry-flows.html) (open in a browser)
