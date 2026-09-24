@@ -7,7 +7,7 @@ Finish a phase's **Definition of done** before starting the next one.
 |---|---|---|---|
 | [M0](phase-0-setup.md) ✅ | Setup | Repo, solution skeleton, local MySQL accounts, CI | — |
 | [M1](phase-1-auth-projects.md) ✅ | Auth, projects, members | Sign in, create a project (and its `cf_p_<id>` database), manage members | M0 |
-| [M2](phase-2-table-designer.md) | Table designer | Draft tables & columns with full validation, designer UI | M1 |
+| [M2](phase-2-table-designer.md) ✅ | Table designer | Draft tables & columns with full validation, designer UI | M1 |
 | [M3](phase-3-schema-engine.md) ⭐ | Schema engine | Plan (diff + SQL preview), Apply, migration history, drift | M2 |
 | [M4](phase-4-data-api.md) | Data API | Browse / add / edit / delete rows of generated tables | M3 |
 | [M5](phase-5-polish.md) | Portfolio polish | README, demo data, GIF, live deploy | M4 |
