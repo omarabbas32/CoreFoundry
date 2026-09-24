@@ -11,7 +11,7 @@ _Last updated: 2026-09-24 · branch `m1-models`_
 | [M4 — Data API](phases/phase-4-data-api.md) | Planned | Row CRUD on generated tables |
 | [M5 — Portfolio polish](phases/phase-5-polish.md) | Planned | One-command run, README, demo, deploy |
 
-**Tests:** 162 .NET tests pass (112 unit, 50 integration, including 40 against a real MySQL database, none skipped),
+**Tests:** 162 .NET tests pass (112 unit, 50 integration, of which 29 run against a real MySQL database; none skipped),
 plus a 15-check headless browser run of the dashboard. `npm run lint` and `npm run build` are clean.
 
 ---
