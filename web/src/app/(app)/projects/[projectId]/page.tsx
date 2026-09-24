@@ -73,6 +73,19 @@ export default function ProjectPage() {
         </Alert>
       )}
 
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <h2 className="font-semibold">Tables</h2>
+          <p className="text-sm text-muted">Design the tables and columns of the project&apos;s database.</p>
+        </div>
+        <Link
+          href={`/projects/${data.id}/tables`}
+          className="inline-flex h-9 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
+        >
+          Open table designer
+        </Link>
+      </Card>
+
       <MembersSection project={data} />
 
       {atLeast(data.role, "Admin") && <RenameProjectForm project={data} />}
