@@ -7,8 +7,8 @@ and manage who else has access, with role checks enforced on every route.
 **Depends on:** M0.
 
 > **Progress:** data model (all 7 metadata tables, see plan D13–D15), auth endpoints, projects API
-> (with `cf_p_<id>` provisioning and startup recovery) and project authorization are done. Members API
-> and the frontend are next. Test projects use ids ≥ 1,000,000 so tests never touch dev project databases.
+> (with `cf_p_<id>` provisioning and startup recovery) project authorization and the members API
+> (add/role/remove/leave/transfer ownership) are done. The frontend is next. Test projects use ids ≥ 1,000,000 so tests never touch dev project databases.
 > Auth integration tests run against a local `corefoundry_test` database (`db/setup-test.sql`) and
 > skip when it isn't configured. Two refreshes racing with the same token: the loser gets 401
 > (optimistic concurrency on `RefreshTokens.RevokedAt`), which is **not** treated as theft.
@@ -113,9 +113,9 @@ Full columns and delete rules are in the [data model](../corefoundry-erd.html).
 | POST | `/api/projects/{projectId}/transfer-ownership` | Owner | `{ userId }`, one transaction |
 
 Rules:
-- [ ] Exactly one `Owner` per project, always equal to `Projects.OwnerId`
-- [ ] Admins can't grant, change or remove the Owner role
-- [ ] The Owner can't be removed. Ownership has to be transferred first.
+- [x] Exactly one `Owner` per project, always equal to `Projects.OwnerId`
+- [x] Admins can't grant, change or remove the Owner role
+- [x] The Owner can't be removed. Ownership has to be transferred first.
 
 ---
 
@@ -174,8 +174,8 @@ Turn "not a member" into 404 with a custom `IAuthorizationMiddlewareResultHandle
       token revokes the chain, and the newest token stops working too.
 - [x] Creating a project creates `cf_p_<id>` (checked via `INFORMATION_SCHEMA.SCHEMATA`)
 - [x] Deleting a project drops the database
-- [ ] Non-member → 404. Developer on an Admin route → 403. Admin can't remove the Owner.
-- [ ] Transfer ownership swaps the roles and `OwnerId` atomically
+- [x] Non-member → 404. Developer on an Admin route → 403. Admin can't remove the Owner.
+- [x] Transfer ownership swaps the roles and `OwnerId` atomically
 
 ---
 

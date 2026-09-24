@@ -16,6 +16,9 @@ internal sealed class UserRepository(MetadataDbContext db) : IUserRepository
     public Task<bool> EmailExistsAsync(string normalizedEmail, CancellationToken cancellationToken) =>
         db.Users.AnyAsync(user => user.Email == normalizedEmail, cancellationToken);
 
+    public async Task<IReadOnlyList<User>> ListByIdsAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken) =>
+        await db.Users.Where(user => ids.Contains(user.Id)).ToListAsync(cancellationToken);
+
     public void Add(User user) => db.Users.Add(user);
 }
 

@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M1 — auth and projects done; members & frontend next**. See [the phases](docs/phases/README.md).
+> Status: **M1 — backend done (auth, projects, members); frontend next**. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -77,6 +77,11 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | PATCH | `/api/projects/{id}` | `{ name }`; Admin+ |
 | DELETE | `/api/projects/{id}` | Owner; drops the `cf_p_<id>` database |
 | POST | `/api/projects/{id}/retry-provisioning` | Owner; for projects whose database creation failed |
+| GET | `/api/projects/{id}/members` | Developer+; Owner first, then Admins, then Developers |
+| POST | `/api/projects/{id}/members` | `{ email, role }` Admin+; existing accounts only; role Admin or Developer |
+| PUT | `/api/projects/{id}/members/{userId}` | `{ role }` Admin+; Admin ↔ Developer, never the Owner |
+| DELETE | `/api/projects/{id}/members/{userId}` | Admin+ for others; any member may remove themselves |
+| POST | `/api/projects/{id}/transfer-ownership` | `{ userId }` Owner; the old Owner becomes Admin |
 
 After pulling new migrations: `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`
 

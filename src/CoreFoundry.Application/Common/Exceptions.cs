@@ -37,6 +37,16 @@ public sealed class ConflictException : Exception
     public ConflictException(string message, Exception innerException) : base(message, innerException) { }
 }
 
+/// <summary>The caller is known but not allowed to do this. Maps to 403.</summary>
+public sealed class ForbiddenException : Exception
+{
+    public ForbiddenException(string message) : base(message) { }
+
+    public ForbiddenException() { }
+
+    public ForbiddenException(string message, Exception innerException) : base(message, innerException) { }
+}
+
 /// <summary>The resource doesn't exist or isn't visible to the caller. Maps to 404.</summary>
 public sealed class NotFoundException : Exception
 {

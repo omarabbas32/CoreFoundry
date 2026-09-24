@@ -62,13 +62,6 @@ public sealed partial class TestDatabaseApi : WebApplicationFactory<Program>, IA
         HandleCookies = false,
     });
 
-    /// <summary>Runs SQL against the test metadata database (e.g. to set up state no endpoint exposes yet).</summary>
-    public async Task ExecuteMetadataSqlAsync(FormattableString sql)
-    {
-        await using var scope = Services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<MetadataDbContext>().Database.ExecuteSqlInterpolatedAsync(sql);
-    }
-
     public async Task<bool> ProjectDatabaseExistsAsync(string databaseName)
     {
         await using var connection = new MySqlConnection(EngineConnectionString);
