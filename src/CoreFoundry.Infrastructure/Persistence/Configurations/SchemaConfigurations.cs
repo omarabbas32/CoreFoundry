@@ -17,6 +17,9 @@ internal sealed class ProjectTableConfiguration : IEntityTypeConfiguration<Proje
         builder.Property(table => table.AppliedName).HasMaxLength(ProjectTable.NameMaxLength);
         builder.HasIndex(table => new { table.ProjectId, table.Name }).IsUnique();
 
+        // Bumped by every change to the table or its columns; a stale Version makes the save fail (409).
+        builder.Property(table => table.Version).IsConcurrencyToken();
+
         builder.HasOne<Project>()
             .WithMany()
             .HasForeignKey(table => table.ProjectId)
@@ -45,6 +48,8 @@ internal sealed class ProjectColumnConfiguration : IEntityTypeConfiguration<Proj
         builder.HasIndex(column => new { column.TableId, column.Name }).IsUnique();
 
         builder.Ignore(column => column.IsApplied);
+        builder.Ignore(column => column.Default);
+        builder.Ignore(column => column.Definition);
     }
 }
 
