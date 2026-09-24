@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M1 — backend done (auth, projects, members); frontend next**. See [the phases](docs/phases/README.md).
+> Status: **M1 done — auth, projects, members, and the dashboard**. Next: M2 table designer. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -43,11 +43,18 @@ dotnet run --launch-profile http
 ### 3. Web
 ```bash
 cd web
-cp .env.example .env.local
+cp .env.example .env.local   # API_ORIGIN, defaults to http://localhost:5172
 npm install
 npm run dev
 ```
-Open http://localhost:3000. The page shows the API and database health.
+The browser only talks to the web app: `next.config.ts` proxies `/api/*` to the API, so the
+refresh cookie and CORS behave like the single-origin production setup.
+
+Pages: sign in / register, your projects (status, role, retry failed database creation, create),
+and a project page with details, members (add, change role, remove, leave, transfer ownership),
+rename, and delete (confirmed by typing the project name). Controls your role can't use are hidden;
+the API enforces the same rules.
+Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
 
 ### Tests
 ```bash

@@ -8,7 +8,9 @@ and manage who else has access, with role checks enforced on every route.
 
 > **Progress:** data model (all 7 metadata tables, see plan D13–D15), auth endpoints, projects API
 > (with `cf_p_<id>` provisioning and startup recovery) project authorization and the members API
-> (add/role/remove/leave/transfer ownership) are done. The frontend is next. Test projects use ids ≥ 1,000,000 so tests never touch dev project databases.
+> (add/role/remove/leave/transfer ownership) and the Next.js dashboard are done.
+> The web app proxies `/api/*` to the API (same origin, no CORS in practice) and runs on port 3100
+> in development because port 3000 is often taken by other local services. Test projects use ids ≥ 1,000,000 so tests never touch dev project databases.
 > Auth integration tests run against a local `corefoundry_test` database (`db/setup-test.sql`) and
 > skip when it isn't configured. Two refreshes racing with the same token: the loser gets 401
 > (optimistic concurrency on `RefreshTokens.RevokedAt`), which is **not** treated as theft.
@@ -149,14 +151,14 @@ Turn "not a member" into 404 with a custom `IAuthorizationMiddlewareResultHandle
 
 ## 6. Frontend (Next.js)
 
-- [ ] `/login`, `/register`: react-hook-form + zod, server errors mapped to fields
-- [ ] Auth state: keep the access token in memory (React context). On app load,
+- [x] `/login`, `/register`: react-hook-form + zod, server errors mapped to fields
+- [x] Auth state: keep the access token in memory (React context). On app load,
       call `/api/auth/refresh` to restore the session from the cookie.
-- [ ] `apiFetch` wrapper: adds the Bearer token. On a 401 it refreshes once and
+- [x] `apiFetch` wrapper: adds the Bearer token. On a 401 it refreshes once and
       retries. If two requests get a 401 at the same time, they share one refresh call.
-- [ ] `/projects`: list with a status badge (Provisioning, Active, Failed + Retry),
+- [x] `/projects`: list with a status badge (Provisioning, Active, Failed + Retry),
       and a create dialog
-- [ ] `/projects/[id]/members`: table showing roles, add by email, change role, remove.
+- [x] `/projects/[id]/members`: table showing roles, add by email, change role, remove.
       Controls the user isn't allowed to use are hidden or disabled.
 - [ ] CORS: API allows `http://localhost:3000` with credentials (dev only).
       Production uses a shared origin (M5).

@@ -9,6 +9,7 @@ using CoreFoundry.Infrastructure;
 using CoreFoundry.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
@@ -42,7 +43,14 @@ builder.Services.AddCors(options => options.AddPolicy(WebCorsPolicy, policy => p
     .AllowAnyMethod()
     .AllowCredentials()));
 
+// The web app proxies /api to this service, so the client IP arrives in X-Forwarded-For.
+// Only loopback proxies are trusted by default, so a remote caller can't spoof its IP.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
