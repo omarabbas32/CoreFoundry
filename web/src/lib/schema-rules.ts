@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { mysqlReservedWords } from "./mysql-reserved-words";
-import type { ColumnInput, DataType } from "./types";
+import type { ColumnInput, DataType, ReferenceAction } from "./types";
 
 /*
  * Browser copy of the Domain rules (IdentifierRules, ColumnDefinitionRules, ColumnDefault) so the
@@ -60,6 +60,9 @@ export type ColumnFormValues = {
   isNullable: boolean;
   isUnique: boolean;
   defaultValue: string;
+  /** A table id, or "" for no reference. */
+  referencesTableId: string;
+  onDelete: ReferenceAction;
 };
 
 const wholeNumber = (value: string) => (/^\s*\d+\s*$/.test(value) ? Number(value) : null);
@@ -74,6 +77,8 @@ export const columnFormSchema = z
     isNullable: z.boolean(),
     isUnique: z.boolean(),
     defaultValue: z.string(),
+    referencesTableId: z.string(),
+    onDelete: z.enum(["Restrict", "Cascade", "SetNull"]),
   })
   .superRefine((form, ctx) => {
     const issue = (path: keyof ColumnFormValues, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
@@ -108,6 +113,14 @@ export const columnFormSchema = z
       issue("isUnique", `${form.dataType} columns can't be unique.`);
     }
 
+    // Mirrors ColumnDefinitionRules.ValidateReference; the dialog already locks the type and hides the default.
+    if (form.referencesTableId !== "") {
+      if (form.dataType !== "BigInt") issue("dataType", "A column that references a table must be BigInt, like the id it holds.");
+      if (form.defaultValue !== "") issue("defaultValue", "A column that references a table can't have a default.");
+      if (form.onDelete === "SetNull" && !form.isNullable) issue("onDelete", "Set null needs a nullable column.");
+      return;
+    }
+
     const defaultError = defaultValueError(form.dataType, form.defaultValue, { length, precision, scale });
     if (defaultError) issue("defaultValue", defaultError);
   });
@@ -115,7 +128,10 @@ export const columnFormSchema = z
 /** The API request for the form, with fields that don't apply to the type cleared. */
 export function toColumnInput(form: ColumnFormValues): ColumnInput {
   const params = typeInfo[form.dataType].params;
+  const reference = form.referencesTableId === "" ? null : Number(form.referencesTableId);
   return {
+    referencesTableId: reference,
+    onDelete: reference === null ? null : form.onDelete,
     name: form.name.trim(),
     dataType: form.dataType,
     length: params === "length" ? wholeNumber(form.length) : null,

@@ -15,10 +15,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { Column } from "@/lib/types";
 
+const onDeleteText = { Restrict: "restrict", Cascade: "cascade", SetNull: "set null" } as const;
+
 // Handle · name · type · nullable · unique · default · actions. Scrolls sideways on narrow screens.
 const rowGrid = "grid grid-cols-[2rem_minmax(9rem,1.4fr)_minmax(8rem,1fr)_4.5rem_4.5rem_minmax(8rem,1.2fr)_9.5rem] items-center gap-x-3";
 
-export function typeLabel(column: Pick<Column, "dataType" | "length" | "precision" | "scale">) {
+export function typeLabel(column: Pick<Column, "dataType" | "length" | "precision" | "scale" | "referencesTableName">) {
+  if (column.referencesTableName) return `BigInt → ${column.referencesTableName}`;
   if (column.dataType === "Varchar") return `Varchar(${column.length})`;
   if (column.dataType === "Decimal") return `Decimal(${column.precision},${column.scale})`;
   return column.dataType;
@@ -157,7 +160,10 @@ function SortableRow({
         {column.name}
         {column.state === "New" && <span className="ml-2 font-sans text-xs text-accent">new</span>}
       </span>
-      <span className={dropped ? "text-muted line-through" : ""}>{typeLabel(column)}</span>
+      <span className={`grid ${dropped ? "text-muted line-through" : ""}`}>
+        <span className={column.referencesTableName && !dropped ? "font-medium text-accent" : ""}>{typeLabel(column)}</span>
+        {column.onDelete && <span className="text-xs text-muted">on delete {onDeleteText[column.onDelete]}</span>}
+      </span>
       <span className={dropped ? "text-muted line-through" : ""}>{column.isNullable ? "yes" : "no"}</span>
       <span className={dropped ? "text-muted line-through" : ""}>{column.isUnique ? "yes" : "—"}</span>
       <span className={`truncate font-mono ${dropped ? "text-muted line-through" : ""}`} title={column.defaultValue ?? undefined}>

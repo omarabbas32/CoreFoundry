@@ -56,7 +56,8 @@ rename, and delete (confirmed by typing the project name). Controls your role ca
 the API enforces the same rules.
 The table designer (`/projects/<id>/tables`) edits the draft schema: tables, columns with their
 type parameters and defaults, drag-to-reorder, delete with undo. Nothing is sent to the project's
-database yet; applying drafts comes with the schema engine (M3).
+database yet; applying drafts comes with the schema engine (M3). Columns can reference other
+tables, and the schema diagram shows the relations (pan, zoom, drag).
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
 
 ### Tests
@@ -98,11 +99,12 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | PUT | `/api/projects/{id}/tables/{tableId}` | `{ version, name }` rename |
 | DELETE | `/api/projects/{id}/tables/{tableId}?version=` | never applied → 204 (deleted); applied → 200, marked `PendingDrop` |
 | POST | `/api/projects/{id}/tables/{tableId}/restore` | `{ version }` undoes a pending drop |
-| POST | `/api/projects/{id}/tables/{tableId}/columns` | `{ version, name, dataType, length, precision, scale, isNullable, isUnique, defaultValue }` |
+| POST | `/api/projects/{id}/tables/{tableId}/columns` | `{ version, name, dataType, length, precision, scale, isNullable, isUnique, defaultValue, referencesTableId?, onDelete? }` |
 | PUT | `/api/projects/{id}/tables/{tableId}/columns/{columnId}` | same body; update |
 | DELETE | `/api/projects/{id}/tables/{tableId}/columns/{columnId}?version=` | never applied → removed; applied → `PendingDrop` |
 | POST | `/api/projects/{id}/tables/{tableId}/columns/{columnId}/restore` | `{ version }` |
 | PUT | `/api/projects/{id}/tables/{tableId}/columns/order` | `{ version, columnIds }`, every column exactly once |
+| GET | `/api/projects/{id}/schema` | Developer+; every table with its columns and references (the diagram's data) |
 
 Every table change carries the `version` the client last saw and returns the whole table with
 its new version; a stale version gets **409**.
@@ -112,6 +114,12 @@ its new version; a stale version gets **409**.
 starting with `cf_`. A table's row must fit MySQL's 65,535-byte limit (computed exactly, including
 the `id` column); Text/Json columns can't be unique or have a default, and a unique Varchar is at
 most 768 characters.
+
+**Relations:** a column can reference another table of the project (or its own table): it holds
+that table's `id`, so it is BigInt with no default, and `onDelete` is `Restrict`, `Cascade` or
+`SetNull` (SetNull needs a nullable column). A table can't be deleted while other tables'
+columns reference it. The **Diagram** page (`/projects/<id>/tables/diagram`) draws the tables
+and their relations.
 
 After pulling new migrations: `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`
 

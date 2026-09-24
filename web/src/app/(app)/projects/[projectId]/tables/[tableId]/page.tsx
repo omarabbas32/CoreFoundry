@@ -7,7 +7,7 @@ import { FullPageSpinner } from "@/components/full-page-spinner";
 import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Button, Card, ConfirmDialog } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useProject, useTable, useTableChange } from "@/lib/queries";
+import { useProject, useTable, useTableChange, useTables } from "@/lib/queries";
 import { limits, rowBytes } from "@/lib/schema-rules";
 import type { Column, Table } from "@/lib/types";
 import { ColumnDialog } from "./column-dialog";
@@ -55,6 +55,7 @@ function Designer({
 }) {
   const router = useRouter();
   const change = useTableChange(projectId, table.id);
+  const tables = useTables(projectId);
   const [editing, setEditing] = useState<Column | "new" | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -81,10 +82,10 @@ function Designer({
   /** Re-adds a hard-deleted column with the same definition, then moves it back to where it was. */
   async function undoDelete({ column, position }: DeletedColumn) {
     setDeleted(null);
-    const { name, dataType, length, precision, scale, isNullable, isUnique, defaultValue } = column;
+    const { name, dataType, length, precision, scale, isNullable, isUnique, defaultValue, referencesTableId, onDelete } = column;
     const added = await run({
       kind: "addColumn",
-      column: { name, dataType, length, precision, scale, isNullable, isUnique, defaultValue },
+      column: { name, dataType, length, precision, scale, isNullable, isUnique, defaultValue, referencesTableId, onDelete },
     });
     const ids = added!.columns.map((candidate) => candidate.id);
     const restoredId = ids.pop()!;
@@ -202,6 +203,7 @@ function Designer({
         projectId={projectId}
         tableId={table.id}
         column={editing === "new" ? null : editing}
+        tables={tables.data ?? []}
         open={editing !== null}
         onClose={() => setEditing(null)}
       />

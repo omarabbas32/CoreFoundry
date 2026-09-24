@@ -32,6 +32,10 @@ export function atLeast(role: ProjectRole, minimum: ProjectRole) {
 export const dataTypes = ["Int", "BigInt", "Decimal", "Bool", "Varchar", "Text", "DateTime", "Date", "Json", "Uuid"] as const;
 export type DataType = (typeof dataTypes)[number];
 
+/** What happens to referencing rows when the referenced row is deleted. */
+export const referenceActions = ["Restrict", "Cascade", "SetNull"] as const;
+export type ReferenceAction = (typeof referenceActions)[number];
+
 /** Where a table or column stands relative to the real database ("Changed" arrives with the schema engine). */
 export type SchemaObjectState = "New" | "Applied" | "PendingDrop";
 
@@ -45,6 +49,10 @@ export type Column = {
   isNullable: boolean;
   isUnique: boolean;
   defaultValue: string | null;
+  /** The table whose id this column references (a foreign key), or null. */
+  referencesTableId: number | null;
+  referencesTableName: string | null;
+  onDelete: ReferenceAction | null;
   ordinalPosition: number;
   state: SchemaObjectState;
 };
@@ -71,5 +79,5 @@ export type TableSummary = {
 
 export type ColumnInput = Pick<
   Column,
-  "name" | "dataType" | "length" | "precision" | "scale" | "isNullable" | "isUnique" | "defaultValue"
+  "name" | "dataType" | "length" | "precision" | "scale" | "isNullable" | "isUnique" | "defaultValue" | "referencesTableId" | "onDelete"
 >;

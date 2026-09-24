@@ -10,6 +10,7 @@ export const queryKeys = {
   members: (id: number) => ["projects", id, "members"] as const,
   tables: (projectId: number) => ["projects", projectId, "tables"] as const,
   table: (projectId: number, tableId: number) => ["projects", projectId, "tables", tableId] as const,
+  schema: (projectId: number) => ["projects", projectId, "schema"] as const,
 };
 
 export function useProjects() {
@@ -119,13 +120,29 @@ export function useTable(projectId: number, tableId: number) {
   });
 }
 
+/** Every table with its columns and references (for the diagram). */
+export function useSchema(projectId: number) {
+  return useQuery({
+    queryKey: queryKeys.schema(projectId),
+    queryFn: () => api<Table[]>(`/api/projects/${projectId}/schema`),
+  });
+}
+
+/** After any table change: the list and the whole-schema view are stale (each table is updated in place). */
+function invalidateTableLists(queryClient: ReturnType<typeof useQueryClient>, projectId: number) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.tables(projectId), exact: true }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.schema(projectId), exact: true }),
+  ]);
+}
+
 export function useCreateTable(projectId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => api<Table>(`/api/projects/${projectId}/tables`, { method: "POST", body: { name } }),
     onSuccess: (table) => {
       queryClient.setQueryData(queryKeys.table(projectId, table.id), table);
-      return queryClient.invalidateQueries({ queryKey: queryKeys.tables(projectId), exact: true });
+      return invalidateTableLists(queryClient, projectId);
     },
   });
 }
@@ -178,7 +195,7 @@ export function useTableChange(projectId: number, tableId: number) {
     onSuccess: (table) => {
       if (table) queryClient.setQueryData(key, table);
       else queryClient.removeQueries({ queryKey: key });
-      return queryClient.invalidateQueries({ queryKey: queryKeys.tables(projectId), exact: true });
+      return invalidateTableLists(queryClient, projectId);
     },
   });
 }

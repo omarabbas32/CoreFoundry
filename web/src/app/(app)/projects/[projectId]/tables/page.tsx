@@ -30,9 +30,17 @@ export default function TablesPage() {
               Every table gets an <span className="font-mono">id BIGINT</span> primary key; you add the rest.
             </p>
           </div>
-          <Button onClick={() => setCreating(true)} disabled={!tables.data}>
-            New table
-          </Button>
+          <div className="flex gap-2">
+            <Link
+              href={`/projects/${projectId}/tables/diagram`}
+              className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+            >
+              Diagram
+            </Link>
+            <Button onClick={() => setCreating(true)} disabled={!tables.data}>
+              New table
+            </Button>
+          </div>
         </div>
       </div>
 

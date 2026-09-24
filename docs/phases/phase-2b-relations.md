@@ -1,4 +1,4 @@
-# M2.5 — Relations and schema diagram (draft only)
+# M2.5 — Relations and schema diagram (draft only) ✅
 
 **Goal:** a column can reference another table (a many-to-one foreign key), and the
 project's draft schema can be seen as a diagram with relation lines. Like M2, this only
@@ -18,50 +18,53 @@ edits draft metadata: **nothing touches MySQL**. M3 creates the real constraints
 
 ## 2. Data
 
-- [ ] `ProjectColumns.ReferencesTableId` (nullable FK → `ProjectTables.Id`) and
+- [x] `ProjectColumns.ReferencesTableId` (nullable FK → `ProjectTables.Id`) and
       `ProjectColumns.OnDelete` (`TINYINT`, `Restrict=1, Cascade=2, SetNull=3`), migration `AddColumnReferences`
-- [ ] Both set or both null
+- [x] Both set or both null
+- [x] `ReferencesTableId` is a real FK with ON DELETE CASCADE: the Domain refuses to delete a referenced
+      table, so the cascade only runs when a whole project is deleted (tested)
 
 ## 3. Rules (Domain)
 
-- [ ] A reference column is `BigInt` (it holds an `id`), with no length/precision/scale and no default
-- [ ] `SetNull` requires a nullable column
-- [ ] The target table is in the same project and not pending drop; self-references are allowed
-- [ ] A table can't be deleted (hard delete or pending drop) while live columns of **other**
+- [x] A reference column is `BigInt` (it holds an `id`), with no length/precision/scale and no default
+- [x] `SetNull` requires a nullable column
+- [x] The target table is in the same project and not pending drop; self-references are allowed
+- [x] A table can't be deleted (hard delete or pending drop) while live columns of **other**
       tables reference it; the error names them (`books.author_id`)
-- [ ] A column can't be restored, and a table can't be restored, while a reference it holds
+- [x] A column can't be restored, and a table can't be restored, while a reference it holds
       points at a table pending drop
-- [ ] Renaming the target is fine: references are by id
+- [x] Renaming the target is fine: references are by id
 
 ## 4. API
 
-- [ ] Column requests: `referencesTableId`, `onDelete`; responses add `referencesTableName`
-- [ ] A target from another project (or unknown) → 400 on `referencesTableId`
-- [ ] `GET /api/projects/{projectId}/schema` (Developer): every table with its columns,
+- [x] Column requests: `referencesTableId`, `onDelete`; responses add `referencesTableName`
+- [x] A target from another project (or unknown) → 400 on `referencesTableId`
+- [x] `GET /api/projects/{projectId}/schema` (Developer): every table with its columns,
       for the diagram (and the M3 plan)
 
 ## 5. Frontend
 
-- [ ] Column dialog: "References" picker (none or a table); picking one locks the type to
+- [x] Column dialog: "References" picker (none or a table); picking one locks the type to
       BigInt, hides the default and shows "On delete"
-- [ ] Grid: `BigInt → authors` with the on-delete rule
-- [ ] `/projects/[id]/tables/diagram`: React Flow canvas, one node per table (columns listed,
+- [x] Grid: `BigInt → authors` with the on-delete rule
+- [x] `/projects/[id]/tables/diagram`: React Flow canvas, one node per table (columns listed,
       pending drops struck through), an edge from each reference column to its target's `id`,
       auto layout, pan/zoom/drag, click a table to open the designer
+      (edges run from a column's left edge to the referenced `id` row's right edge, since referenced tables are laid out to the left)
 
 ## 6. Tests
 
-- [ ] Unit: every rule in §3
-- [ ] Integration: create `books.author_id → authors`; wrong type / SetNull on NOT NULL /
+- [x] Unit: every rule in §3
+- [x] Integration: create `books.author_id → authors`; wrong type / SetNull on NOT NULL /
       other project's table → 400; deleting `authors` while referenced → 400; after deleting the
       reference column it works; `/schema` returns both tables; the project database stays empty
-- [ ] Browser: design authors ← books, see the edge in the diagram
+- [x] Browser: design authors ← books, see the edge in the diagram
 
 ## 7. Definition of done
 
-- [ ] In Bookshop, `books.author_id` references `authors` with `Cascade`, and the diagram shows the relation
-- [ ] Deleting `authors` is refused with a message naming `books.author_id`
-- [ ] No SQL is sent to `cf_p_*` databases
+- [x] In Bookshop, `books.author_id` references `authors` with `Cascade`, and the diagram shows the relation
+- [x] Deleting `authors` is refused with a message naming `books.author_id`
+- [x] No SQL is sent to `cf_p_*` databases
 
 ## 8. What M3 must add (tracked in the M3 phase doc)
 
