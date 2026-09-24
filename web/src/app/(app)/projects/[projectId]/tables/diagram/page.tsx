@@ -32,7 +32,7 @@ export default function DiagramPage() {
         </div>
       </div>
 
-      <DraftBanner />
+      <DraftBanner projectId={projectId} />
       {schema.error && <Alert>{schema.error.message}</Alert>}
 
       {schema.data?.length === 0 && (

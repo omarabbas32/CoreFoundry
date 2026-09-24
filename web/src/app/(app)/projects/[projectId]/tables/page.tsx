@@ -44,7 +44,7 @@ export default function TablesPage() {
         </div>
       </div>
 
-      <DraftBanner />
+      <DraftBanner projectId={projectId} />
       {tables.error && <Alert>{tables.error.message}</Alert>}
 
       {tables.data?.length === 0 && (

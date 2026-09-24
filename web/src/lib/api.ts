@@ -25,13 +25,17 @@ export class ApiError extends Error {
     message: string,
     /** Field name (camelCase) → messages, from ValidationProblemDetails. */
     readonly fieldErrors: Record<string, string[]> = {},
+    /** The ProblemDetails type's last segment, e.g. "plan-stale" (empty when absent). */
+    readonly problemType: string = "",
+    /** The whole ProblemDetails body, for extension members such as apply-failed's statement. */
+    readonly problem: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-type ProblemDetails = { title?: string; detail?: string; errors?: Record<string, string[]> };
+type ProblemDetails = { type?: string; title?: string; detail?: string; errors?: Record<string, string[]> };
 
 async function toApiError(response: Response): Promise<ApiError> {
   let problem: ProblemDetails = {};
@@ -54,7 +58,8 @@ async function toApiError(response: Response): Promise<ApiError> {
     (response.status === 502 || response.status === 504
       ? "Can't reach the API. Is it running?"
       : `Request failed (${response.status}).`);
-  return new ApiError(response.status, message, fieldErrors);
+  const problemType = problem.type?.startsWith("https://corefoundry.dev/problems/") ? problem.type.split("/").pop()! : "";
+  return new ApiError(response.status, message, fieldErrors, problemType, problem as Record<string, unknown>);
 }
 
 /**
