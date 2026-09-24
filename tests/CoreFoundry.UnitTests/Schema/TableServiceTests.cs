@@ -1,6 +1,7 @@
 using System.Reflection;
 using CoreFoundry.Application.Common;
 using CoreFoundry.Application.Schema;
+using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Domain.Common;
 using CoreFoundry.Domain.Projects;
 using CoreFoundry.Domain.Schema;
@@ -14,6 +15,7 @@ public class TableServiceTests
     private const long ProjectId = 7;
     private readonly FakeProjects _projects = new();
     private readonly FakeTables _tables = new();
+    private readonly FakeMigrations _migrations = new();
     private readonly FakeTablesUnitOfWork _unitOfWork;
     private readonly TableService _service;
 
@@ -21,7 +23,7 @@ public class TableServiceTests
     {
         _projects.Add(WithId(new Project("Bookshop", "bookshop", ownerId: 1), ProjectId));
         _unitOfWork = new FakeTablesUnitOfWork(_tables);
-        _service = new TableService(_projects, _tables, _unitOfWork);
+        _service = new TableService(_projects, _tables, _migrations, _unitOfWork);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -332,9 +334,9 @@ internal sealed class FakeTables : ITableRepository
     public Task<int> CountAsync(long projectId, CancellationToken cancellationToken) =>
         Task.FromResult(All.Count(table => table.ProjectId == projectId));
 
-    public Task<IReadOnlyDictionary<long, string>> ListNamesAsync(long projectId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyDictionary<long, string>>(
-            All.Where(table => table.ProjectId == projectId).ToDictionary(table => table.Id, table => table.Name));
+    public Task<IReadOnlyDictionary<long, TableName>> ListNamesAsync(long projectId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<long, TableName>>(All.Where(table => table.ProjectId == projectId)
+            .ToDictionary(table => table.Id, table => new TableName(table.Name, table.AppliedName)));
 
     public Task<bool> NameExistsAsync(long projectId, string name, long? exceptTableId, CancellationToken cancellationToken) =>
         Task.FromResult(All.Any(table => table.ProjectId == projectId && table.Name == name && table.Id != exceptTableId));
@@ -379,4 +381,25 @@ internal sealed class FakeTablesUnitOfWork(FakeTables tables) : IUnitOfWork
             id.SetValue(entity, _nextId++);
         }
     }
+}
+
+internal sealed class FakeMigrations : ISchemaMigrationRepository
+{
+    public List<SchemaMigration> All { get; } = [];
+
+    public void Add(SchemaMigration migration) => All.Add(migration);
+
+    public Task<SchemaMigration?> FindAsync(long projectId, long migrationId, CancellationToken cancellationToken) =>
+        Task.FromResult(All.SingleOrDefault(migration => migration.ProjectId == projectId && migration.Id == migrationId));
+
+    public Task<IReadOnlyList<SchemaMigration>> ListAsync(long projectId, int skip, int take, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SchemaMigration>>(
+            [.. All.Where(migration => migration.ProjectId == projectId).OrderByDescending(migration => migration.Version).Skip(skip).Take(take)]);
+
+    public Task<int> CountAsync(long projectId, CancellationToken cancellationToken) =>
+        Task.FromResult(All.Count(migration => migration.ProjectId == projectId));
+
+    public Task<SchemaMigration?> LatestAppliedAsync(long projectId, CancellationToken cancellationToken) =>
+        Task.FromResult(All.Where(migration => migration.ProjectId == projectId && migration.Status == MigrationStatus.Applied)
+            .OrderByDescending(migration => migration.Version).FirstOrDefault());
 }

@@ -120,7 +120,7 @@ public static class SchemaDiffer
             _operations.Add(new CreateTable(table with { Columns = columns }));
             foreach (var column in columns)
             {
-                AddForeignKeyIfAny(table.Name, column);
+                AddForeignKeyIfAny(table.Name, column, existingValues: false);
             }
         }
 
@@ -187,10 +187,10 @@ public static class SchemaDiffer
             _operations.Add(new AddColumn(table, column, risk, reason));
             if (column.IsUnique)
             {
-                _operations.Add(new AddUniqueKey(table, column.Name, ConstraintNames.UniqueKey(table, column.Name)));
+                _operations.Add(new AddUniqueKey(table, column.Name, ConstraintNames.UniqueKey(table, column.Name), ExistingValues: false));
             }
 
-            AddForeignKeyIfAny(table, column);
+            AddForeignKeyIfAny(table, column, existingValues: false);
         }
 
         private void DiffUniqueKey(string table, ColumnModel existing, ColumnModel wanted)
@@ -231,7 +231,7 @@ public static class SchemaDiffer
                 DropForeignKey(currentTable, name);
             }
 
-            AddForeignKeyIfAny(table, wanted);
+            AddForeignKeyIfAny(table, wanted, existingValues: true);
         }
 
         /// <summary>Same target (by its current physical name), same rule and the expected constraint name.</summary>
@@ -242,7 +242,7 @@ public static class SchemaDiffer
             && have.OnDelete == want.OnDelete
             && have.ConstraintName == ConstraintNames.ForeignKey(table, wanted.Name);
 
-        private void AddForeignKeyIfAny(string table, ColumnModel column)
+        private void AddForeignKeyIfAny(string table, ColumnModel column, bool existingValues)
         {
             if (column.Reference is not { } reference)
             {
@@ -252,7 +252,8 @@ public static class SchemaDiffer
             var target = reference.TargetMetadataId is long id && _desiredNames.TryGetValue(id, out var name)
                 ? name
                 : reference.TargetTable;
-            _operations.Add(new AddForeignKey(table, column.Name, target, reference.OnDelete, ConstraintNames.ForeignKey(table, column.Name)));
+            _operations.Add(new AddForeignKey(
+                table, column.Name, target, reference.OnDelete, ConstraintNames.ForeignKey(table, column.Name), existingValues));
         }
 
         private void DropForeignKey(string table, string name)

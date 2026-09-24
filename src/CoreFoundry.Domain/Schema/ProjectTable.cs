@@ -176,6 +176,27 @@ public sealed class ProjectTable
         }
     }
 
+    /// <summary>
+    /// Records a successful apply: the table and its columns now exist under their current names,
+    /// and columns that were pending drop are gone. (A table pending drop is deleted by the caller.)
+    /// </summary>
+    public void MarkApplied()
+    {
+        if (PendingDrop)
+        {
+            throw new DomainException("A table pending drop is removed after an apply, not marked applied.");
+        }
+
+        AppliedName = Name;
+        _columns.RemoveAll(column => column.PendingDrop);
+        foreach (var column in _columns)
+        {
+            column.MarkApplied();
+        }
+
+        Touch();
+    }
+
     public void Restore()
     {
         if (!PendingDrop)

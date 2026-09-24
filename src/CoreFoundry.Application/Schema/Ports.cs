@@ -13,8 +13,8 @@ public interface ITableRepository
 
     Task<int> CountAsync(long projectId, CancellationToken cancellationToken);
 
-    /// <summary>Id → name of every table of the project (for showing what columns reference).</summary>
-    Task<IReadOnlyDictionary<long, string>> ListNamesAsync(long projectId, CancellationToken cancellationToken);
+    /// <summary>Id → current and applied name of every table of the project (for what columns reference).</summary>
+    Task<IReadOnlyDictionary<long, TableName>> ListNamesAsync(long projectId, CancellationToken cancellationToken);
 
     /// <summary>True if another table of the project (pending drop included) already has this name.</summary>
     Task<bool> NameExistsAsync(long projectId, string name, long? exceptTableId, CancellationToken cancellationToken);

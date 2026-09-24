@@ -137,13 +137,14 @@ public sealed record ModifyColumn(
 }
 
 /// <param name="Column">The column's name after any rename in the same plan.</param>
-public sealed record AddUniqueKey(string Table, string Column, string Name) : SchemaOperation(Table)
+/// <param name="ExistingValues">False for a column created in the same plan: it holds no values yet.</param>
+public sealed record AddUniqueKey(string Table, string Column, string Name, bool ExistingValues = true) : SchemaOperation(Table)
 {
     public override OperationPhase Phase => OperationPhase.AlterTables;
 
-    public override OperationRisk Risk => OperationRisk.Risky;
+    public override OperationRisk Risk => ExistingValues ? OperationRisk.Risky : OperationRisk.Safe;
 
-    public override string RiskReason => $"Fails if {Table}.{Column} already has duplicate values.";
+    public override string? RiskReason => ExistingValues ? $"Fails if {Table}.{Column} already has duplicate values." : null;
 
     public override string Describe() => $"Make {Table}.{Column} unique";
 }
@@ -165,16 +166,17 @@ public sealed record RenameUniqueKey(string Table, string Name, string NewName) 
 
 /// <param name="Table">The referencing table's name after renames.</param>
 /// <param name="TargetTable">The referenced table's name after renames.</param>
+/// <param name="ExistingValues">False for a column created in the same plan: it holds no values yet.</param>
 public sealed record AddForeignKey(
-    string Table, string Column, string TargetTable, ReferenceAction OnDelete, string Name)
+    string Table, string Column, string TargetTable, ReferenceAction OnDelete, string Name, bool ExistingValues = true)
     : SchemaOperation(Table)
 {
     public override OperationPhase Phase => OperationPhase.AddForeignKeys;
 
-    public override OperationRisk Risk => OperationRisk.Risky;
+    public override OperationRisk Risk => ExistingValues ? OperationRisk.Risky : OperationRisk.Safe;
 
-    public override string RiskReason =>
-        $"Fails if {Table}.{Column} holds values that aren't ids of {TargetTable}.";
+    public override string? RiskReason =>
+        ExistingValues ? $"Fails if {Table}.{Column} holds values that aren't ids of {TargetTable}." : null;
 
     public override string Describe() => $"Reference {Table}.{Column} → {TargetTable}.id (on delete {OnDelete})";
 }

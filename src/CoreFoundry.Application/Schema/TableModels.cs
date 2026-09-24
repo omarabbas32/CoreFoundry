@@ -1,4 +1,6 @@
+using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Domain.Schema;
+using CoreFoundry.Domain.SchemaEngine;
 
 namespace CoreFoundry.Application.Schema;
 
@@ -8,8 +10,11 @@ public enum SchemaObjectState
     /// <summary>Never applied.</summary>
     New,
 
-    /// <summary>Applied and unchanged. (<c>Changed</c> arrives with the M3 snapshot comparison.)</summary>
+    /// <summary>Applied and unchanged since the last apply.</summary>
     Applied,
+
+    /// <summary>Applied, but the draft differs from what the last apply created (rename, type, …).</summary>
+    Changed,
 
     /// <summary>Applied, and will be dropped at the next apply unless restored.</summary>
     PendingDrop,
@@ -64,28 +69,28 @@ public sealed record TableDto(
     DateTime CreatedAt,
     DateTime UpdatedAt)
 {
-    /// <param name="tableNames">Names of the project's tables by id, for the columns' references.</param>
-    public static TableDto From(ProjectTable table, IReadOnlyDictionary<long, string> tableNames)
+    public static TableDto From(ProjectTable table, SchemaContext context)
     {
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(tableNames);
+        ArgumentNullException.ThrowIfNull(context);
         return new(
             table.Id,
             table.Name,
-            StateOf(table),
+            context.StateOf(table),
             table.Version,
-            [.. table.Columns.Select(column => ColumnFrom(table, column, tableNames))],
+            [.. table.Columns.Select(column => ColumnFrom(table, column, context))],
             table.CreatedAt,
             table.UpdatedAt);
     }
 
-    public static TableSummaryDto SummaryFrom(ProjectTable table)
+    public static TableSummaryDto SummaryFrom(ProjectTable table, SchemaContext context)
     {
         ArgumentNullException.ThrowIfNull(table);
-        return new(table.Id, table.Name, StateOf(table), table.Columns.Count, table.Version, table.UpdatedAt);
+        ArgumentNullException.ThrowIfNull(context);
+        return new(table.Id, table.Name, context.StateOf(table), table.Columns.Count, table.Version, table.UpdatedAt);
     }
 
-    private static ColumnDto ColumnFrom(ProjectTable table, ProjectColumn column, IReadOnlyDictionary<long, string> tableNames) => new(
+    private static ColumnDto ColumnFrom(ProjectTable table, ProjectColumn column, SchemaContext context) => new(
         column.Id,
         column.Name,
         column.DataType,
@@ -96,15 +101,76 @@ public sealed record TableDto(
         column.IsUnique,
         column.DefaultValue,
         column.ReferencesTableId,
-        column.ReferencesTableId is long target ? tableNames.GetValueOrDefault(target) : null,
+        column.ReferencesTableId is long target ? context.Tables.GetValueOrDefault(target)?.Name : null,
         column.OnDelete,
         column.OrdinalPosition,
-        table.IsColumnPendingDrop(column) ? SchemaObjectState.PendingDrop
-            : column.IsApplied ? SchemaObjectState.Applied
-            : SchemaObjectState.New);
+        context.StateOf(table, column));
+}
 
-    private static SchemaObjectState StateOf(ProjectTable table) =>
-        table.PendingDrop ? SchemaObjectState.PendingDrop
-            : table.IsApplied ? SchemaObjectState.Applied
-            : SchemaObjectState.New;
+/// <summary>A project table's current and applied names.</summary>
+public sealed record TableName(string Name, string? AppliedName);
+
+/// <summary>
+/// What's needed to tell New / Applied / Changed / PendingDrop apart: the project's table names (for
+/// references) and the snapshot the last apply took of the real schema.
+/// </summary>
+public sealed record SchemaContext(IReadOnlyDictionary<long, TableName> Tables, SchemaSnapshot Snapshot)
+{
+    public SchemaObjectState StateOf(ProjectTable table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        if (table.PendingDrop)
+        {
+            return SchemaObjectState.PendingDrop;
+        }
+
+        if (!table.IsApplied)
+        {
+            return SchemaObjectState.New;
+        }
+
+        return table.Name != table.AppliedName || table.Columns.Any(column => StateOf(table, column) != SchemaObjectState.Applied)
+            ? SchemaObjectState.Changed
+            : SchemaObjectState.Applied;
+    }
+
+    public SchemaObjectState StateOf(ProjectTable table, ProjectColumn column)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(column);
+        if (table.IsColumnPendingDrop(column))
+        {
+            return SchemaObjectState.PendingDrop;
+        }
+
+        if (!column.IsApplied)
+        {
+            return SchemaObjectState.New;
+        }
+
+        // Without a snapshot of this table (e.g. applied before snapshots existed) there's nothing to compare with.
+        if (Snapshot.FindTable(table.AppliedName!)?.FindColumn(column.AppliedName!) is not { } applied)
+        {
+            return SchemaObjectState.Applied;
+        }
+
+        return column.Name != column.AppliedName || applied != Expected(column)
+            ? SchemaObjectState.Changed
+            : SchemaObjectState.Applied;
+    }
+
+    /// <summary>What the snapshot would say about this column if its draft were applied as it is now.</summary>
+    private ColumnSnapshot Expected(ProjectColumn column)
+    {
+        var type = new ColumnType(column.DataType, column.Length, column.Precision, column.Scale);
+        var target = column.ReferencesTableId is long id ? Tables.GetValueOrDefault(id) : null;
+        return new ColumnSnapshot(
+            column.AppliedName!,
+            type.ToString(),
+            column.IsNullable,
+            column.IsUnique,
+            type.Normalize(column.Default)?.Canonical,
+            target is null ? null : target.AppliedName ?? target.Name,
+            column.OnDelete?.ToString());
+    }
 }

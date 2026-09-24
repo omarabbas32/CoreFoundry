@@ -20,9 +20,9 @@ internal sealed class TableRepository(MetadataDbContext db) : ITableRepository
     public Task<int> CountAsync(long projectId, CancellationToken cancellationToken) =>
         db.ProjectTables.CountAsync(table => table.ProjectId == projectId, cancellationToken);
 
-    public async Task<IReadOnlyDictionary<long, string>> ListNamesAsync(long projectId, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyDictionary<long, TableName>> ListNamesAsync(long projectId, CancellationToken cancellationToken) =>
         await db.ProjectTables.Where(table => table.ProjectId == projectId)
-            .ToDictionaryAsync(table => table.Id, table => table.Name, cancellationToken);
+            .ToDictionaryAsync(table => table.Id, table => new TableName(table.Name, table.AppliedName), cancellationToken);
 
     public Task<bool> NameExistsAsync(long projectId, string name, long? exceptTableId, CancellationToken cancellationToken) =>
         db.ProjectTables.AnyAsync(
