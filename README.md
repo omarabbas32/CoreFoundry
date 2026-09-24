@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M1 — auth done; projects & members next**. See [the phases](docs/phases/README.md).
+> Status: **M1 — auth and projects done; members & frontend next**. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -59,8 +59,9 @@ dropped and re-created on every run (your `corefoundry` dev data is never touche
 ```bash
 mysql -u root -p < db/setup-test.sql
 ```
-The tests reuse the API's `ConnectionStrings:Metadata` user-secret with the database swapped to
-`corefoundry_test`. Without it (e.g. in CI) those tests are skipped.
+The tests reuse the API's `ConnectionStrings:Metadata` and `Engine` user-secrets, with the metadata
+database swapped to `corefoundry_test`. Test projects get ids from 1,000,000, so their `cf_p_<id>`
+databases never collide with dev ones; leftovers are dropped at the start of each run. Without it (e.g. in CI) those tests are skipped.
 
 ## API so far
 | Method | Route | Notes |
@@ -70,6 +71,12 @@ The tests reuse the API's `ConnectionStrings:Metadata` user-secret with the data
 | POST | `/api/auth/refresh` | cookie → new access token + rotated cookie |
 | POST | `/api/auth/logout` | revokes the cookie's token → 204 |
 | GET | `/api/auth/me` | Bearer token → `{ id, email }` |
+| GET | `/api/projects` | projects I'm a member of, with my role |
+| POST | `/api/projects` | `{ name }` → 201; creates the `cf_p_<id>` database; caller becomes Owner |
+| GET | `/api/projects/{id}` | Developer+; non-members get 404 |
+| PATCH | `/api/projects/{id}` | `{ name }`; Admin+ |
+| DELETE | `/api/projects/{id}` | Owner; drops the `cf_p_<id>` database |
+| POST | `/api/projects/{id}/retry-provisioning` | Owner; for projects whose database creation failed |
 
 After pulling new migrations: `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`
 

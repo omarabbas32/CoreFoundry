@@ -1,6 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CoreFoundry.Api.Auth;
+using CoreFoundry.Api.Authorization;
 using CoreFoundry.Api.Errors;
+using CoreFoundry.Api.Projects;
 using CoreFoundry.Application;
 using CoreFoundry.Infrastructure;
 using CoreFoundry.Infrastructure.Auth;
@@ -11,7 +14,8 @@ using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
@@ -26,8 +30,10 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         bearer.TokenValidationParameters = jwt.Value.CreateValidationParameters();
         bearer.MapInboundClaims = false; // keep "sub"/"email" as-is
     });
-builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddProjectAuthorization();
 builder.Services.AddCoreFoundryRateLimiting(builder.Configuration);
+builder.Services.AddHostedService<ProjectRecoveryService>();
 
 const string WebCorsPolicy = "web";
 builder.Services.AddCors(options => options.AddPolicy(WebCorsPolicy, policy => policy

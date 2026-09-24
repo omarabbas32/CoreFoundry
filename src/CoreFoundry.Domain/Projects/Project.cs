@@ -72,6 +72,48 @@ public sealed partial class Project
         Status = to;
     }
 
+    /// <summary>Longest slug <see cref="SlugFrom"/> produces, leaving room for a "-&lt;n&gt;" collision suffix.</summary>
+    public const int SlugBaseMaxLength = SlugMaxLength - 8;
+
+    /// <summary>
+    /// A URL-safe slug from a display name: lower-case ASCII letters and digits joined by single hyphens.
+    /// Names with no usable characters (e.g. only Arabic script or emoji) fall back to "project".
+    /// </summary>
+    public static string SlugFrom(string name)
+    {
+        var slug = new System.Text.StringBuilder(SlugBaseMaxLength);
+        var pendingHyphen = false;
+        foreach (var ch in (name ?? string.Empty).ToLowerInvariant())
+        {
+            if (char.IsAsciiLetterLower(ch) || char.IsAsciiDigit(ch))
+            {
+                if (pendingHyphen && slug.Length > 0)
+                {
+                    slug.Append('-');
+                }
+
+                slug.Append(ch);
+                pendingHyphen = false;
+            }
+            else
+            {
+                pendingHyphen = true;
+            }
+
+            if (slug.Length >= SlugBaseMaxLength)
+            {
+                break;
+            }
+        }
+
+        var result = slug.ToString(0, Math.Min(slug.Length, SlugBaseMaxLength)).TrimEnd('-');
+        return result.Length > 0 ? result : "project";
+    }
+
+    /// <summary>The slug to try for the <paramref name="attempt"/>-th collision: "shop", "shop-2", "shop-3", …</summary>
+    public static string SlugCandidate(string baseSlug, int attempt) =>
+        attempt <= 1 ? baseSlug : $"{baseSlug}-{attempt}";
+
     private static string ValidSlug(string slug)
     {
         var value = Guard.NotBlank(slug, nameof(Slug), SlugMaxLength);

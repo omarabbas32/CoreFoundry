@@ -6,7 +6,9 @@ and manage who else has access, with role checks enforced on every route.
 
 **Depends on:** M0.
 
-> **Progress:** data model (all 7 metadata tables, see plan D13–D15) and auth endpoints are done.
+> **Progress:** data model (all 7 metadata tables, see plan D13–D15), auth endpoints, projects API
+> (with `cf_p_<id>` provisioning and startup recovery) and project authorization are done. Members API
+> and the frontend are next. Test projects use ids ≥ 1,000,000 so tests never touch dev project databases.
 > Auth integration tests run against a local `corefoundry_test` database (`db/setup-test.sql`) and
 > skip when it isn't configured. Two refreshes racing with the same token: the loser gets 401
 > (optimistic concurrency on `RefreshTokens.RevokedAt`), which is **not** treated as theft.
@@ -91,12 +93,12 @@ Full columns and delete rules are in the [data model](../corefoundry-erd.html).
 3. Delete the metadata rows (cascades take care of members, tables, migrations).
 
 ### Startup check
-- [ ] Hosted service on boot: finish provisioning for projects stuck in `Provisioning`
+- [x] Hosted service on boot: finish provisioning for projects stuck in `Provisioning`
       and finish deleting projects stuck in `Deleting`. Both steps are safe to run
       again because of `IF [NOT] EXISTS`.
 
 ### Slug
-- [ ] Generated from the name (`My Shop` → `my-shop`). On collision, append `-2`, `-3` and so on.
+- [x] Generated from the name (`My Shop` → `my-shop`). On collision, append `-2`, `-3` and so on.
 
 ---
 
@@ -119,15 +121,15 @@ Rules:
 
 ## 5. Authorization
 
-- [ ] `ProjectRoleRequirement(ProjectRole minimum)` +
+- [x] `ProjectRoleRequirement(ProjectRole minimum)` +
       `ProjectRoleHandler : AuthorizationHandler<ProjectRoleRequirement>`
-- [ ] The handler reads `projectId` from route values and loads the caller's
+- [x] The handler reads `projectId` from route values and loads the caller's
       membership (one indexed query, cached for the length of the request).
-- [ ] Policies `Project.Developer`, `Project.Admin`, `Project.Owner`, applied as
+- [x] Policies `Project.Developer`, `Project.Admin`, `Project.Owner`, applied as
       `[Authorize(Policy = "Project.Admin")]` on endpoints
-- [ ] **Not a member → 404** (so project ids can't be probed). **Member without
+- [x] **Not a member → 404** (so project ids can't be probed). **Member without
       the required role → 403.**
-- [ ] Role order: Owner (highest) > Admin > Developer. Keep the numeric values
+- [x] Role order: Owner (highest) > Admin > Developer. Keep the numeric values
       separate from the ordering to avoid accidental comparisons.
 
 ```csharp
@@ -170,8 +172,8 @@ Turn "not a member" into 404 with a custom `IAuthorizationMiddlewareResultHandle
 - [x] Register → login → `/me` works. Wrong password and unknown email return the same 401.
 - [x] Refresh rotates the cookie. The old cookie is then rejected. Replaying a revoked
       token revokes the chain, and the newest token stops working too.
-- [ ] Creating a project creates `cf_p_<id>` (checked via `INFORMATION_SCHEMA.SCHEMATA`)
-- [ ] Deleting a project drops the database
+- [x] Creating a project creates `cf_p_<id>` (checked via `INFORMATION_SCHEMA.SCHEMATA`)
+- [x] Deleting a project drops the database
 - [ ] Non-member → 404. Developer on an Admin route → 403. Admin can't remove the Owner.
 - [ ] Transfer ownership swaps the roles and `OwnerId` atomically
 
