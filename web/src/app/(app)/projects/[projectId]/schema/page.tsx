@@ -28,6 +28,15 @@ export default function ReviewPlanPage() {
   const projectId = Number(useParams<{ projectId: string }>().projectId);
   const project = useProject(projectId);
   const plan = usePlan(projectId);
+  // Lives here, not in the plan view: an apply changes the plan, which re-mounts the view.
+  const apply = useApply(projectId);
+  const [applied, setApplied] = useState<ApplyResult | null>(null);
+
+  async function runApply(planHash: string, acknowledgeDestructive: boolean) {
+    setApplied(null);
+    apply.reset();
+    setApplied(await apply.mutateAsync({ planHash, acknowledgeDestructive }));
+  }
 
   if (plan.isPending || project.isPending) return <FullPageSpinner label="Comparing the draft with the database…" />;
 
@@ -59,9 +68,25 @@ export default function ReviewPlanPage() {
         </div>
       </div>
 
+      {applied && (
+        <p role="status" className="rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok">
+          Applied as schema version {applied.version} ({applied.statements} statements).{" "}
+          <Link href={`/projects/${projectId}/schema/history`} className="underline">
+            See history
+          </Link>
+        </p>
+      )}
+      {apply.error && <ApplyError error={apply.error} projectId={projectId} onRefresh={() => void plan.refetch()} />}
+
       {plan.error && <Alert>{plan.error.message}</Alert>}
       {plan.data && project.data && (
-        <PlanView key={plan.data.planHash} plan={plan.data} projectId={projectId} canApply={atLeast(project.data.role, "Admin")} onRefresh={() => void plan.refetch()} />
+        <PlanView
+          key={plan.data.planHash}
+          plan={plan.data}
+          canApply={atLeast(project.data.role, "Admin")}
+          applying={apply.isPending}
+          onApply={(acknowledge) => runApply(plan.data.planHash, acknowledge)}
+        />
       )}
     </div>
   );
@@ -69,14 +94,14 @@ export default function ReviewPlanPage() {
 
 function PlanView({
   plan,
-  projectId,
   canApply,
-  onRefresh,
+  applying,
+  onApply,
 }: {
   plan: SchemaPlan;
-  projectId: number;
   canApply: boolean;
-  onRefresh: () => void;
+  applying: boolean;
+  onApply: (acknowledgeDestructive: boolean) => Promise<void>;
 }) {
   const byTable = new Map<string, PlanOperation[]>();
   for (const operation of plan.operations) {
@@ -138,7 +163,7 @@ function PlanView({
           <SqlBlock statements={plan.statements} />
 
           {canApply ? (
-            <ApplyPanel plan={plan} projectId={projectId} onRefresh={onRefresh} />
+            <ApplyPanel plan={plan} applying={applying} onApply={onApply} />
           ) : (
             <p className="text-sm text-muted">Only admins and the owner can apply the plan.</p>
           )}
@@ -173,29 +198,22 @@ function SqlBlock({ statements }: { statements: string[] }) {
   );
 }
 
-function ApplyPanel({ plan, projectId, onRefresh }: { plan: SchemaPlan; projectId: number; onRefresh: () => void }) {
-  const apply = useApply(projectId);
+/** The outcome (success or error) is shown by the page, which outlives this panel. */
+function ApplyPanel({
+  plan,
+  applying,
+  onApply,
+}: {
+  plan: SchemaPlan;
+  applying: boolean;
+  onApply: (acknowledgeDestructive: boolean) => Promise<void>;
+}) {
   const [acknowledged, setAcknowledged] = useState(false);
-  const [applied, setApplied] = useState<ApplyResult | null>(null);
-
   const blocked = plan.hasDestructive && !acknowledged;
-
-  async function run() {
-    setApplied(await apply.mutateAsync({ planHash: plan.planHash, acknowledgeDestructive: acknowledged }));
-  }
 
   return (
     <Card className="grid gap-4 p-5">
       <h2 className="font-semibold">Apply</h2>
-      {applied && (
-        <p role="status" className="rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok">
-          Applied as schema version {applied.version} ({applied.statements} statements).{" "}
-          <Link href={`/projects/${projectId}/schema/history`} className="underline">
-            See history
-          </Link>
-        </p>
-      )}
-      {apply.error && <ApplyError error={apply.error} projectId={projectId} onRefresh={onRefresh} />}
 
       {plan.hasDestructive && (
         <label className="flex items-start gap-2 text-sm">
@@ -213,8 +231,13 @@ function ApplyPanel({ plan, projectId, onRefresh }: { plan: SchemaPlan; projectI
       )}
 
       <div className="flex items-center gap-3">
-        <Button variant={plan.hasDestructive ? "danger" : "primary"} loading={apply.isPending} disabled={blocked} onClick={() => void run().catch(() => undefined)}>
-          {apply.isPending ? "Applying…" : `Apply ${plan.statements.length} ${plan.statements.length === 1 ? "statement" : "statements"}`}
+        <Button
+          variant={plan.hasDestructive ? "danger" : "primary"}
+          loading={applying}
+          disabled={blocked}
+          onClick={() => void onApply(acknowledged).catch(() => undefined)} // the page shows the error
+        >
+          {applying ? "Applying…" : `Apply ${plan.statements.length} ${plan.statements.length === 1 ? "statement" : "statements"}`}
         </Button>
         <span className="text-xs text-muted">Runs exactly the SQL above, one statement at a time.</span>
       </div>
