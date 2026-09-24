@@ -155,7 +155,7 @@ Diff the draft (M2, M2.5) against the last applied snapshot, render DDL from the
 | `8ca8249` | Table designer UI |
 | `784e30a` | M2 docs: progress, decisions D18–D24 |
 | `ab01a63` | M2.5 backend: references, rules, migration, `/schema`, deadlock → 409 |
-| _next_ | M2.5 UI: references in the designer, schema diagram; docs |
+| `329eeb6` | M2.5 UI: references in the designer, schema diagram; docs |
 
 ## Commits on `m1-models` since M0
 
