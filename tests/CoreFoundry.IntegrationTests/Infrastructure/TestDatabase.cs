@@ -72,6 +72,29 @@ public sealed partial class TestDatabaseApi : WebApplicationFactory<Program>, IA
         return Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture) > 0;
     }
 
+    /// <summary>Number of tables in a project database (the table designer must never create any).</summary>
+    public async Task<long> CountTablesInAsync(string databaseName)
+    {
+        await using var connection = new MySqlConnection(EngineConnectionString);
+        await connection.OpenAsync();
+        await using var command = new MySqlCommand(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = @name", connection);
+        command.Parameters.AddWithValue("@name", databaseName);
+        return Convert.ToInt64(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Stands in for the schema engine (M3): marks a draft table and its columns as applied by setting
+    /// <c>AppliedName</c> directly in the metadata database.
+    /// </summary>
+    public async Task MarkAppliedAsync(long tableId)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MetadataDbContext>();
+        await db.Database.ExecuteSqlAsync($"UPDATE `ProjectTables` SET `AppliedName` = `Name` WHERE `Id` = {tableId}");
+        await db.Database.ExecuteSqlAsync($"UPDATE `ProjectColumns` SET `AppliedName` = `Name` WHERE `TableId` = {tableId}");
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Metadata", _connections?.Metadata ?? "Server=127.0.0.1;Port=1;Database=none;User=none;Password=none");
