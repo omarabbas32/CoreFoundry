@@ -3,6 +3,8 @@ using CoreFoundry.Domain.Common;
 namespace CoreFoundry.Domain.Schema;
 
 /// <summary>Everything about a column except its name and position. Only <see cref="ColumnDefinitionRules.Create"/> builds valid ones.</summary>
+/// <param name="ReferencesTableId">The table whose <c>id</c> this column references (a foreign key), or null.</param>
+/// <param name="OnDelete">Set exactly when <paramref name="ReferencesTableId"/> is.</param>
 public sealed record ColumnDefinition(
     DataType DataType,
     int? Length,
@@ -10,7 +12,12 @@ public sealed record ColumnDefinition(
     byte? Scale,
     bool IsNullable,
     bool IsUnique,
-    ColumnDefault? Default);
+    ColumnDefault? Default,
+    long? ReferencesTableId = null,
+    ReferenceAction? OnDelete = null)
+{
+    public bool IsReference => ReferencesTableId is not null;
+}
 
 /// <summary>Per-project and per-table caps (also stated in the README).</summary>
 public static class SchemaLimits
@@ -44,14 +51,28 @@ public static class ColumnDefinitionRules
     private const int SystemIdBytes = 8;
 
     /// <summary>Validates the parts of a column definition and parses its default.</summary>
+    /// <remarks>
+    /// Only the column's own rules are checked here. Whether the referenced table exists, is in the
+    /// same project and isn't pending drop needs the other tables: see <see cref="ReferenceRules"/>.
+    /// </remarks>
     /// <exception cref="DomainException">A rule is broken; <see cref="DomainException.Field"/> names the input.</exception>
     public static ColumnDefinition Create(
-        DataType dataType, int? length, int? precision, int? scale, bool isNullable, bool isUnique, string? defaultValue)
+        DataType dataType,
+        int? length,
+        int? precision,
+        int? scale,
+        bool isNullable,
+        bool isUnique,
+        string? defaultValue,
+        long? referencesTableId = null,
+        ReferenceAction? onDelete = null)
     {
         if (!Enum.IsDefined(dataType))
         {
             throw Invalid("dataType", "Unknown data type.");
         }
+
+        ValidateReference(dataType, isNullable, defaultValue, referencesTableId, onDelete);
 
         ValidateLength(dataType, length);
         ValidatePrecisionAndScale(dataType, precision, scale);
@@ -67,7 +88,8 @@ public static class ColumnDefinitionRules
         }
 
         var parsedDefault = ColumnDefault.Parse(dataType, defaultValue, length, precision, scale);
-        return new ColumnDefinition(dataType, length, (byte?)precision, (byte?)scale, isNullable, isUnique, parsedDefault);
+        return new ColumnDefinition(
+            dataType, length, (byte?)precision, (byte?)scale, isNullable, isUnique, parsedDefault, referencesTableId, onDelete);
     }
 
     /// <summary>
@@ -106,6 +128,46 @@ public static class ColumnDefinitionRules
             {
                 Field = "length",
             };
+        }
+    }
+
+    /// <summary>A reference holds another table's <c>id</c>: BigInt, no default, and SetNull only if it can be NULL.</summary>
+    private static void ValidateReference(
+        DataType dataType, bool isNullable, string? defaultValue, long? referencesTableId, ReferenceAction? onDelete)
+    {
+        if (referencesTableId is null)
+        {
+            if (onDelete is not null)
+            {
+                throw Invalid("onDelete", "On delete only applies to a column that references a table.");
+            }
+
+            return;
+        }
+
+        if (referencesTableId <= 0)
+        {
+            throw Invalid("referencesTableId", "Choose the table this column references.");
+        }
+
+        if (onDelete is not { } action || !Enum.IsDefined(action))
+        {
+            throw Invalid("onDelete", "Choose what happens when the referenced row is deleted.");
+        }
+
+        if (dataType != DataType.BigInt)
+        {
+            throw Invalid("dataType", "A column that references a table must be BigInt, like the id it holds.");
+        }
+
+        if (!string.IsNullOrEmpty(defaultValue))
+        {
+            throw Invalid("defaultValue", "A column that references a table can't have a default.");
+        }
+
+        if (action == ReferenceAction.SetNull && !isNullable)
+        {
+            throw Invalid("onDelete", "Set null needs a nullable column.");
         }
     }
 

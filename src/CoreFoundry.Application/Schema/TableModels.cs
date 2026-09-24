@@ -16,6 +16,7 @@ public enum SchemaObjectState
 }
 
 /// <summary>A column as the user typed it; validated by the Domain rules.</summary>
+/// <param name="ReferencesTableId">A table of the same project whose <c>id</c> this column references, or null.</param>
 public sealed record ColumnInput(
     string Name,
     DataType DataType,
@@ -24,7 +25,9 @@ public sealed record ColumnInput(
     int? Scale,
     bool IsNullable,
     bool IsUnique,
-    string? DefaultValue);
+    string? DefaultValue,
+    long? ReferencesTableId = null,
+    ReferenceAction? OnDelete = null);
 
 public sealed record ColumnDto(
     long Id,
@@ -36,6 +39,9 @@ public sealed record ColumnDto(
     bool IsNullable,
     bool IsUnique,
     string? DefaultValue,
+    long? ReferencesTableId,
+    string? ReferencesTableName,
+    ReferenceAction? OnDelete,
     int OrdinalPosition,
     SchemaObjectState State);
 
@@ -58,15 +64,17 @@ public sealed record TableDto(
     DateTime CreatedAt,
     DateTime UpdatedAt)
 {
-    public static TableDto From(ProjectTable table)
+    /// <param name="tableNames">Names of the project's tables by id, for the columns' references.</param>
+    public static TableDto From(ProjectTable table, IReadOnlyDictionary<long, string> tableNames)
     {
         ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(tableNames);
         return new(
             table.Id,
             table.Name,
             StateOf(table),
             table.Version,
-            [.. table.Columns.Select(column => ColumnFrom(table, column))],
+            [.. table.Columns.Select(column => ColumnFrom(table, column, tableNames))],
             table.CreatedAt,
             table.UpdatedAt);
     }
@@ -77,7 +85,7 @@ public sealed record TableDto(
         return new(table.Id, table.Name, StateOf(table), table.Columns.Count, table.Version, table.UpdatedAt);
     }
 
-    private static ColumnDto ColumnFrom(ProjectTable table, ProjectColumn column) => new(
+    private static ColumnDto ColumnFrom(ProjectTable table, ProjectColumn column, IReadOnlyDictionary<long, string> tableNames) => new(
         column.Id,
         column.Name,
         column.DataType,
@@ -87,6 +95,9 @@ public sealed record TableDto(
         column.IsNullable,
         column.IsUnique,
         column.DefaultValue,
+        column.ReferencesTableId,
+        column.ReferencesTableId is long target ? tableNames.GetValueOrDefault(target) : null,
+        column.OnDelete,
         column.OrdinalPosition,
         table.IsColumnPendingDrop(column) ? SchemaObjectState.PendingDrop
             : column.IsApplied ? SchemaObjectState.Applied

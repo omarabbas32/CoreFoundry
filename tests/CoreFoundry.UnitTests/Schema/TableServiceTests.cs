@@ -202,6 +202,101 @@ public class TableServiceTests
         (headline.Length, headline.IsNullable, headline.DefaultValue).ShouldBe((150, false, "Untitled"));
     }
 
+    // ---- References ----------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_column_references_another_table_and_shows_its_name()
+    {
+        var authors = await _service.CreateAsync(ProjectId, "authors", null, Ct);
+        var books = await _service.CreateAsync(ProjectId, "books", null, Ct);
+
+        books = await _service.AddColumnAsync(ProjectId, books.Id, books.Version, Ref("author_id", authors.Id, ReferenceAction.Cascade), Ct);
+
+        var authorId = books.Columns.Single();
+        (authorId.ReferencesTableId, authorId.ReferencesTableName, authorId.OnDelete).ShouldBe((authors.Id, "authors", ReferenceAction.Cascade));
+    }
+
+    [Fact]
+    public async Task A_table_can_reference_itself()
+    {
+        var employees = await _service.CreateAsync(ProjectId, "employees", null, Ct);
+
+        employees = await _service.AddColumnAsync(
+            ProjectId, employees.Id, employees.Version, Ref("manager_id", employees.Id, ReferenceAction.SetNull), Ct);
+
+        employees.Columns.Single().ReferencesTableName.ShouldBe("employees");
+    }
+
+    [Fact]
+    public async Task A_table_of_another_project_cannot_be_referenced()
+    {
+        _projects.Add(WithId(new Project("Other", "other", ownerId: 1), 8));
+        var foreign = await _service.CreateAsync(8, "secrets", null, Ct);
+        var books = await _service.CreateAsync(ProjectId, "books", null, Ct);
+
+        var ex = await Should.ThrowAsync<ValidationFailedException>(() => _service.AddColumnAsync(
+            ProjectId, books.Id, books.Version, Ref("secret_id", foreign.Id, ReferenceAction.Restrict), Ct));
+
+        ex.Errors.Keys.ShouldBe(["referencesTableId"]);
+    }
+
+    [Fact]
+    public async Task Create_with_columns_checks_references_by_index()
+    {
+        var ex = await Should.ThrowAsync<ValidationFailedException>(() => _service.CreateAsync(
+            ProjectId, "books", [Int("pages"), Ref("author_id", 999, ReferenceAction.Restrict)], Ct));
+
+        ex.Errors.Keys.ShouldBe(["columns[1].referencesTableId"]);
+    }
+
+    [Fact]
+    public async Task A_referenced_table_cannot_be_deleted_until_the_reference_is_gone()
+    {
+        var authors = await _service.CreateAsync(ProjectId, "authors", null, Ct);
+        var books = await _service.CreateAsync(ProjectId, "books", [Ref("author_id", authors.Id, ReferenceAction.Restrict)], Ct);
+
+        (await Should.ThrowAsync<DomainException>(() => _service.DeleteAsync(ProjectId, authors.Id, authors.Version, Ct)))
+            .Message.ShouldContain("books.author_id");
+
+        await _service.DeleteColumnAsync(ProjectId, books.Id, books.Columns.Single().Id, books.Version, Ct);
+        (await _service.DeleteAsync(ProjectId, authors.Id, authors.Version, Ct)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_reference_to_a_table_pending_drop_cannot_be_added_or_restored()
+    {
+        var authors = await _service.CreateAsync(ProjectId, "authors", null, Ct);
+        var books = await _service.CreateAsync(ProjectId, "books", [Ref("author_id", authors.Id, ReferenceAction.Restrict)], Ct);
+        foreach (var table in _tables.All)
+        {
+            MarkApplied(table);
+        }
+
+        // Drop the reference (pending), then its target (allowed now), then try to bring the reference back.
+        books = await _service.DeleteColumnAsync(ProjectId, books.Id, books.Columns.Single().Id, books.Version, Ct);
+        await _service.DeleteAsync(ProjectId, authors.Id, authors.Version, Ct);
+
+        (await Should.ThrowAsync<DomainException>(() => _service.RestoreColumnAsync(
+            ProjectId, books.Id, books.Columns.Single().Id, books.Version, Ct))).Message.ShouldContain("marked for deletion");
+        (await Should.ThrowAsync<ValidationFailedException>(() => _service.AddColumnAsync(
+            ProjectId, books.Id, books.Version, Ref("writer_id", authors.Id, ReferenceAction.Restrict), Ct))).Errors.Keys.ShouldBe(["referencesTableId"]);
+    }
+
+    [Fact]
+    public async Task Schema_returns_every_table_with_its_columns()
+    {
+        var authors = await _service.CreateAsync(ProjectId, "authors", [Varchar("name", 100)], Ct);
+        await _service.CreateAsync(ProjectId, "books", [Ref("author_id", authors.Id, ReferenceAction.Cascade)], Ct);
+
+        var schema = await _service.GetSchemaAsync(ProjectId, Ct);
+
+        schema.Select(table => table.Name).ShouldBe(["authors", "books"]);
+        schema[1].Columns.Single().ReferencesTableName.ShouldBe("authors");
+    }
+
+    private static ColumnInput Ref(string name, long tableId, ReferenceAction onDelete) =>
+        new(name, DataType.BigInt, null, null, null, true, false, null, tableId, onDelete);
+
     private static ColumnInput Int(string name) => new(name, DataType.Int, null, null, null, true, false, null);
 
     private static ColumnInput Varchar(string name, int length) => new(name, DataType.Varchar, length, null, null, true, false, null);
@@ -236,6 +331,10 @@ internal sealed class FakeTables : ITableRepository
 
     public Task<int> CountAsync(long projectId, CancellationToken cancellationToken) =>
         Task.FromResult(All.Count(table => table.ProjectId == projectId));
+
+    public Task<IReadOnlyDictionary<long, string>> ListNamesAsync(long projectId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<long, string>>(
+            All.Where(table => table.ProjectId == projectId).ToDictionary(table => table.Id, table => table.Name));
 
     public Task<bool> NameExistsAsync(long projectId, string name, long? exceptTableId, CancellationToken cancellationToken) =>
         Task.FromResult(All.Any(table => table.ProjectId == projectId && table.Name == name && table.Id != exceptTableId));

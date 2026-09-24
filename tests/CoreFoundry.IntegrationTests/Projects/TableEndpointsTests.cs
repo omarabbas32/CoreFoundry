@@ -218,8 +218,9 @@ public sealed class TableEndpointsTests : IDisposable
             HttpMethod.Post, $"{Tables(project)}/{table.Id}/columns", owner,
             new SaveColumnRequest(table.Version, $"c{i}", DataType.Int, null, null, null, true, false, null))));
 
-        responses.Count(response => response.StatusCode == HttpStatusCode.OK).ShouldBe(1);
-        responses.Count(response => response.StatusCode == HttpStatusCode.Conflict).ShouldBe(3);
+        var outcomes = await Task.WhenAll(responses.Select(async response =>
+            $"{(int)response.StatusCode} {await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)}"));
+        string.Join(",", outcomes.Select(outcome => outcome[..3]).Order()).ShouldBe("200,409,409,409", string.Join(" | ", outcomes));
         (await OkAsync<TableDto>(HttpMethod.Get, $"{Tables(project)}/{table.Id}", owner)).Columns.ShouldHaveSingleItem();
     }
 
@@ -231,6 +232,76 @@ public sealed class TableEndpointsTests : IDisposable
 
         (await _driver.SendAsync(HttpMethod.Delete, $"{Tables(project)}/{table.Id}", owner)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
+
+    // ---- References (M2.5) -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_reference_is_saved_and_the_schema_shows_it_without_touching_the_project_database()
+    {
+        var (owner, project) = await OwnedProjectAsync();
+        var authors = await CreateAsync(project, owner, "authors", Column("name", DataType.Varchar, length: 100));
+        await CreateAsync(project, owner, "books", Reference("author_id", authors.Id, ReferenceAction.Cascade, nullable: false));
+
+        var schema = await OkAsync<List<TableDto>>(HttpMethod.Get, $"/api/projects/{project.Id}/schema", owner);
+
+        schema.Select(table => table.Name).ShouldBe(["authors", "books"]);
+        var authorId = schema[1].Columns.Single();
+        (authorId.ReferencesTableId, authorId.ReferencesTableName, authorId.OnDelete, authorId.DataType)
+            .ShouldBe((authors.Id, "authors", ReferenceAction.Cascade, DataType.BigInt));
+        (await _api.CountTablesInAsync(project.DatabaseName)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Invalid_references_are_400_on_the_right_field()
+    {
+        var (owner, project) = await OwnedProjectAsync();
+        var other = await _driver.CreateProjectAsync(owner, "Other");
+        var foreign = await CreateAsync(other, owner, "secrets");
+        var authors = await CreateAsync(project, owner, "authors");
+
+        var problem = await ValidationProblemAsync(await _driver.SendAsync(HttpMethod.Post, Tables(project), owner,
+            new CreateTableRequest("books",
+            [
+                Column("author_id", DataType.Int) with { ReferencesTableId = authors.Id, OnDelete = ReferenceAction.Restrict },
+                Reference("editor_id", authors.Id, ReferenceAction.SetNull, nullable: false),
+                Reference("secret_id", foreign.Id, ReferenceAction.Restrict),
+            ])));
+
+        problem.Errors.Keys.ShouldBe(["columns[0].dataType", "columns[1].onDelete", "columns[2].referencesTableId"], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task A_referenced_table_cannot_be_deleted_until_the_reference_is_removed()
+    {
+        var (owner, project) = await OwnedProjectAsync();
+        var authors = await CreateAsync(project, owner, "authors");
+        var books = await CreateAsync(project, owner, "books", Reference("author_id", authors.Id, ReferenceAction.Restrict));
+
+        var refused = await _driver.SendAsync(HttpMethod.Delete, $"{Tables(project)}/{authors.Id}?version={authors.Version}", owner);
+        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadAsync<ProblemDetails>(refused)).Detail.ShouldNotBeNull().ShouldContain("books.author_id");
+
+        await OkAsync<TableDto>(HttpMethod.Delete, $"{Tables(project)}/{books.Id}/columns/{books.Columns[0].Id}?version={books.Version}", owner);
+        (await _driver.SendAsync(HttpMethod.Delete, $"{Tables(project)}/{authors.Id}?version={authors.Version}", owner))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Deleting_a_project_with_references_between_its_tables_works()
+    {
+        var (owner, project) = await OwnedProjectAsync();
+        var authors = await CreateAsync(project, owner, "authors");
+        var employees = await CreateAsync(project, owner, "employees");
+        await OkAsync<TableDto>(HttpMethod.Post, $"{Tables(project)}/{employees.Id}/columns", owner,
+            new SaveColumnRequest(employees.Version, "manager_id", DataType.BigInt, null, null, null, true, false, null, employees.Id, ReferenceAction.SetNull));
+        await CreateAsync(project, owner, "books", Reference("author_id", authors.Id, ReferenceAction.Cascade));
+
+        (await _driver.SendAsync(HttpMethod.Delete, $"/api/projects/{project.Id}", owner)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _driver.SendAsync(HttpMethod.Get, $"/api/projects/{project.Id}", owner)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static ColumnRequest Reference(string name, long tableId, ReferenceAction onDelete, bool nullable = true) =>
+        new(name, DataType.BigInt, null, null, null, nullable, false, null, tableId, onDelete);
 
     private async Task<(SignedIn Owner, ProjectDto Project)> OwnedProjectAsync()
     {

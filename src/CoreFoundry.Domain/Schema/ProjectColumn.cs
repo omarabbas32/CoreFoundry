@@ -33,6 +33,12 @@ public sealed class ProjectColumn
     /// <summary>The canonical form of <see cref="Default"/>, or null for no default.</summary>
     public string? DefaultValue { get; private set; }
 
+    /// <summary>The table whose <c>id</c> this column references (a foreign key), or null.</summary>
+    public long? ReferencesTableId { get; private set; }
+
+    /// <summary>Set exactly when <see cref="ReferencesTableId"/> is.</summary>
+    public ReferenceAction? OnDelete { get; private set; }
+
     public int OrdinalPosition { get; private set; }
     public bool PendingDrop { get; private set; }
     public DateTime CreatedAt { get; private set; }
@@ -43,7 +49,8 @@ public sealed class ProjectColumn
     /// <summary>The default parsed into its typed form.</summary>
     public ColumnDefault? Default => ColumnDefault.Parse(DataType, DefaultValue, Length, Precision, Scale);
 
-    public ColumnDefinition Definition => new(DataType, Length, Precision, Scale, IsNullable, IsUnique, Default);
+    public ColumnDefinition Definition =>
+        new(DataType, Length, Precision, Scale, IsNullable, IsUnique, Default, ReferencesTableId, OnDelete);
 
     internal void Rename(string name) => Name = name;
 
@@ -56,6 +63,8 @@ public sealed class ProjectColumn
         IsNullable = definition.IsNullable;
         IsUnique = definition.IsUnique;
         DefaultValue = definition.Default?.Canonical;
+        ReferencesTableId = definition.ReferencesTableId;
+        OnDelete = definition.OnDelete;
     }
 
     internal void MoveTo(int ordinalPosition) => OrdinalPosition = ordinalPosition;

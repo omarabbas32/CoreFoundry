@@ -56,6 +56,9 @@ internal sealed class EfUnitOfWork(MetadataDbContext db) : IUnitOfWork
     /// <summary>MySQL ER_DUP_ENTRY.</summary>
     private const int DuplicateKeyError = 1062;
 
+    /// <summary>MySQL ER_LOCK_DEADLOCK: MySQL rolled this transaction back in full.</summary>
+    private const int DeadlockError = 1213;
+
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         try
@@ -64,6 +67,12 @@ internal sealed class EfUnitOfWork(MetadataDbContext db) : IUnitOfWork
         }
         catch (DbUpdateConcurrencyException ex)
         {
+            throw new ConcurrencyConflictException("The data was changed by another request.", ex);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is MySqlException { Number: DeadlockError })
+        {
+            // Concurrent saves of the same rows can deadlock (e.g. two column inserts each hold a shared
+            // lock on the parent table row, then both need to update its Version). The loser lost the race.
             throw new ConcurrencyConflictException("The data was changed by another request.", ex);
         }
         catch (DbUpdateException ex) when (ex.InnerException is MySqlException { Number: DuplicateKeyError })

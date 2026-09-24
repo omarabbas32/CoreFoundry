@@ -15,9 +15,12 @@ public sealed record ColumnRequest(
     int? Scale,
     bool IsNullable,
     bool IsUnique,
-    string? DefaultValue)
+    string? DefaultValue,
+    long? ReferencesTableId = null,
+    ReferenceAction? OnDelete = null)
 {
-    public ColumnInput ToInput() => new(Name, DataType, Length, Precision, Scale, IsNullable, IsUnique, DefaultValue);
+    public ColumnInput ToInput() =>
+        new(Name, DataType, Length, Precision, Scale, IsNullable, IsUnique, DefaultValue, ReferencesTableId, OnDelete);
 }
 
 public sealed record CreateTableRequest(string Name, IReadOnlyList<ColumnRequest>? Columns);
@@ -36,9 +39,12 @@ public sealed record SaveColumnRequest(
     int? Scale,
     bool IsNullable,
     bool IsUnique,
-    string? DefaultValue)
+    string? DefaultValue,
+    long? ReferencesTableId = null,
+    ReferenceAction? OnDelete = null)
 {
-    public ColumnInput ToInput() => new(Name, DataType, Length, Precision, Scale, IsNullable, IsUnique, DefaultValue);
+    public ColumnInput ToInput() =>
+        new(Name, DataType, Length, Precision, Scale, IsNullable, IsUnique, DefaultValue, ReferencesTableId, OnDelete);
 }
 
 public sealed record ReorderColumnsRequest(int Version, IReadOnlyList<long> ColumnIds);
@@ -55,6 +61,11 @@ public sealed class TablesController(TableService tables) : ControllerBase
     [HttpGet]
     public Task<IReadOnlyList<TableSummaryDto>> List(long projectId, CancellationToken cancellationToken) =>
         tables.ListAsync(projectId, cancellationToken);
+
+    /// <summary>The whole draft schema: every table with its columns and references (for the diagram).</summary>
+    [HttpGet("~/api/projects/{projectId:long}/schema")]
+    public Task<IReadOnlyList<TableDto>> Schema(long projectId, CancellationToken cancellationToken) =>
+        tables.GetSchemaAsync(projectId, cancellationToken);
 
     [HttpGet("{tableId:long}")]
     public Task<TableDto> Get(long projectId, long tableId, CancellationToken cancellationToken) =>
