@@ -67,7 +67,8 @@ internal sealed class SchemaMigrationConfiguration : IEntityTypeConfiguration<Sc
         builder.ToTable("SchemaMigrations");
         builder.HasKey(migration => migration.Id);
 
-        builder.HasIndex(migration => new { migration.ProjectId, migration.Version }).IsUnique();
+        // Not unique: a failed attempt and its retry target the same version (applies are serialized by GET_LOCK).
+        builder.HasIndex(migration => new { migration.ProjectId, migration.Version });
 
         builder.Property(migration => migration.StatementsJson).HasColumnType("json").IsRequired();
         builder.Property(migration => migration.SnapshotJson).HasColumnType("json");

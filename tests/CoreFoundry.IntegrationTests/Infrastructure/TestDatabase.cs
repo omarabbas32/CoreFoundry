@@ -95,6 +95,13 @@ public sealed partial class TestDatabaseApi : WebApplicationFactory<Program>, IA
         await db.Database.ExecuteSqlAsync($"UPDATE `ProjectColumns` SET `AppliedName` = `Name` WHERE `TableId` = {tableId}");
     }
 
+    /// <summary>Runs raw SQL on the metadata test database (for tests that bypass the API on purpose).</summary>
+    public async Task ExecuteMetadataAsync(string sql)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<MetadataDbContext>().Database.ExecuteSqlRawAsync(sql);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Metadata", _connections?.Metadata ?? "Server=127.0.0.1;Port=1;Database=none;User=none;Password=none");
