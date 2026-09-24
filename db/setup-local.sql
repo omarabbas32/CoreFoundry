@@ -29,7 +29,8 @@ SET @sql = NULL, @meta_pwd = NULL, @engine_pwd = NULL;
 GRANT ALL PRIVILEGES ON corefoundry.* TO 'cf_meta'@'localhost';
 
 -- '_' is a wildcard in grant patterns, so it is escaped: cf\_p\_%
-GRANT CREATE, ALTER, DROP, INDEX, SELECT, INSERT, UPDATE, DELETE
+-- REFERENCES lets the schema engine create foreign keys between a project's tables (M2.5/M3).
+GRANT CREATE, ALTER, DROP, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE
   ON `cf\_p\_%`.* TO 'cf_engine'@'localhost';
 
 FLUSH PRIVILEGES;
