@@ -1,28 +1,22 @@
-using CoreFoundry.Domain.Common;
-
 namespace CoreFoundry.Domain.Schema;
 
 /// <summary>
 /// A column in the <b>draft</b> schema. Its stable <see cref="Id"/> plus <see cref="AppliedName"/>
 /// is what lets the schema engine tell a rename from a drop + add.
 /// </summary>
-/// <remarks>Per-type rules for Length / Precision / Scale / DefaultValue arrive with the table designer in M2.</remarks>
+/// <remarks>Created and changed only through <see cref="ProjectTable"/>, which enforces the table-wide rules.</remarks>
 public sealed class ProjectColumn
 {
-    public const int NameMaxLength = 64;
+    public const int NameMaxLength = IdentifierRules.MaxLength;
     public const int DefaultValueMaxLength = 255;
 
     private ProjectColumn() { } // EF Core
 
-    public ProjectColumn(long tableId, string name, DataType dataType, int ordinalPosition)
+    internal ProjectColumn(string name, ColumnDefinition definition, int ordinalPosition)
     {
-        TableId = Guard.PositiveId(tableId, nameof(TableId));
-        Name = Guard.NotBlank(name, nameof(Name), NameMaxLength);
-        DataType = Enum.IsDefined(dataType) ? dataType : throw new DomainException("Unknown data type.");
-        OrdinalPosition = ordinalPosition >= 0
-            ? ordinalPosition
-            : throw new DomainException("OrdinalPosition can't be negative.");
-        IsNullable = true;
+        Name = name;
+        Redefine(definition);
+        OrdinalPosition = ordinalPosition;
     }
 
     public long Id { get; private set; }
@@ -35,11 +29,36 @@ public sealed class ProjectColumn
     public byte? Scale { get; private set; }
     public bool IsNullable { get; private set; }
     public bool IsUnique { get; private set; }
+
+    /// <summary>The canonical form of <see cref="Default"/>, or null for no default.</summary>
     public string? DefaultValue { get; private set; }
+
     public int OrdinalPosition { get; private set; }
     public bool PendingDrop { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
     public bool IsApplied => AppliedName is not null;
+
+    /// <summary>The default parsed into its typed form.</summary>
+    public ColumnDefault? Default => ColumnDefault.Parse(DataType, DefaultValue, Length, Precision, Scale);
+
+    public ColumnDefinition Definition => new(DataType, Length, Precision, Scale, IsNullable, IsUnique, Default);
+
+    internal void Rename(string name) => Name = name;
+
+    internal void Redefine(ColumnDefinition definition)
+    {
+        DataType = definition.DataType;
+        Length = definition.Length;
+        Precision = definition.Precision;
+        Scale = definition.Scale;
+        IsNullable = definition.IsNullable;
+        IsUnique = definition.IsUnique;
+        DefaultValue = definition.Default?.Canonical;
+    }
+
+    internal void MoveTo(int ordinalPosition) => OrdinalPosition = ordinalPosition;
+
+    internal void SetPendingDrop(bool pendingDrop) => PendingDrop = pendingDrop;
 }
