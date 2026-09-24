@@ -34,6 +34,8 @@ backend architecture.
 | D13 | `Projects.DatabaseName` is **computed** (`cf_p_{Id}`), not a column | The Id only exists after insert; a derived name can never drift from it. |
 | D14 | `SchemaMigrations.StatementCount` column added | Lets the journal validate progress and refuse `Applied` before every statement ran. |
 | D15 | EF Core's provider runs on Oracle's **MySql.Data** driver; the schema engine/Data API use **MySqlConnector** | Consequence of D9: two drivers, one per data-access strategy. |
+| D16 | Web dev server on **port 3100** | A local VPN service holds `127.0.0.1:3000`, which made `:3000` only intermittently reachable. |
+| D17 | Next.js **proxies `/api/*`** to the API (`next.config.ts` rewrites); the API trusts `X-Forwarded-For` from loopback proxies only | One origin for the SameSite=Strict refresh cookie (as planned for production), while the login rate limit stays per client IP. |
 
 ---
 

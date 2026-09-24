@@ -33,7 +33,9 @@ internal sealed class TimestampsInterceptor(TimeProvider timeProvider) : SaveCha
             return;
         }
 
-        var now = timeProvider.GetUtcNow().UtcDateTime;
+        // Truncate to microseconds (DATETIME(6)) so the in-memory value equals what a later read returns.
+        var utcNow = timeProvider.GetUtcNow().UtcDateTime;
+        var now = utcNow.AddTicks(-(utcNow.Ticks % TimeSpan.TicksPerMicrosecond));
         foreach (var entry in context.ChangeTracker.Entries())
         {
             if (entry.State == EntityState.Added && entry.Metadata.FindProperty(CreatedAt) is not null)

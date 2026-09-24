@@ -68,6 +68,38 @@ public class ProjectTests
     }
 
     [Theory]
+    [InlineData("My Shop", "my-shop")]
+    [InlineData("  Book   Shop!! 2026 ", "book-shop-2026")]
+    [InlineData("Café-Bar", "caf-bar")]
+    [InlineData("---", "project")]
+    [InlineData("متجر الكتب", "project")]
+    [InlineData("", "project")]
+    public void Slug_from_name(string name, string expected)
+    {
+        var slug = Project.SlugFrom(name);
+
+        slug.ShouldBe(expected);
+        Should.NotThrow(() => new Project(name.Length > 0 ? name : "x", slug, 1)); // always a valid slug
+    }
+
+    [Fact]
+    public void Slug_from_a_long_name_leaves_room_for_a_collision_suffix()
+    {
+        var slug = Project.SlugFrom(new string('a', 30) + " " + new string('b', 60));
+
+        slug.Length.ShouldBeLessThanOrEqualTo(Project.SlugBaseMaxLength);
+        slug.ShouldNotEndWith("-");
+        Should.NotThrow(() => new Project("Long", Project.SlugCandidate(slug, 9_999_999), 1));
+    }
+
+    [Theory]
+    [InlineData(1, "shop")]
+    [InlineData(2, "shop-2")]
+    [InlineData(10, "shop-10")]
+    public void Slug_candidates_for_collisions(int attempt, string expected) =>
+        Project.SlugCandidate("shop", attempt).ShouldBe(expected);
+
+    [Theory]
     [InlineData(ProjectRole.Owner, ProjectRole.Admin, true)]
     [InlineData(ProjectRole.Admin, ProjectRole.Admin, true)]
     [InlineData(ProjectRole.Developer, ProjectRole.Admin, false)]

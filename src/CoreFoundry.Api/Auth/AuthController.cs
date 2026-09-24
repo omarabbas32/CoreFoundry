@@ -1,11 +1,9 @@
-using System.Globalization;
-using System.Security.Claims;
+using CoreFoundry.Api.Authorization;
 using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace CoreFoundry.Api.Auth;
 
@@ -63,8 +61,7 @@ public sealed class AuthController(AuthService auth) : ControllerBase
     [HttpGet("me")]
     public async Task<ActionResult<UserDto>> Me(CancellationToken cancellationToken)
     {
-        var subject = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        if (!long.TryParse(subject, NumberStyles.None, CultureInfo.InvariantCulture, out var userId))
+        if (User.GetUserId() is not long userId)
         {
             return Unauthorized();
         }

@@ -37,6 +37,39 @@ public sealed class ConflictException : Exception
     public ConflictException(string message, Exception innerException) : base(message, innerException) { }
 }
 
+/// <summary>The caller is known but not allowed to do this. Maps to 403.</summary>
+public sealed class ForbiddenException : Exception
+{
+    public ForbiddenException(string message) : base(message) { }
+
+    public ForbiddenException() { }
+
+    public ForbiddenException(string message, Exception innerException) : base(message, innerException) { }
+}
+
+/// <summary>The resource doesn't exist or isn't visible to the caller. Maps to 404.</summary>
+public sealed class NotFoundException : Exception
+{
+    public NotFoundException(string message) : base(message) { }
+
+    public NotFoundException() { }
+
+    public NotFoundException(string message, Exception innerException) : base(message, innerException) { }
+}
+
+/// <summary>
+/// Creating or dropping a project's physical database failed. The project is left in a state the
+/// startup recovery (or a retry) can finish. Maps to 503.
+/// </summary>
+public sealed class DatabaseProvisioningException : Exception
+{
+    public DatabaseProvisioningException(string message) : base(message) { }
+
+    public DatabaseProvisioningException() { }
+
+    public DatabaseProvisioningException(string message, Exception innerException) : base(message, innerException) { }
+}
+
 /// <summary>
 /// A save lost an optimistic-concurrency race (another request changed the same row first).
 /// Thrown by <see cref="IUnitOfWork"/> implementations.

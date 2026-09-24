@@ -11,6 +11,9 @@ public interface IUserRepository
 
     Task<bool> EmailExistsAsync(string normalizedEmail, CancellationToken cancellationToken);
 
+    /// <summary>The users with these ids; unknown ids are simply absent.</summary>
+    Task<IReadOnlyList<User>> ListByIdsAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken);
+
     void Add(User user);
 }
 

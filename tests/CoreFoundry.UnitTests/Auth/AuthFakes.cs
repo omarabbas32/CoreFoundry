@@ -49,6 +49,9 @@ internal sealed class FakeUsers : IUserRepository
     public Task<bool> EmailExistsAsync(string normalizedEmail, CancellationToken cancellationToken) =>
         Task.FromResult(All.Any(user => user.Email == normalizedEmail));
 
+    public Task<IReadOnlyList<User>> ListByIdsAsync(IReadOnlyCollection<long> ids, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<User>>([.. All.Where(user => ids.Contains(user.Id))]);
+
     public void Add(User user) => All.Add(user);
 }
 

@@ -1,26 +1,77 @@
 @import "tailwindcss";
 
+/* Same palette family as docs/*.html: cool neutrals, indigo accent for "metadata", semantic ok/warn/danger. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #f5f7f7;
+  --surface: #ffffff;
+  --surface-muted: #eef1f2;
+  --foreground: #141b20;
+  --muted: #5a6670;
+  --border: #d5dcde;
+  --accent: #2e48b0;
+  --accent-hover: #243a94;
+  --accent-soft: #e3e8fa;
+  --on-accent: #ffffff;
+  --ok: #1d7646;
+  --ok-soft: #dff1e6;
+  --warn: #8f5b00;
+  --warn-soft: #fbefd6;
+  --danger: #b42318;
+  --danger-soft: #fbe3e0;
+  --on-danger: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+    --background: #0d1316;
+    --surface: #141c21;
+    --surface-muted: #19232a;
+    --foreground: #e3e8ea;
+    --muted: #93a0a8;
+    --border: #2b3941;
+    --accent: #93a5ff;
+    --accent-hover: #b2beff;
+    --accent-soft: #1c2548;
+    --on-accent: #0d1316;
+    --ok: #62c98e;
+    --ok-soft: #14301f;
+    --warn: #e3a945;
+    --warn-soft: #352812;
+    --danger: #f2786e;
+    --danger-soft: #3a1916;
+    --on-danger: #0d1316;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-on-danger: var(--on-danger);
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
 }

@@ -37,6 +37,24 @@ internal sealed class ApiExceptionHandler(IProblemDetailsService problemDetails)
                 Title = "Conflict.",
                 Detail = conflict.Message,
             },
+            ForbiddenException forbidden => new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden.",
+                Detail = forbidden.Message,
+            },
+            NotFoundException notFound => new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Not found.",
+                Detail = notFound.Message,
+            },
+            DatabaseProvisioningException provisioning => new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "The project database is temporarily unavailable.",
+                Detail = provisioning.Message,
+            },
             _ => null,
         };
 

@@ -6,7 +6,11 @@ and manage who else has access, with role checks enforced on every route.
 
 **Depends on:** M0.
 
-> **Progress:** data model (all 7 metadata tables, see plan D13–D15) and auth endpoints are done.
+> **Progress:** data model (all 7 metadata tables, see plan D13–D15), auth endpoints, projects API
+> (with `cf_p_<id>` provisioning and startup recovery) project authorization and the members API
+> (add/role/remove/leave/transfer ownership) and the Next.js dashboard are done.
+> The web app proxies `/api/*` to the API (same origin, no CORS in practice) and runs on port 3100
+> in development because port 3000 is often taken by other local services. Test projects use ids ≥ 1,000,000 so tests never touch dev project databases.
 > Auth integration tests run against a local `corefoundry_test` database (`db/setup-test.sql`) and
 > skip when it isn't configured. Two refreshes racing with the same token: the loser gets 401
 > (optimistic concurrency on `RefreshTokens.RevokedAt`), which is **not** treated as theft.
@@ -91,12 +95,12 @@ Full columns and delete rules are in the [data model](../corefoundry-erd.html).
 3. Delete the metadata rows (cascades take care of members, tables, migrations).
 
 ### Startup check
-- [ ] Hosted service on boot: finish provisioning for projects stuck in `Provisioning`
+- [x] Hosted service on boot: finish provisioning for projects stuck in `Provisioning`
       and finish deleting projects stuck in `Deleting`. Both steps are safe to run
       again because of `IF [NOT] EXISTS`.
 
 ### Slug
-- [ ] Generated from the name (`My Shop` → `my-shop`). On collision, append `-2`, `-3` and so on.
+- [x] Generated from the name (`My Shop` → `my-shop`). On collision, append `-2`, `-3` and so on.
 
 ---
 
@@ -111,23 +115,23 @@ Full columns and delete rules are in the [data model](../corefoundry-erd.html).
 | POST | `/api/projects/{projectId}/transfer-ownership` | Owner | `{ userId }`, one transaction |
 
 Rules:
-- [ ] Exactly one `Owner` per project, always equal to `Projects.OwnerId`
-- [ ] Admins can't grant, change or remove the Owner role
-- [ ] The Owner can't be removed. Ownership has to be transferred first.
+- [x] Exactly one `Owner` per project, always equal to `Projects.OwnerId`
+- [x] Admins can't grant, change or remove the Owner role
+- [x] The Owner can't be removed. Ownership has to be transferred first.
 
 ---
 
 ## 5. Authorization
 
-- [ ] `ProjectRoleRequirement(ProjectRole minimum)` +
+- [x] `ProjectRoleRequirement(ProjectRole minimum)` +
       `ProjectRoleHandler : AuthorizationHandler<ProjectRoleRequirement>`
-- [ ] The handler reads `projectId` from route values and loads the caller's
+- [x] The handler reads `projectId` from route values and loads the caller's
       membership (one indexed query, cached for the length of the request).
-- [ ] Policies `Project.Developer`, `Project.Admin`, `Project.Owner`, applied as
+- [x] Policies `Project.Developer`, `Project.Admin`, `Project.Owner`, applied as
       `[Authorize(Policy = "Project.Admin")]` on endpoints
-- [ ] **Not a member → 404** (so project ids can't be probed). **Member without
+- [x] **Not a member → 404** (so project ids can't be probed). **Member without
       the required role → 403.**
-- [ ] Role order: Owner (highest) > Admin > Developer. Keep the numeric values
+- [x] Role order: Owner (highest) > Admin > Developer. Keep the numeric values
       separate from the ordering to avoid accidental comparisons.
 
 ```csharp
@@ -147,14 +151,14 @@ Turn "not a member" into 404 with a custom `IAuthorizationMiddlewareResultHandle
 
 ## 6. Frontend (Next.js)
 
-- [ ] `/login`, `/register`: react-hook-form + zod, server errors mapped to fields
-- [ ] Auth state: keep the access token in memory (React context). On app load,
+- [x] `/login`, `/register`: react-hook-form + zod, server errors mapped to fields
+- [x] Auth state: keep the access token in memory (React context). On app load,
       call `/api/auth/refresh` to restore the session from the cookie.
-- [ ] `apiFetch` wrapper: adds the Bearer token. On a 401 it refreshes once and
+- [x] `apiFetch` wrapper: adds the Bearer token. On a 401 it refreshes once and
       retries. If two requests get a 401 at the same time, they share one refresh call.
-- [ ] `/projects`: list with a status badge (Provisioning, Active, Failed + Retry),
+- [x] `/projects`: list with a status badge (Provisioning, Active, Failed + Retry),
       and a create dialog
-- [ ] `/projects/[id]/members`: table showing roles, add by email, change role, remove.
+- [x] `/projects/[id]/members`: table showing roles, add by email, change role, remove.
       Controls the user isn't allowed to use are hidden or disabled.
 - [ ] CORS: API allows `http://localhost:3000` with credentials (dev only).
       Production uses a shared origin (M5).
@@ -170,10 +174,10 @@ Turn "not a member" into 404 with a custom `IAuthorizationMiddlewareResultHandle
 - [x] Register → login → `/me` works. Wrong password and unknown email return the same 401.
 - [x] Refresh rotates the cookie. The old cookie is then rejected. Replaying a revoked
       token revokes the chain, and the newest token stops working too.
-- [ ] Creating a project creates `cf_p_<id>` (checked via `INFORMATION_SCHEMA.SCHEMATA`)
-- [ ] Deleting a project drops the database
-- [ ] Non-member → 404. Developer on an Admin route → 403. Admin can't remove the Owner.
-- [ ] Transfer ownership swaps the roles and `OwnerId` atomically
+- [x] Creating a project creates `cf_p_<id>` (checked via `INFORMATION_SCHEMA.SCHEMATA`)
+- [x] Deleting a project drops the database
+- [x] Non-member → 404. Developer on an Admin route → 403. Admin can't remove the Owner.
+- [x] Transfer ownership swaps the roles and `OwnerId` atomically
 
 ---
 

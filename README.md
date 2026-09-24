@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M1 — auth done; projects & members next**. See [the phases](docs/phases/README.md).
+> Status: **M1 done — auth, projects, members, and the dashboard**. Next: M2 table designer. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -43,11 +43,18 @@ dotnet run --launch-profile http
 ### 3. Web
 ```bash
 cd web
-cp .env.example .env.local
+cp .env.example .env.local   # API_ORIGIN, defaults to http://localhost:5172
 npm install
 npm run dev
 ```
-Open http://localhost:3000. The page shows the API and database health.
+The browser only talks to the web app: `next.config.ts` proxies `/api/*` to the API, so the
+refresh cookie and CORS behave like the single-origin production setup.
+
+Pages: sign in / register, your projects (status, role, retry failed database creation, create),
+and a project page with details, members (add, change role, remove, leave, transfer ownership),
+rename, and delete (confirmed by typing the project name). Controls your role can't use are hidden;
+the API enforces the same rules.
+Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
 
 ### Tests
 ```bash
@@ -59,8 +66,9 @@ dropped and re-created on every run (your `corefoundry` dev data is never touche
 ```bash
 mysql -u root -p < db/setup-test.sql
 ```
-The tests reuse the API's `ConnectionStrings:Metadata` user-secret with the database swapped to
-`corefoundry_test`. Without it (e.g. in CI) those tests are skipped.
+The tests reuse the API's `ConnectionStrings:Metadata` and `Engine` user-secrets, with the metadata
+database swapped to `corefoundry_test`. Test projects get ids from 1,000,000, so their `cf_p_<id>`
+databases never collide with dev ones; leftovers are dropped at the start of each run. Without it (e.g. in CI) those tests are skipped.
 
 ## API so far
 | Method | Route | Notes |
@@ -70,10 +78,22 @@ The tests reuse the API's `ConnectionStrings:Metadata` user-secret with the data
 | POST | `/api/auth/refresh` | cookie → new access token + rotated cookie |
 | POST | `/api/auth/logout` | revokes the cookie's token → 204 |
 | GET | `/api/auth/me` | Bearer token → `{ id, email }` |
+| GET | `/api/projects` | projects I'm a member of, with my role |
+| POST | `/api/projects` | `{ name }` → 201; creates the `cf_p_<id>` database; caller becomes Owner |
+| GET | `/api/projects/{id}` | Developer+; non-members get 404 |
+| PATCH | `/api/projects/{id}` | `{ name }`; Admin+ |
+| DELETE | `/api/projects/{id}` | Owner; drops the `cf_p_<id>` database |
+| POST | `/api/projects/{id}/retry-provisioning` | Owner; for projects whose database creation failed |
+| GET | `/api/projects/{id}/members` | Developer+; Owner first, then Admins, then Developers |
+| POST | `/api/projects/{id}/members` | `{ email, role }` Admin+; existing accounts only; role Admin or Developer |
+| PUT | `/api/projects/{id}/members/{userId}` | `{ role }` Admin+; Admin ↔ Developer, never the Owner |
+| DELETE | `/api/projects/{id}/members/{userId}` | Admin+ for others; any member may remove themselves |
+| POST | `/api/projects/{id}/transfer-ownership` | `{ userId }` Owner; the old Owner becomes Admin |
 
 After pulling new migrations: `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`
 
 ## Docs
 - [Plan](intial-plan.md)
+- [Progress](docs/PROGRESS.md): what's done, how it's verified, and what's next
 - [Phases](docs/phases/README.md)
 - [Data model](docs/corefoundry-erd.html) · [Backend flows](docs/corefoundry-flows.html) (open in a browser)
