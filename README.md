@@ -205,7 +205,9 @@ in Clean Architecture generated from the applied tables.
 
 Unapplied draft changes are not exported (the export matches the running database). A test exports a Bookshop,
 builds it, checks its migration with `dotnet ef`, runs it against MySQL, uses it over HTTP and compares its tables
-with CoreFoundry's (set `CF_SKIP_EXPORT_BUILD=1` to skip that slow test).
+with CoreFoundry's. Two more exports are built and run the same way: one checks the access levels and roles
+(`AccessEndpointsTests`), the other the realtime hub with SignalR clients (`RealtimeEndpointsTests`). Set
+`CF_SKIP_EXPORT_BUILD=1` to skip these three slow tests.
 
 ### Data API with curl
 

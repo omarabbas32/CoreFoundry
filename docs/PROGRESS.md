@@ -12,8 +12,8 @@ _Last updated: 2026-09-26 · branch `m8-m9-access-realtime`_
 | [M4 — Data API](phases/phase-4-data-api.md) | ✅ Built (`m4-data-api`), hands-on check open | Row CRUD on applied tables: REST API + data viewer |
 | [M6 — Code export](phases/phase-6-code-export.md) | ✅ Built (`m6-code-export`), UI click and Docker run open | Download a project as a deployable .NET Clean Architecture backend |
 | [M7 — Schema templates](phases/phase-7-schema-templates.md) | ✅ Built (`m7-schema-templates`), browser check open | Start a project from a ready E-commerce schema with sample rows |
-| [M8 — Access rules](phases/phase-8-access-rules.md) | ✅ Built (`m8-m9-access-realtime`), end-to-end export test open | Per-table read/write access (Public / Signed-in / Admin), enforced by the exported backend |
-| [M9 — Realtime in the export](phases/phase-9-realtime-export.md) | ✅ Built (`m8-m9-access-realtime`), end-to-end export test open | SignalR hub in the exported backend; M8's read level decides who may subscribe |
+| [M8 — Access rules](phases/phase-8-access-rules.md) | ✅ Built (`m8-m9-access-realtime`) | Per-table read/write access (Public / Signed-in / Admin), enforced by the exported backend |
+| [M9 — Realtime in the export](phases/phase-9-realtime-export.md) | ✅ Built (`m8-m9-access-realtime`) | SignalR hub in the exported backend; M8's read level decides who may subscribe |
 | [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next (one-command Docker run written on `m5-one-command-run`) | One-command run, README, demo, deploy |
 
 **Tests:** 722 .NET tests pass (595 unit, 127 integration, of which 106 run against a real MySQL database; none skipped),
@@ -283,33 +283,49 @@ and "write not wider than read" forbids Admin read with Signed-in write (phase-8
   every level.
 - **Integration:** the access endpoint (default on a new table, update, stale version → 409, non-member → 404,
   invalid combination → 400, a change doesn't appear in the schema plan), the template's defaults on a used template.
-- **End to end:** an export test extending `ExportEndpointsTests.cs` (no token / Admin / User / a promotion changing
-  what the second user can do) is in progress in a parallel worktree; it isn't in this branch's history yet.
+- **End to end (`AccessEndpointsTests.cs`, ~1 min):** a Library with `books` Public/Admin and `authors` Admin/Admin
+  is exported, built (0 warnings), its migration checked by `dotnet ef`, and run against MySQL: no token (read books
+  200, write books 401, read authors 401); five simultaneous first sign-ups all succeed and exactly one becomes Admin
+  (token claim and account list); the Admin reads and writes both tables; the last Admin can't be demoted (409); a
+  User reads books but gets 403 writing them, reading authors and listing accounts; a promotion counts after the
+  User logs in again; the OpenAPI document locks only the operations that need a token (books `GET` and register
+  open, books `POST` and authors `GET` carry the Bearer requirement). `CF_SKIP_EXPORT_BUILD=1` skips it.
 
 ## M9 — Realtime in the export
 
 The exported backend gains a **realtime hub**: the generated API pushes `insert`/`update`/`delete` notifications for
-its own tables over SignalR, and M8's read level decides who may subscribe. Built per `docs/phases/phase-9-realtime-export.md`
-in a parallel worktree against this spec; nothing here is CoreFoundry's own runtime.
+its own tables over SignalR, and M8's read level decides who may subscribe. Built per `docs/phases/phase-9-realtime-export.md`;
+nothing here is CoreFoundry's own runtime.
 
 ### What the export generates (phase-9 §3)
 | File | What it adds |
 |---|---|
 | `Application/Realtime/IChangePublisher.cs` | Port + `ChangeEvent`/`ChangeOperation` records, no SignalR types |
 | `Application/Common/CrudService.cs` | An abstract `TableName`; publishes once after a successful `SaveChangesAsync` in Create/Replace/Delete, nothing on a failed save |
+| `Application/Tables/<Entity>/<Entity>Service.cs` | Each service overrides `TableName` with the applied table name (`"books"`) |
 | `Infrastructure/Realtime/RealtimeHub.cs` | `Subscribe`/`Unsubscribe`, the generated table → read-level map, a `HubException` for a refused table or level |
-| `Infrastructure/Realtime/SignalRChangePublisher.cs` | Pushes to `Clients.Group("table:<name>")`; catches and logs a failed send so the request never fails |
-| `Api/Program.cs` | `MapHub<RealtimeHub>("/hubs/realtime").AllowAnonymous()`, CORS (`Cors:AllowedOrigins`) before authentication, `access_token` read from the query string only under `/hubs/` |
+| `Infrastructure/Realtime/SignalRChangePublisher.cs` | Pushes to `Clients.Group("table:<name>")`, each send bounded to 5 s; catches and logs a failed or timed-out send so the request never fails |
+| `Infrastructure/DependencyInjection.cs` | `AddSignalR()` and the publisher registration (singleton) |
+| `Api/Program.cs` | `MapHub<RealtimeHub>("/hubs/realtime", o => o.CloseOnAuthenticationExpiration = true).AllowAnonymous()`, CORS (`Cors:AllowedOrigins`) before authentication, `access_token` read from the query string only under `/hubs/` |
+| `Api/appsettings.json` | A `Cors:AllowedOrigins` section, empty by default (no CORS at all) |
 | Export README | Subscribe snippet, re-subscribe and refetch on reconnect, CORS, the external-writer and cascade gaps |
 
 `CodeNames.Reserved` gains `RealtimeHub`, `ChangeEvent`, `ChangeOperation`, `IChangePublisher`, `SignalRChangePublisher`
 and the `Realtime` namespace segment, so a table like `change_events` can't clash with them.
 
 ### How it's verified
-Per phase-9 §4: unit tests on the generated hub, publisher, `CrudService` publish-once behavior and the reserved
-names; an end-to-end test extending `ExportEndpointsTests.cs` with a SignalR client (subscribe, refused table,
-reconnect and re-subscribe, a failed save publishing nothing). This work is in progress in a parallel worktree, so
-none of it is in this branch's history yet — see the open items on phase-9's Definition of done.
+- **Unit:** the generated hub (level map from M8's `Read`, refusals, unknown tables), the publisher (group, 5 s bound,
+  a failed send logged), `CrudService` publishing once per write and not on a failed save, each service's
+  `TableName`, the `Program.cs` wiring and the reserved names.
+- **End to end (`RealtimeEndpointsTests.cs`, ~1 min):** a Bookshop with `books` Public/Admin, `authors` Admin/Admin and
+  `categories` at the Signed-in default is exported, built (0 warnings), its migration checked, and run; SignalR
+  clients connect over WebSockets with the token in the query string (`?access_token=`), the way browsers send it,
+  while the same query-string token on `GET /api/authors` is 401. Public: an anonymous client subscribes to `books`.
+  Signed-in: anonymous is told to sign in for `categories`, a User subscribes and gets its `insert`. Admin:
+  anonymous is told to sign in for `authors`, a User is refused, the Admin subscribes. Unknown tables are refused.
+  `insert`/`update`/`delete` arrive with the right table, operation and id; a 409 save publishes nothing, and no
+  client gets a table it didn't subscribe to. Reconnect: after a stop and start, a write doesn't reach the new
+  connection until it re-subscribes, then it does.
 
 ## How it's verified
 
@@ -408,6 +424,10 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D45).
   group membership, which is out of scope for v1 (phase-9 §3).
 - **Realtime is table-level only, like M8's access rules** — no per-row visibility (the RLS equivalent); the same
   Owner level would be needed here too (phase-9 §6 q.3).
+- **Realtime access is checked at subscribe time.** A user demoted by an Admin keeps receiving events until the
+  connection closes; a connection made with a token closes when that token expires (phase-9 §1).
+- **The realtime WebSocket carries its token in the query string** (`?access_token=`; browsers can't set headers on a
+  WebSocket), so it can appear in proxy access logs. It is read under `/hubs/` only.
 
 ## Next: M5 — Portfolio polish
 

@@ -63,7 +63,7 @@ backend architecture.
 | D42 | **Realtime (M9)** events are a **notification**, `{ table, operation, id }`, never the row | The row's JSON contract (decimals as strings, date/time formats, the generated converters) lives in the REST controllers; a hub sending rows would have to duplicate it or quietly diverge (phase-9 §6 q.1) — a later, deliberate upgrade. |
 | D43 | The realtime hub is **always generated**, no opt-in flag | One export shape and one code path to test; the cost is a little unused code in a download that doesn't want it (phase-9 §6 q.5). |
 | D44 | The hub is mapped at **`/hubs/realtime`** with `.AllowAnonymous()`, outside `/api/` so no table name can collide with it; each `Subscribe` checks the table's read level itself (anonymous / signed-in / Admin), mirroring the per-action attributes M8 writes on controllers | A subscription is a *read*, and a Public table must be subscribable without a token, so the hub can't carry a blanket `[Authorize]` or M8's fallback policy. |
-| D45 | A publish failure is **caught and logged, and never fails the write**; a failed save publishes nothing | The row is already committed by the time the hub is asked to publish, so a broken realtime path must not turn a successful write into an error response. |
+| D45 | A publish failure is **caught and logged, and never fails the write**; a failed save publishes nothing; each send is bounded to 5 s | The row is already committed by the time the hub is asked to publish, so a broken realtime path must not turn a successful write into an error response; the 5 s bound keeps a subscriber that stops reading from holding up the table's writes (it misses that event and refetches on reconnect). |
 
 ---
 

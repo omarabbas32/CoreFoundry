@@ -34,8 +34,9 @@ subscribable without a token, the hub can't carry a blanket `[Authorize]`, and M
 too: `MapHub` is mapped with **`.AllowAnonymous()`** so anyone can connect, and each `Subscribe` checks the table's
 level against `Context.User`, mirroring the per-action attributes M8 writes on the controllers (and the same
 "anything not explicitly allowed is closed" rule). A refused `Subscribe` throws a `HubException` with a readable
-message ("Sign in to subscribe to orders."), so the client's `invoke` rejects with it. Subscribing twice to the
-same table is harmless (group membership is a set).
+message ("Sign in to subscribe to orders."), so the client's `invoke` rejects with it. As on the REST API (401
+before 403), an anonymous caller on a Signed-in or Admin table is asked to sign in, and only a signed-in non-Admin
+is told the table is for admins. Subscribing twice to the same table is harmless (group membership is a set).
 
 **What is covered, honestly:**
 - Events are emitted for writes that go through the generated API. Supabase reads the Postgres WAL, so it also sees
@@ -44,8 +45,8 @@ same table is harmless (group membership is a set).
 - **Cascades send no event.** Deleting an `authors` row whose `books` reference it with *Cascade* or *Set null*
   changes those `books` rows inside MySQL; only the `authors` delete is published. The README says so.
 - **Access is checked at subscribe time.** A user demoted by an Admin (M8's role endpoint) keeps receiving events
-  until the connection closes. The hub sets `CloseOnAuthenticationExpiration`, so a connection with a token ends
-  when that token expires. Events carry only ids, which limits what a stale subscription sees.
+  until the connection closes. The hub's endpoint sets `CloseOnAuthenticationExpiration`, so a connection with a
+  token ends when that token expires. Events carry only ids, which limits what a stale subscription sees.
 
 ## 2. Where this lives in CoreFoundry
 
@@ -69,8 +70,8 @@ same table is harmless (group membership is a set).
 | `Bookshop.Application/Tables/Book/BookService.cs` (each entity) | **changed** — overrides `TableName` with the applied table name (`"books"`) |
 | `Bookshop.Infrastructure/Realtime/RealtimeHub.cs` | **new** — the hub + the generated table→read-level map (from M8's `Read`) and the `Subscribe`/`Unsubscribe` checks |
 | `Bookshop.Infrastructure/Realtime/SignalRChangePublisher.cs` | **new** — pushes to `Clients.Group("table:<name>")` through `IHubContext<>`; registered in Infrastructure DI. It **catches and logs** any send failure: the row is already saved, so the request must not fail. Each send is **bounded to 5 s**, so a subscriber that stops reading can't hold up the table's writes |
-| `Bookshop.Infrastructure/DependencyInjection.cs` | **changed** — `AddSignalR()` (with `CloseOnAuthenticationExpiration`) and the publisher registration |
-| `Bookshop.Api/Program.cs` | **changed** — `MapHub<RealtimeHub>("/hubs/realtime").AllowAnonymous()`, CORS, and the `access_token` query-string reader in `JwtBearerEvents.OnMessageReceived`, **only for paths under `/hubs/`** |
+| `Bookshop.Infrastructure/DependencyInjection.cs` | **changed** — `AddSignalR()` and the publisher registration (singleton) |
+| `Bookshop.Api/Program.cs` | **changed** — `MapHub<RealtimeHub>("/hubs/realtime", o => o.CloseOnAuthenticationExpiration = true).AllowAnonymous()`, CORS, and the `access_token` query-string reader in `JwtBearerEvents.OnMessageReceived`, **only for paths under `/hubs/`** |
 | `Bookshop.Api/appsettings.json` | **changed** — a `Cors:AllowedOrigins` section, empty by default (the generated app has no CORS at all today; a browser client needs it) |
 | `Bookshop/README.md` | **changed** — a Realtime section: subscribe snippet, refetch-on-reconnect, CORS, the external-writer gap |
 
@@ -131,13 +132,18 @@ await subscribe("books");
   `Program.cs` wiring (`AllowAnonymous` on the hub, CORS before authentication, `access_token` only under `/hubs/`),
   the generated level map from M8's `Read`, and that a table name outside the export is refused; plus the new names
   in `CodeNames.Reserved` (a table `change_events` still exports and builds).
-- **Integration** (extends the M6/M8 end-to-end test, `tests/CoreFoundry.IntegrationTests/Export/ExportEndpointsTests.cs`),
-  against the running exported Bookshop with M8's levels (`books` Read Public / Write Admin, `authors` Admin/Admin):
+- **Integration** (`tests/CoreFoundry.IntegrationTests/Export/RealtimeEndpointsTests.cs`, built and run like the M6/M8
+  end-to-end tests), against the running exported Bookshop with M8's levels (`books` Read Public / Write Admin,
+  `authors` Admin/Admin, `categories` left at Signed-in/Signed-in):
+  - clients connect over WebSockets with the token in the query string (`?access_token=`), the path browsers use;
+    the same query-string token on `GET /api/authors` is 401 (it is read under `/hubs/` only)
   - a subscribed client gets three `change` events (right table, operation, id) for `POST`/`PUT`/`DELETE` over HTTP
-  - a token-less client may subscribe to `books` and gets a `HubException` for `authors`; a signed-in non-admin
-    gets one for `authors` too
-  - **reconnect:** the connection is dropped and restored, the client re-subscribes, and the next write still arrives
-  - a failed save (e.g. a unique-value conflict) publishes nothing
+  - Public: a token-less client subscribes to `books`. Signed-in: it is told to sign in for `categories`, while a
+    User subscribes and receives the `insert` when the Admin adds a category. Admin: the token-less client is told
+    to sign in for `authors`, a User gets a `HubException` for it, the Admin subscribes. Unknown tables are refused.
+  - a failed save (a unique-value conflict, 409) publishes nothing, and no client gets a table it didn't subscribe to
+  - **reconnect:** after the connection is stopped and started, a write doesn't reach it (the server forgot its
+    subscriptions); once it re-subscribes, the next write arrives
   - the generated project still builds with **0 warnings** and `dotnet ef migrations has-pending-model-changes`
     still reports none.
   Event assertions wait on a collector with an explicit timeout, so a missing event fails fast instead of hanging.
@@ -194,7 +200,3 @@ await subscribe("books");
       external-writer and cascade gaps
 - [x] `docs/PROGRESS.md`, the decisions log and `intial-plan.md` §1 are updated
 - [ ] All CoreFoundry tests pass (including the extended export test)
-
-The generated hub, publisher, `CrudService` wiring, `Program.cs`/CORS setup and the extended end-to-end test
-(§4) are being implemented in a parallel worktree against this spec; the remaining items are ticked once that
-lands and passes.

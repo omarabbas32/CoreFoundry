@@ -93,13 +93,18 @@ Admin role and the fallback policy from this phase as they are.
   generator writes the right attribute per action and level; migration writer includes `role`.
 - **Integration (CoreFoundry):** the access endpoint (update, stale version → 409, non-member → 404, invalid combination
   → 400); access changes don't appear in the plan; template tables get their defaults.
-- **End to end (extends the M6 export test):** export Bookshop with `books` Read Public / Write Admin and `authors`
-  Admin/Admin, then against the running generated API:
+- **End to end (`tests/CoreFoundry.IntegrationTests/Export/AccessEndpointsTests.cs`, built and run like the M6 export
+  test):** export a Library with `books` Read Public / Write Admin and `authors` Admin/Admin, then against the
+  running generated API:
   - no token: `GET /api/books` → 200, `POST /api/books` → 401, `GET /api/authors` → 401
-  - the first user (Admin): everything works
-  - the second user (User): `GET /api/books` → 200, `POST /api/books` → 403, `GET /api/authors` → 403
-  - the Admin promotes the second user → `POST /api/books` → 201
-  - EF still reports no pending model changes.
+  - five simultaneous first sign-ups: all 201, exactly one token's `role` claim is `Admin`, and the account list
+    shows exactly one Admin
+  - the Admin: everything works; as the only Admin they can't be demoted (409)
+  - a User: `GET /api/books` → 200, `POST /api/books` → 403, `GET /api/authors` → 403, `GET /api/auth/users` → 403
+  - the Admin promotes the User; after logging in again, `POST /api/books` → 201
+  - the OpenAPI document: `GET /api/books` and `POST /api/auth/register` carry no security requirement,
+    `POST /api/books` and `GET /api/authors` require `Bearer`
+  - the export builds with 0 warnings and EF reports no pending model changes.
 
 ## 5. Steps (plan-before-execute; commit after each verified step)
 
@@ -128,6 +133,3 @@ Admin role and the fallback policy from this phase as they are.
 - [x] A new E-commerce project has the defaults above
 - [ ] The exported backend enforces them (end-to-end test), the first user is Admin, and Swagger shows which endpoints are public
 - [ ] All tests pass
-
-The generated attributes, fallback policy, roles and Swagger lock are built (§3); the end-to-end export test
-(no token / Admin / User / promotion matrix, §4) is in progress and will tick the last two items when it passes.
