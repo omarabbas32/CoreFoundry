@@ -204,11 +204,16 @@ public class BackendGeneratorTests
 
         var repository = File("src/Bookshop.Infrastructure/Persistence/UserRepository.cs");
         repository.ShouldContain("await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);");
-        repository.ShouldContain("catch (Exception ex) when (attempt < MaxAttempts && DatabaseErrors.IsDeadlock(ex))");
+        repository.ShouldContain("private const int MaxAttempts = 6;");
+        repository.ShouldContain("catch (Exception ex) when (attempt < MaxAttempts && DatabaseErrors.IsRetryableLockError(ex))");
         repository.ShouldContain("db.ChangeTracker.Clear();");
 
+        // Retries back off with a short randomized delay instead of retrying straight into the same contention.
+        repository.ShouldContain("await Task.Delay(Random.Shared.Next(10, 50) * attempt, cancellationToken);");
+
+        // Both a deadlock (1213) and a lock wait timeout (1205) are retried.
         File("src/Bookshop.Infrastructure/Persistence/DatabaseErrors.cs")
-            .ShouldContain("MySqlException { Number: (int)MySqlErrorCode.LockDeadlock }");
+            .ShouldContain("MySqlException { Number: (int)MySqlErrorCode.LockDeadlock or (int)MySqlErrorCode.LockWaitTimeout }");
     }
 
     [Fact]

@@ -766,8 +766,8 @@ internal static class SharedFiles
 
             internal sealed class UserRepository(AppDbContext db) : IUserRepository
             {
-                /// <summary>Runs of a serializable transaction before a deadlock is given up on (a 500).</summary>
-                private const int MaxAttempts = 3;
+                /// <summary>Runs of a serializable transaction before a deadlock or lock wait timeout is given up on (a 500).</summary>
+                private const int MaxAttempts = 6;
 
                 public Task<AppUser?> FindByEmailAsync(string email, CancellationToken cancellationToken) =>
                     db.Users.FirstOrDefaultAsync(user => user.Email == email, cancellationToken);
@@ -803,9 +803,10 @@ internal static class SharedFiles
                     for (var attempt = 1; ; attempt++)
                     {
                         // MySQL takes shared locks on what a serializable transaction reads. Two of them that read the
-                        // same rows and then write end in a deadlock: MySQL rolls one back, and it runs again here.
-                        // MySql.Data sets the isolation level per session, so the pooled connection may keep SERIALIZABLE
-                        // until EF's next transaction on it resets the level (accepted: the effect is negligible).
+                        // same rows and then write end in a deadlock, or one waits out the other's lock: MySQL rolls
+                        // one back (or times it out), and it runs again here. MySql.Data sets the isolation level per
+                        // session, so the pooled connection may keep SERIALIZABLE until EF's next transaction on it
+                        // resets the level (accepted: the effect is negligible).
                         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
                         try
                         {
@@ -813,9 +814,12 @@ internal static class SharedFiles
                             await transaction.CommitAsync(cancellationToken);
                             return result;
                         }
-                        catch (Exception ex) when (attempt < MaxAttempts && DatabaseErrors.IsDeadlock(ex))
+                        catch (Exception ex) when (attempt < MaxAttempts && DatabaseErrors.IsRetryableLockError(ex))
                         {
                             db.ChangeTracker.Clear();
+                            // A burst of first sign-ups all S-lock the same empty range, so retrying immediately just
+                            // rejoins the same contention. Spread contenders out with a short randomized backoff.
+                            await Task.Delay(Random.Shared.Next(10, 50) * attempt, cancellationToken);
                         }
                     }
                 }
@@ -886,12 +890,13 @@ internal static class SharedFiles
                     };
                 }
 
-                /// <summary>Whether MySQL picked this transaction as a deadlock's victim and rolled it back (error 1213).</summary>
-                public static bool IsDeadlock(Exception exception)
+                /// <summary>Whether a serializable transaction can just be run again: MySQL picked it as a deadlock's
+                /// victim (1213) or gave up waiting for another transaction's lock (1205).</summary>
+                public static bool IsRetryableLockError(Exception exception)
                 {
                     for (var current = exception; current is not null; current = current.InnerException)
                     {
-                        if (current is MySqlException { Number: (int)MySqlErrorCode.LockDeadlock })
+                        if (current is MySqlException { Number: (int)MySqlErrorCode.LockDeadlock or (int)MySqlErrorCode.LockWaitTimeout })
                         {
                             return true;
                         }
