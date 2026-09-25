@@ -25,15 +25,16 @@ public static class CodeNames
 
         // Namespace segments of the generated solution: a type with one of these names would hide the namespace.
         "Api", "Application", "Auth", "Common", "Configurations", "Controllers", "Domain", "Entities", "Errors",
-        "Infrastructure", "Json", "Migrations", "OpenApi", "Persistence", "Tables",
+        "Infrastructure", "Json", "Migrations", "OpenApi", "Persistence", "Realtime", "Tables",
 
         // Shared types the generator writes.
         "AccessToken", "AccountDto", "AppUserConfiguration", "AuthResponse", "AuthenticationFailedException",
-        "BearerSecurityRequirementTransformer", "BearerSecuritySchemeTransformer", "ConflictException", "CredentialsRequest",
-        "CrudService", "DatabaseErrors", "DateTimeConverter", "DecimalDigitsAttribute", "DecimalStringConverter",
-        "EfRepository", "ExceptionHandler", "IEntity", "IPasswordHasher", "IRepository", "ITokenService", "IUserRepository",
-        "JsonValues", "JwtTokenService", "MaxCharactersAttribute", "MaxUtf8BytesAttribute", "MySqlDateAttribute",
-        "NotFoundException", "PasswordHasher", "RoleRequest", "Roles", "UserRepository", "ValidationFailedException",
+        "BearerSecurityRequirementTransformer", "BearerSecuritySchemeTransformer", "ChangeEvent", "ChangeOperation",
+        "ConflictException", "CredentialsRequest", "CrudService", "DatabaseErrors", "DateTimeConverter", "DecimalDigitsAttribute",
+        "DecimalStringConverter", "EfRepository", "ExceptionHandler", "IChangePublisher", "IEntity", "IPasswordHasher",
+        "IRepository", "ITokenService", "IUserRepository", "JsonValues", "JwtTokenService", "MaxCharactersAttribute",
+        "MaxUtf8BytesAttribute", "MySqlDateAttribute", "NotFoundException", "PasswordHasher", "RealtimeHub", "RoleRequest",
+        "Roles", "SignalRChangePublisher", "UserRepository", "ValidationFailedException",
     };
 
     /// <summary><c>price_usd</c> → <c>PriceUsd</c>, <c>isbn13</c> → <c>Isbn13</c>.</summary>

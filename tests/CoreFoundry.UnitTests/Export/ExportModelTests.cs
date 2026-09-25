@@ -134,6 +134,25 @@ public class ExportModelTests
     }
 
     [Fact]
+    public void Tables_named_like_the_realtime_types_get_non_clashing_names()
+    {
+        var schema = new DataSchema(1,
+        [
+            new DataTable("change_events", []), // ChangeEvent is the realtime event record
+            new DataTable("realtime_hubs", []), // RealtimeHub is the hub
+            new DataTable("realtime", []), // Realtime is a namespace segment
+        ]);
+
+        var model = ExportModel.From("Shop", schema);
+
+        model.Entities.Select(entity => entity.ClassName).ShouldBe(["ChangeEvents", "RealtimeHubs", "RealtimeEntity"]);
+        foreach (var name in new[] { "RealtimeHub", "ChangeEvent", "ChangeOperation", "IChangePublisher", "SignalRChangePublisher", "Realtime" })
+        {
+            CodeNames.Reserved.ShouldContain(name);
+        }
+    }
+
+    [Fact]
     public void Columns_with_unknown_types_stop_the_export()
     {
         var schema = new DataSchema(1, [new DataTable("books", [new DataColumn("legacy", null, "mediumint(9)", true, false, null, null)])]);
