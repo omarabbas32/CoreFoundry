@@ -5,20 +5,26 @@ namespace CoreFoundry.Application.Data;
 
 /// <summary>
 /// The tables the Data API serves: the schema as it was right after the last successful apply
-/// (<see cref="SchemaSnapshot"/>), never the draft. A table or column that exists only in the
-/// draft doesn't exist here.
+/// (<see cref="SchemaSnapshot"/>), never the draft's definitions. A table or column that exists
+/// only in the draft doesn't exist here; neither does one created outside CoreFoundry.
 /// </summary>
 /// <param name="SchemaVersion">The project's schema version this was read for.</param>
 public sealed record DataSchema(int SchemaVersion, IReadOnlyList<DataTable> Tables)
 {
     public static DataSchema Empty(int schemaVersion) => new(schemaVersion, []);
 
-    public static DataSchema From(SchemaSnapshot snapshot, int schemaVersion)
+    /// <param name="managed">
+    /// Applied table name → its applied column names, from the draft. The snapshot is the whole database,
+    /// including tables and columns created outside CoreFoundry; only managed ones are served (an
+    /// unmanaged table may have no <c>id</c>, or a name CoreFoundry won't quote).
+    /// </param>
+    public static DataSchema From(SchemaSnapshot snapshot, int schemaVersion, IReadOnlyDictionary<string, IReadOnlySet<string>> managed)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        return new(schemaVersion, [.. snapshot.Tables.Select(table => new DataTable(
+        ArgumentNullException.ThrowIfNull(managed);
+        return new(schemaVersion, [.. snapshot.Tables.Where(table => managed.ContainsKey(table.Name)).Select(table => new DataTable(
             table.Name,
-            [.. table.Columns.Select(column => new DataColumn(
+            [.. table.Columns.Where(column => managed[table.Name].Contains(column.Name)).Select(column => new DataColumn(
                 column.Name,
                 ColumnType.TryParse(column.Type, out var type) ? type : null,
                 column.Type,

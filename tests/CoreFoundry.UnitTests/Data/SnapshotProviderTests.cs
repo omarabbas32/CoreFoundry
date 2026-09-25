@@ -13,17 +13,19 @@ public sealed class SnapshotProviderTests : IDisposable
 {
     private const long ProjectId = 7;
     private readonly FakeMigrations _migrations = new();
+    private readonly FakeTables _tables = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private CachedSnapshotProvider Provider => new(_migrations, _cache);
+    private CachedSnapshotProvider Provider => new(_migrations, _tables, _cache);
 
     public void Dispose() => _cache.Dispose();
 
     [Fact]
     public async Task No_applied_migration_means_no_tables()
     {
+        Manage("books");
         _migrations.Add(new SchemaMigration(ProjectId, 1, "[]", 1, requestedBy: null)); // still Pending
 
         var schema = await Provider.GetAsync(ProjectId, 0, Ct);
@@ -34,6 +36,7 @@ public sealed class SnapshotProviderTests : IDisposable
     [Fact]
     public async Task The_last_applied_snapshot_becomes_typed_tables()
     {
+        Manage("books", "title", "price_usd", "author_id", "legacy");
         Applied(1, new TableSnapshot("books",
         [
             new ColumnSnapshot("title", "Varchar(200)", false, true, null, null, null),
@@ -55,6 +58,7 @@ public sealed class SnapshotProviderTests : IDisposable
     [Fact]
     public async Task Table_names_match_exactly()
     {
+        Manage("books");
         Applied(1, new TableSnapshot("books", []));
 
         var schema = await Provider.GetAsync(ProjectId, 1, Ct);
@@ -64,12 +68,46 @@ public sealed class SnapshotProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task Tables_and_columns_created_outside_CoreFoundry_are_not_served()
+    {
+        Manage("books", "title");
+        Applied(1,
+            new TableSnapshot("books",
+            [
+                new ColumnSnapshot("title", "Varchar(200)", false, false, null, null, null),
+                new ColumnSnapshot("Added Outside", "int", true, false, null, null, null),
+            ]),
+            new TableSnapshot("My Table", [new ColumnSnapshot("x", "int", true, false, null, null, null)]),
+            new TableSnapshot("audit_log", []));
+
+        var schema = await Provider.GetAsync(ProjectId, 1, Ct);
+
+        schema.Tables.Select(table => table.Name).ShouldBe(["books"]);
+        schema.FindTable("books")!.Columns.Select(column => column.Name).ShouldBe(["title"]);
+    }
+
+    [Fact]
+    public async Task Draft_only_tables_and_columns_are_not_served()
+    {
+        Manage("books", "title");
+        _tables.All.Single().AddColumn("subtitle", Int());
+        _tables.Add(new ProjectTable(ProjectId, "authors"));
+        Applied(1, new TableSnapshot("books", [new ColumnSnapshot("title", "Varchar(200)", false, false, null, null, null)]));
+
+        var schema = await Provider.GetAsync(ProjectId, 1, Ct);
+
+        schema.Tables.ShouldHaveSingleItem().Columns.ShouldHaveSingleItem().Name.ShouldBe("title");
+    }
+
+    [Fact]
     public async Task The_same_version_is_served_from_the_cache()
     {
+        Manage("books");
         Applied(1, new TableSnapshot("books", []));
         var first = await Provider.GetAsync(ProjectId, 1, Ct);
 
         _migrations.All.Clear();
+        _tables.All.Clear();
         var second = await Provider.GetAsync(ProjectId, 1, Ct);
 
         second.ShouldBeSameAs(first);
@@ -78,14 +116,30 @@ public sealed class SnapshotProviderTests : IDisposable
     [Fact]
     public async Task A_new_version_reads_the_new_snapshot()
     {
+        Manage("books", "price");
         Applied(1, new TableSnapshot("books", [new ColumnSnapshot("price", "Decimal(10,2)", false, false, null, null, null)]));
         (await Provider.GetAsync(ProjectId, 1, Ct)).FindTable("books")!.FindColumn("price").ShouldNotBeNull();
 
+        _tables.All.Clear();
+        Manage("books", "price_usd");
         Applied(2, new TableSnapshot("books", [new ColumnSnapshot("price_usd", "Decimal(10,2)", false, false, null, null, null)]));
         var books = (await Provider.GetAsync(ProjectId, 2, Ct)).FindTable("books")!;
 
         books.FindColumn("price").ShouldBeNull();
         books.FindColumn("price_usd").ShouldNotBeNull();
+    }
+
+    /// <summary>A draft table (Int columns) that an earlier apply created.</summary>
+    private void Manage(string name, params string[] columns)
+    {
+        var table = new ProjectTable(ProjectId, name);
+        foreach (var column in columns)
+        {
+            table.AddColumn(column, Int());
+        }
+
+        table.MarkApplied();
+        _tables.Add(table);
     }
 
     private void Applied(int version, params TableSnapshot[] tables)
@@ -95,4 +149,6 @@ public sealed class SnapshotProviderTests : IDisposable
         migration.MarkApplied(new SchemaSnapshot(tables).ToJson(), DateTime.UtcNow);
         _migrations.Add(migration);
     }
+
+    private static ColumnDefinition Int() => ColumnDefinitionRules.Create(DataType.Int, null, null, null, true, false, null);
 }
