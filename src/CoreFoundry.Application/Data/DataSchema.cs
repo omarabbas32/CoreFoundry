@@ -31,7 +31,8 @@ public sealed record DataSchema(int SchemaVersion, IReadOnlyList<DataTable> Tabl
                 column.IsNullable,
                 column.IsUnique,
                 column.Default,
-                column.References))]))]);
+                column.References,
+                column.OnDelete))]))]);
     }
 
     /// <summary>Exact, case-sensitive match on the physical name (names are stored lower-case).</summary>
@@ -51,8 +52,10 @@ public sealed record DataTable(string Name, IReadOnlyList<DataColumn> Columns)
 /// <param name="RawType">The type as the snapshot stores it (for display).</param>
 /// <param name="Default">The default's canonical text, or null.</param>
 /// <param name="References">The referenced table's physical name, or null.</param>
+/// <param name="OnDelete">With <paramref name="References"/>: <c>Restrict</c>, <c>Cascade</c> or <c>SetNull</c>.</param>
 public sealed record DataColumn(
-    string Name, ColumnType? Type, string RawType, bool IsNullable, bool IsUnique, string? Default, string? References)
+    string Name, ColumnType? Type, string RawType, bool IsNullable, bool IsUnique, string? Default, string? References,
+    string? OnDelete = null)
 {
     public bool IsWritable => Type is not null;
 
