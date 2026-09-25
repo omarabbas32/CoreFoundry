@@ -131,10 +131,10 @@ public sealed class RealtimeEndpointsTests : IDisposable
         var adminChanges = new ChangeCollector(admin);
         var anonymousChanges = new ChangeCollector(anonymous);
 
-        // Anyone may subscribe to the public table; authors needs the Admin role; unknown tables are refused.
+        // Anyone may subscribe to the public table; authors needs a sign-in, then the Admin role; unknown tables are refused.
         await anonymous.InvokeAsync("Subscribe", "books", Ct);
         (await Should.ThrowAsync<HubException>(() => anonymous.InvokeAsync("Subscribe", "authors", Ct)))
-            .Message.ShouldContain("Only admins can subscribe to authors.");
+            .Message.ShouldContain("Sign in to subscribe to authors.");
         (await Should.ThrowAsync<HubException>(() => member.InvokeAsync("Subscribe", "authors", Ct)))
             .Message.ShouldContain("Only admins can subscribe to authors.");
         (await Should.ThrowAsync<HubException>(() => anonymous.InvokeAsync("Subscribe", "nope", Ct)))

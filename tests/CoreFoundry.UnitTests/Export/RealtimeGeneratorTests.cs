@@ -84,7 +84,7 @@ public class RealtimeGeneratorTests
         hub.ShouldContain("public async Task Unsubscribe(string table)");
         hub.ShouldContain("if (table is null || !Tables.TryGetValue(table, out var level))");
         hub.ShouldContain("throw new HubException(");
-        hub.ShouldContain("Level.SignedIn when Context.User?.Identity?.IsAuthenticated != true =>");
+        hub.ShouldContain("Level.SignedIn or Level.Admin when Context.User?.Identity?.IsAuthenticated != true =>"); // anonymous: sign in, as REST 401
         hub.ShouldContain("Level.Admin when Context.User?.IsInRole(\"Admin\") != true =>");
         hub.ShouldContain("$\"Sign in to subscribe to {table}.\"");
         hub.ShouldContain("$\"Only admins can subscribe to {table}.\"");

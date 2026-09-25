@@ -76,7 +76,7 @@ internal static class RealtimeFiles
 
                     var refusal = level switch
                     {
-                        Level.SignedIn when Context.User?.Identity?.IsAuthenticated != true => $"Sign in to subscribe to {table}.",
+                        Level.SignedIn or Level.Admin when Context.User?.Identity?.IsAuthenticated != true => $"Sign in to subscribe to {table}.",
                         Level.Admin when Context.User?.IsInRole("Admin") != true => $"Only admins can subscribe to {table}.",
                         _ => null,
                     };
