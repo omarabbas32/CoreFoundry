@@ -1,6 +1,6 @@
 # CoreFoundry — Progress
 
-_Last updated: 2026-09-25 · branch `m7-schema-templates`_
+_Last updated: 2026-09-26 · branch `m8-m9-access-realtime`_
 
 | Phase | Status | Summary |
 |---|---|---|
@@ -12,6 +12,8 @@ _Last updated: 2026-09-25 · branch `m7-schema-templates`_
 | [M4 — Data API](phases/phase-4-data-api.md) | ✅ Built (`m4-data-api`), hands-on check open | Row CRUD on applied tables: REST API + data viewer |
 | [M6 — Code export](phases/phase-6-code-export.md) | ✅ Built (`m6-code-export`), UI click and Docker run open | Download a project as a deployable .NET Clean Architecture backend |
 | [M7 — Schema templates](phases/phase-7-schema-templates.md) | ✅ Built (`m7-schema-templates`), browser check open | Start a project from a ready E-commerce schema with sample rows |
+| [M8 — Access rules](phases/phase-8-access-rules.md) | ✅ Built (`m8-m9-access-realtime`), end-to-end export test open | Per-table read/write access (Public / Signed-in / Admin), enforced by the exported backend |
+| [M9 — Realtime in the export](phases/phase-9-realtime-export.md) | ✅ Built (`m8-m9-access-realtime`), end-to-end export test open | SignalR hub in the exported backend; M8's read level decides who may subscribe |
 | [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next (one-command Docker run written on `m5-one-command-run`) | One-command run, README, demo, deploy |
 
 **Tests:** 722 .NET tests pass (595 unit, 127 integration, of which 106 run against a real MySQL database; none skipped),
@@ -244,6 +246,71 @@ Swagger UI, Dockerfile, docker-compose (API + MySQL 8.4) and a README listing ev
   keys and references). `CF_SKIP_EXPORT_BUILD=1` skips it.
 - **Not yet:** clicking the button in a browser; `docker compose up` (Docker isn't installed).
 
+## M8 — Access rules
+
+Every exported endpoint used to require a signed-in user. In M8 each table gets its own **Read** and **Write**
+level — Public / Signed-in / Admin — set in CoreFoundry, and the export writes exactly those rules into the
+generated backend.
+
+### Components
+| Component | Layer | What it does |
+|---|---|---|
+| `AccessLevel` | Domain | `Public = 1`, `SignedIn = 2`, `Admin = 3` |
+| `ProjectTable.SetAccess` | Domain | Rejects an undefined level and write wider than read; bumps `Version`, never `Changed` |
+| `ReadAccess`/`WriteAccess` on `ProjectTables` (migration `TableAccessRules`) | Infrastructure | TINYINT columns, default `SignedIn`/`SignedIn`; metadata only, no DDL, ignored by plan/apply |
+| `EcommerceTemplate` | Application | Sets the defaults below when the template's draft tables are created |
+| `ExportModel` | Application | Each entity carries its `Read`/`Write`, taken from the applied table |
+| `EntityFiles` (`AccessAttribute`) | Infrastructure | `List`/`Get` get Read's attribute, `Create`/`Replace`/`Delete` get Write's: `[AllowAnonymous]`, `[Authorize]` or `[Authorize(Roles = "Admin")]` |
+| `SharedFiles` (generated auth) | Infrastructure | `AppUser.Role` (`User`/`Admin`, column `cf_users.role`) in the generated `InitialCreate`; register decides the first account is Admin inside a serializable transaction; JWT `role` claim (`RoleClaimType = "role"`); a fallback policy (`RequireAuthenticatedUser`) closes anything without its own attribute; `GET /api/auth/users` and `PUT /api/auth/users/{id}/role` (Admin-only, last Admin can't be demoted); a per-operation OpenAPI transformer adds the Bearer requirement only where it's needed, instead of the whole document |
+| `DeployFiles` (export README) | Infrastructure | An access table (table, read, write) and how to become Admin |
+| `TablesController.SetAccess` | Api | `PUT /api/projects/{id}/tables/{tableId}/access` |
+| `AccessSelects`, `AccessSection` | Web | Read/write selects on the designer table page and an Access section on the API page; the Export card summarizes public/admin-only tables and warns when every table is still at the default |
+
+### API
+| Method | Route | Notes |
+|---|---|---|
+| PUT | `/api/projects/{id}/tables/{tableId}/access` | Developer+; `{ version, read, write }` → the table with its new version; 409 stale, 400 invalid combination |
+| GET | `/api/projects/{id}/tables`, `…/tables/{tableId}` | now include `readAccess`, `writeAccess` |
+
+### Defaults of the E-commerce template (M7)
+`products`/`categories`: Public/Admin. `reviews`: Public/Signed-in. `customers`/`addresses`/`orders`/`order_items`/`payments`:
+Admin/Admin — `orders` and `order_items` are Admin read too, because per-row ownership (an Owner level) doesn't exist yet
+and "write not wider than read" forbids Admin read with Signed-in write (phase-8 §6 q.1).
+
+### How it's verified
+- **Unit:** `SetAccess`'s accepted/rejected level combinations and the default, the template's access levels through
+  the Domain rules, the export model carrying `Read`/`Write` per entity, the generator's per-action attribute for
+  every level.
+- **Integration:** the access endpoint (default on a new table, update, stale version → 409, non-member → 404,
+  invalid combination → 400, a change doesn't appear in the schema plan), the template's defaults on a used template.
+- **End to end:** an export test extending `ExportEndpointsTests.cs` (no token / Admin / User / a promotion changing
+  what the second user can do) is in progress in a parallel worktree; it isn't in this branch's history yet.
+
+## M9 — Realtime in the export
+
+The exported backend gains a **realtime hub**: the generated API pushes `insert`/`update`/`delete` notifications for
+its own tables over SignalR, and M8's read level decides who may subscribe. Built per `docs/phases/phase-9-realtime-export.md`
+in a parallel worktree against this spec; nothing here is CoreFoundry's own runtime.
+
+### What the export generates (phase-9 §3)
+| File | What it adds |
+|---|---|
+| `Application/Realtime/IChangePublisher.cs` | Port + `ChangeEvent`/`ChangeOperation` records, no SignalR types |
+| `Application/Common/CrudService.cs` | An abstract `TableName`; publishes once after a successful `SaveChangesAsync` in Create/Replace/Delete, nothing on a failed save |
+| `Infrastructure/Realtime/RealtimeHub.cs` | `Subscribe`/`Unsubscribe`, the generated table → read-level map, a `HubException` for a refused table or level |
+| `Infrastructure/Realtime/SignalRChangePublisher.cs` | Pushes to `Clients.Group("table:<name>")`; catches and logs a failed send so the request never fails |
+| `Api/Program.cs` | `MapHub<RealtimeHub>("/hubs/realtime").AllowAnonymous()`, CORS (`Cors:AllowedOrigins`) before authentication, `access_token` read from the query string only under `/hubs/` |
+| Export README | Subscribe snippet, re-subscribe and refetch on reconnect, CORS, the external-writer and cascade gaps |
+
+`CodeNames.Reserved` gains `RealtimeHub`, `ChangeEvent`, `ChangeOperation`, `IChangePublisher`, `SignalRChangePublisher`
+and the `Realtime` namespace segment, so a table like `change_events` can't clash with them.
+
+### How it's verified
+Per phase-9 §4: unit tests on the generated hub, publisher, `CrudService` publish-once behavior and the reserved
+names; an end-to-end test extending `ExportEndpointsTests.cs` with a SignalR client (subscribe, refused table,
+reconnect and re-subscribe, a failed save publishing nothing). This work is in progress in a parallel worktree, so
+none of it is in this branch's history yet — see the open items on phase-9's Definition of done.
+
 ## How it's verified
 
 | Layer | What runs |
@@ -257,7 +324,7 @@ Integration tests that need MySQL skip themselves when no connection string is c
 
 ## Changes from the original plan
 
-All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D37).
+All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D45).
 
 | Change | Why |
 |---|---|
@@ -292,6 +359,8 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D37).
 | Docker Compose without Caddy, migrations on API start (M5 one-command run) | The user's choice of layout; Next's `/api` proxy already gives one origin |
 | `GET …/data` lists applied tables with their columns | The viewer builds its grid and form from it |
 | `TableDto.appliedName` | The designer's "Browse data" link needs the table's name in the database, which differs after a rename |
+| Per-table access rules added as M8 (D38–D41), before M9 | Requested by the user; realtime's subscribe check needed a read level to check against |
+| Realtime in the exported backend added as M9 (D42–D45) | Requested by the user; kept out of CoreFoundry's own UI, which stays request/response |
 
 ## Known gaps / follow-ups
 
@@ -325,6 +394,20 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D37).
 - **Integration tests don't run in CI yet.** They need MySQL, and a container setup is deferred.
 - **Windows MySQL stores table names in lower case** (`lower_case_table_names=1`). This is harmless unless a dump is moved to Linux.
 - **The dev database contains test accounts and projects** (`smoke@…`, `member-smoke@…`, `ui-…@test.dev`, `ui-m2-…@test.dev` and `ui-m25-…@test.dev` with "Bookshop" projects) from manual and UI checks.
+- **Access rules are per table, not per row ("only my own orders").** A Signed-in read on `orders` would show every
+  customer's orders to every signed-in user, which is why the E-commerce template keeps `orders`/`order_items`
+  Admin-only. Real ownership needs a fourth level, Owner, and a link between the generated accounts and a
+  user-owned table (phase-8 §6 q.1).
+- **A Signed-in writer can set any value on the row it writes**, e.g. another customer's `customer_id` on a new
+  order. Ownership or server-set columns would fix it; until then the export README says so (phase-8 §6 q.2).
+- **Realtime events cover only the generated API's own writes.** A write from another client, a script, or a
+  second service (CDC/binlog) is invisible; closing that gap is a phase of its own (phase-9 §6 q.4).
+- **Cascades send no realtime event.** Deleting a row that cascades to others changes those rows in MySQL, but only
+  the original delete is published (phase-9 §1).
+- **Realtime has no SignalR backplane.** One instance only; several instances need a backplane (e.g. Redis) to share
+  group membership, which is out of scope for v1 (phase-9 §3).
+- **Realtime is table-level only, like M8's access rules** — no per-row visibility (the RLS equivalent); the same
+  Owner level would be needed here too (phase-9 §6 q.3).
 
 ## Next: M5 — Portfolio polish
 

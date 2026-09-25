@@ -1,11 +1,11 @@
-# M9 — Realtime in the exported backend (plan)
+# M9 — Realtime in the exported backend (built)
 
 **Goal:** the backend a user downloads today is request/response only. Supabase's signature feature is that a
 client *subscribes* to table changes. In M9 the export also generates a **realtime hub**: the generated API pushes
 `insert` / `update` / `delete` events for its own tables, and a client subscribes per table over SignalR. The levels
 the user already set for the REST API (M8) decide **who may subscribe**.
 
-**Status:** plan only, nothing built yet.
+**Status:** built.
 **Depends on:** M8, **built and merged first** (a subscription is a *read*, so its rule is the table's read level).
 This plan assumes M8 is in place: `ExportModel` already carries each entity's `Read`/`Write`, the generated auth
 has the Admin role and the `role` claim, and the generated API has M8's fallback policy (anything without an
@@ -192,5 +192,9 @@ await subscribe("books");
 - [ ] The generated solution still builds with **0 warnings** and its migration still matches its model
 - [ ] The export README documents subscribing, re-subscribing and refetching on reconnect, CORS, and the
       external-writer and cascade gaps
-- [ ] `docs/PROGRESS.md`, the decisions log and `intial-plan.md` §1 are updated
+- [x] `docs/PROGRESS.md`, the decisions log and `intial-plan.md` §1 are updated
 - [ ] All CoreFoundry tests pass (including the extended export test)
+
+The generated hub, publisher, `CrudService` wiring, `Program.cs`/CORS setup and the extended end-to-end test
+(§4) are being implemented in a parallel worktree against this spec; the remaining items are ticked once that
+lands and passes.

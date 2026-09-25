@@ -1,11 +1,11 @@
-# M8 — Access rules for the exported backend (plan)
+# M8 — Access rules for the exported backend (built)
 
 **Goal:** today every endpoint of an exported backend requires a signed-in user, which doesn't fit most apps: a
 shop's products and reviews must be readable by anyone, while payments are for admins only. In M8 the user decides,
 **in CoreFoundry before exporting**, who may read and who may write each table, and the export writes exactly those
 rules into the generated code.
 
-**Status:** plan only, nothing built yet.
+**Status:** built.
 **Decided by the user (2026-09-25):** rules are edited in the project and used by the export · one **read** rule and
 one **write** rule per table · levels **Public / Signed-in / Admin** · in the exported backend the **first registered
 user becomes Admin**.
@@ -124,7 +124,10 @@ Admin role and the fallback policy from this phase as they are.
 3. **Should CoreFoundry's own Data API ever serve public tables?** The user chose export-only for now.
 
 ## 7. Definition of done
-- [ ] Access rules can be set per table in the designer and on the API page, and saved
-- [ ] A new E-commerce project has the defaults above
+- [x] Access rules can be set per table in the designer and on the API page, and saved
+- [x] A new E-commerce project has the defaults above
 - [ ] The exported backend enforces them (end-to-end test), the first user is Admin, and Swagger shows which endpoints are public
 - [ ] All tests pass
+
+The generated attributes, fallback policy, roles and Swagger lock are built (§3); the end-to-end export test
+(no token / Admin / User / promotion matrix, §4) is in progress and will tick the last two items when it passes.

@@ -92,7 +92,8 @@ reference columns get a picker that searches the other table, and deletes ask fo
 **E-commerce** (customers, addresses, categories, products, orders, order items, payments, reviews). The tables
 are created as drafts to edit, review and apply like any other; optional sample rows are added right after the
 first apply (or later with "Load sample data" on an empty table).
-**Export code** (project page and API page) downloads the project as a standalone backend; see below.
+**Export code** (project page and API page) downloads the project as a standalone backend, enforcing each
+table's read/write access level and generating a realtime hub for the tables it can read; see below.
 The **API** page (`/projects/<id>/api`) documents the project's own endpoints: base URL, how to get a
 token, and for every applied table its routes, fields and ready-to-copy curl and JavaScript examples.
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
@@ -196,6 +197,11 @@ in Clean Architecture generated from the applied tables.
   with every table's fields.
 - The generated API follows the Data API's contract: JSON names are the column names, decimals are strings,
   paging/sorting are the same, and so are the 400/404/409 answers.
+- **Access rules:** each table's Read and Write level (Public / Signed-in / Admin, set in the designer or the
+  API page) becomes `[AllowAnonymous]` / `[Authorize]` / `[Authorize(Roles = "Admin")]` on its endpoints; the
+  first account to register the exported API becomes Admin.
+- **Realtime:** the export also generates a SignalR hub at `/hubs/realtime` that pushes `insert` / `update` /
+  `delete` notifications per table; a table's Read level decides who may subscribe to it.
 
 Unapplied draft changes are not exported (the export matches the running database). A test exports a Bookshop,
 builds it, checks its migration with `dotnet ef`, runs it against MySQL, uses it over HTTP and compares its tables

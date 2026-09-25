@@ -56,6 +56,14 @@ backend architecture.
 | D35 | Generated code: columns with a default are nullable in C# (null = let MySQL fill it in); `DateOnly` is stored through a `DateTime` converter; decimals are returned with the column's scale; FK indexes are named like their constraints (`fk_…`); the solution is a `.slnx` | EF's sentinel values would otherwise silently replace explicit 0/false; Oracle's MySQL connector reads DATE as DateTime; parity with the Data API and with CoreFoundry's own tables. |
 | D36 | **Schema templates (M7)** are defined in code (`Application/Templates`) and create **draft** tables through `TableService`, only in a project without tables; references to a table not created yet (itself, or later) are added in a second pass | Same validation as the designer, and a unit test runs every template through the Domain rules. Nothing reaches MySQL without the reviewed plan. |
 | D37 | Template **sample rows** are inserted after the first successful apply (flag `Projects.SampleDataPending`, migration `ProjectTemplates`) through the Data API's coercion and repository; the apply endpoint reports them and never fails because of them. Tables not applied under their template name, missing a column, or already holding rows are skipped with a reason | The user chose "sample rows right after the first apply"; skipping instead of failing keeps a renamed or pre-filled table safe. |
+| D38 | **Access rules (M8)** are edited in CoreFoundry and used only by the export: one **read** and one **write** level per table, chosen from **Public / Signed-in / Admin** (default Signed-in/Signed-in, today's behavior); write can't be wider than read | Table-level rules cover most apps without the fourth "Owner" level a real per-row rule would need (phase-8 §6 q.1); CoreFoundry's own Data API stays members-only, unchanged. |
+| D39 | In the exported backend, the **first account registered becomes Admin**, decided inside a serializable transaction; the JWT carries a `role` claim (`RoleClaimType = "role"`) | The export has no project Owner the way CoreFoundry does, so it needs its own bootstrap rule; the transaction stops two simultaneous first sign-ups from both becoming Admin. |
+| D40 | The export closes every endpoint with a **fallback authorization policy** (`RequireAuthenticatedUser`) and opens `[AllowAnonymous]` / `[Authorize]` / `[Authorize(Roles = "Admin")]` per action from the table's Read/Write level, instead of a class-level `[Authorize]`; Swagger's lock icon is added per operation by reading that same metadata | "Closed unless a table says otherwise" also has to cover endpoints no table owns (`/health`, later the realtime hub); a per-operation Swagger transformer avoids one document-wide Bearer requirement that would lock public endpoints too. |
+| D41 | Access rules are **metadata, not schema**: two columns on `ProjectTables` (`ReadAccess`, `WriteAccess`, migration `TableAccessRules`), no DDL, ignored by plan/apply, never mark a table `Changed` — but they still bump its `Version` | An edit takes effect on the next export without an apply; sharing `Version` means someone editing columns and someone editing access still conflict through the same optimistic-concurrency check. |
+| D42 | **Realtime (M9)** events are a **notification**, `{ table, operation, id }`, never the row | The row's JSON contract (decimals as strings, date/time formats, the generated converters) lives in the REST controllers; a hub sending rows would have to duplicate it or quietly diverge (phase-9 §6 q.1) — a later, deliberate upgrade. |
+| D43 | The realtime hub is **always generated**, no opt-in flag | One export shape and one code path to test; the cost is a little unused code in a download that doesn't want it (phase-9 §6 q.5). |
+| D44 | The hub is mapped at **`/hubs/realtime`** with `.AllowAnonymous()`, outside `/api/` so no table name can collide with it; each `Subscribe` checks the table's read level itself (anonymous / signed-in / Admin), mirroring the per-action attributes M8 writes on controllers | A subscription is a *read*, and a Public table must be subscribable without a token, so the hub can't carry a blanket `[Authorize]` or M8's fallback policy. |
+| D45 | A publish failure is **caught and logged, and never fails the write**; a failed save publishes nothing | The row is already committed by the time the hub is asked to publish, so a broken realtime path must not turn a successful write into an error response. |
 
 ---
 
@@ -76,7 +84,9 @@ Explicitly **cut** (mention as "future roadmap" in the README, don't build):
 - Indexes beyond `UNIQUE` (composite indexes, full-text)
 - Redis caching, background jobs
 - Full code generator (schema → downloadable backend project)
-- Realtime, file storage, CLI, one-click deployment, billing
+- ~~Realtime~~ — added later as M9, but only in the **exported** backend (the user's own app), not in
+  CoreFoundry's own UI or Data API (D42–D45)
+- File storage, CLI, one-click deployment, billing
 - Database-server-per-tenant isolation
 
 Cutting these is what makes this finishable while you're also working full
