@@ -264,14 +264,21 @@ internal static class SharedFiles
             """);
 
         yield return new($"src/{n}.Application/Common/CrudService.cs", $$"""
+            using {{n}}.Application.Realtime;
             using {{n}}.Domain.Common;
 
             namespace {{n}}.Application.Common;
 
-            /// <summary>List, get, add, replace and delete for one table; each table's service supplies the mapping.</summary>
-            public abstract class CrudService<TEntity, TDto, TInput>(IRepository<TEntity> repository)
+            /// <summary>
+            /// List, get, add, replace and delete for one table; each table's service supplies the mapping.
+            /// Each saved add, replace and delete is published to the table's realtime subscribers.
+            /// </summary>
+            public abstract class CrudService<TEntity, TDto, TInput>(IRepository<TEntity> repository, IChangePublisher changes)
                 where TEntity : class, IEntity, new()
             {
+                /// <summary>The table's name in the database, as realtime subscribers know it.</summary>
+                protected abstract string TableName { get; }
+
                 /// <summary>Column name (as in the API) → entity property, for <c>sort</c>.</summary>
                 protected abstract IReadOnlyDictionary<string, string> SortableColumns { get; }
 
@@ -317,6 +324,7 @@ internal static class SharedFiles
                     Apply(input, entity, replace: false);
                     repository.Add(entity);
                     await repository.SaveChangesAsync(cancellationToken);
+                    await PublishAsync(ChangeOperation.Insert, entity.Id);
                     return ToDto(entity);
                 }
 
@@ -325,6 +333,7 @@ internal static class SharedFiles
                     var entity = await FindAsync(id, cancellationToken);
                     Apply(input, entity, replace: true);
                     await repository.SaveChangesAsync(cancellationToken);
+                    await PublishAsync(ChangeOperation.Update, entity.Id);
                     return ToDto(entity);
                 }
 
@@ -332,10 +341,18 @@ internal static class SharedFiles
                 {
                     repository.Remove(await FindAsync(id, cancellationToken));
                     await repository.SaveChangesAsync(cancellationToken);
+                    await PublishAsync(ChangeOperation.Delete, id);
                 }
 
                 private async Task<TEntity> FindAsync(long id, CancellationToken cancellationToken) =>
                     await repository.FindAsync(id, cancellationToken) ?? throw new NotFoundException($"No row with id {id}.");
+
+                /// <summary>
+                /// Called after a save succeeded only (a save that throws never gets here, so nothing is published). Not
+                /// cancelled with the request: the row is saved, so subscribers hear about it even if the caller has gone.
+                /// </summary>
+                private Task PublishAsync(ChangeOperation operation, long id) =>
+                    changes.PublishAsync(new ChangeEvent(TableName, operation, id), CancellationToken.None);
             }
 
             """);
@@ -607,8 +624,10 @@ internal static class SharedFiles
             using Microsoft.Extensions.DependencyInjection;
             using {{n}}.Application.Auth;
             using {{n}}.Application.Common;
+            using {{n}}.Application.Realtime;
             using {{n}}.Infrastructure.Auth;
             using {{n}}.Infrastructure.Persistence;
+            using {{n}}.Infrastructure.Realtime;
 
             namespace {{n}}.Infrastructure;
 
@@ -633,6 +652,9 @@ internal static class SharedFiles
                         .ValidateOnStart();
                     services.AddSingleton<ITokenService, JwtTokenService>();
                     services.AddSingleton<IPasswordHasher, PasswordHasher>();
+
+                    services.AddSignalR();
+                    services.AddSingleton<IChangePublisher, SignalRChangePublisher>();
                     return services;
                 }
             }
@@ -1009,6 +1031,7 @@ internal static class SharedFiles
             using {{n}}.Infrastructure;
             using {{n}}.Infrastructure.Auth;
             using {{n}}.Infrastructure.Persistence;
+            using {{n}}.Infrastructure.Realtime;
 
             var builder = WebApplication.CreateBuilder(args);
 
@@ -1046,11 +1069,35 @@ internal static class SharedFiles
                         ClockSkew = TimeSpan.FromSeconds(30),
                         RoleClaimType = "role", // [Authorize(Roles = "Admin")] reads the token's role claim
                     };
+                    // Browsers can't set headers on a WebSocket, so the SignalR client sends the token as ?access_token=.
+                    // It is read there for the hubs only; anywhere else a token in the URL is ignored.
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var token = context.Request.Query["access_token"];
+                            if (!string.IsNullOrEmpty(token) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                            {
+                                context.Token = token;
+                            }
+
+                            return Task.CompletedTask;
+                        },
+                    };
                 });
             // Anything without its own [AllowAnonymous]/[Authorize] needs a signed-in user; the entity controllers
             // set their own level per table, and every other endpoint gets an explicit AllowAnonymous instead.
             builder.Services.AddAuthorization(options =>
                 options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+
+            // Browser frontends on other origins (Cors:AllowedOrigins). None listed: no CORS at all. Credentials are
+            // allowed because the SignalR client sends them, so the origins must be listed (no AllowAnyOrigin).
+            var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+            if (corsOrigins.Length > 0)
+            {
+                builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+                    policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+            }
 
             var app = builder.Build();
 
@@ -1073,10 +1120,17 @@ internal static class SharedFiles
                 });
             }
 
+            if (corsOrigins.Length > 0)
+            {
+                app.UseCors();
+            }
+
             app.UseAuthentication();
             app.UseAuthorization();
             app.MapControllers();
             app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+            // Anyone may connect; RealtimeHub checks each Subscribe against the table's read level.
+            app.MapHub<RealtimeHub>("/hubs/realtime", options => options.CloseOnAuthenticationExpiration = true).AllowAnonymous();
 
             await app.RunAsync();
 
@@ -1285,6 +1339,9 @@ internal static class SharedFiles
               },
               "Swagger": {
                 "Enabled": false
+              },
+              "Cors": {
+                "AllowedOrigins": []
               }
             }
 

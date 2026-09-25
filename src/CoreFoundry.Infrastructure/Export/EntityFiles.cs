@@ -119,6 +119,7 @@ internal static class EntityFiles
         return $$"""
             using System.Globalization;
             using {{n}}.Application.Common;
+            using {{n}}.Application.Realtime;
             using {{n}}.Domain.Entities;
 
             namespace {{n}}.Application.Tables;
@@ -127,9 +128,11 @@ internal static class EntityFiles
             /// Rows of <c>{{entity.Table}}</c>. Adding a row: fields left out get NULL or the column's default.
             /// Replacing a row: fields left out are set to the column's default, or NULL.
             /// </summary>
-            public sealed class {{entity.ClassName}}Service(IRepository<{{entity.ClassName}}> repository)
-                : CrudService<{{entity.ClassName}}, {{entity.ClassName}}Dto, {{entity.ClassName}}Input>(repository)
+            public sealed class {{entity.ClassName}}Service(IRepository<{{entity.ClassName}}> repository, IChangePublisher changes)
+                : CrudService<{{entity.ClassName}}, {{entity.ClassName}}Dto, {{entity.ClassName}}Input>(repository, changes)
             {
+                protected override string TableName => {{CSharp.String(entity.Table)}};
+
                 protected override IReadOnlyDictionary<string, string> SortableColumns { get; } = new Dictionary<string, string>
                 {
             {{CSharp.Lines(sortable, 8)}}
