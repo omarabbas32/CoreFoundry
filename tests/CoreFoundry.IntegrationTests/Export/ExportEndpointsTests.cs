@@ -145,7 +145,11 @@ public sealed class ExportEndpointsTests : IDisposable
             var applied = SchemaSnapshot.From(await introspector.ReadAsync(shop.Project.DatabaseName, Ct));
             var exported = SchemaSnapshot.From(await introspector.ReadAsync(database, Ct));
             exported.FindTable("cf_users").ShouldNotBeNull();
-            var withoutAccounts = new SchemaSnapshot([.. exported.Tables.Where(table => table.Name is not ("cf_users" or "__efmigrationshistory"))]);
+            // Table names come back as MySQL stores them: lower-cased on Windows (lower_case_table_names=1),
+            // as written on Linux. Compare without case so this holds on both.
+            var withoutAccounts = new SchemaSnapshot([.. exported.Tables.Where(table =>
+                !table.Name.Equals("cf_users", StringComparison.OrdinalIgnoreCase) &&
+                !table.Name.Equals("__EFMigrationsHistory", StringComparison.OrdinalIgnoreCase))]);
             applied.DifferencesTo(withoutAccounts).ShouldBeEmpty();
         }
         finally
