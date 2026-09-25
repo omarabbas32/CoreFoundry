@@ -65,6 +65,14 @@ public static class DependencyInjection
         return services;
     }
 
+    /// <summary>Applies pending EF migrations to the metadata database (used when Docker starts from an empty one).</summary>
+    public static async Task MigrateMetadataDatabaseAsync(this IServiceProvider services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        await using var scope = services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<MetadataDbContext>().Database.MigrateAsync();
+    }
+
     private static string RequiredConnectionString(IConfiguration configuration, string name) =>
         configuration.GetConnectionString(name) is { Length: > 0 } value
             ? value

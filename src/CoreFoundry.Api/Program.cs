@@ -45,10 +45,26 @@ builder.Services.AddCors(options => options.AddPolicy(WebCorsPolicy, policy => p
 
 // The web app proxies /api to this service, so the client IP arrives in X-Forwarded-For.
 // Only loopback proxies are trusted by default, so a remote caller can't spoof its IP.
+// In Docker Compose the web container is the proxy and the API isn't published, so every caller is a
+// trusted proxy (ForwardedHeaders:TrustAllProxies). Never set it when the API is reachable directly.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    if (builder.Configuration.GetValue<bool>("ForwardedHeaders:TrustAllProxies"))
+    {
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
+});
 
 var app = builder.Build();
+
+// Docker Compose starts from an empty database: apply the metadata migrations before serving.
+// Locally they're applied with `dotnet ef database update` instead (see README).
+if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    await app.Services.MigrateMetadataDatabaseAsync();
+}
 
 app.UseForwardedHeaders();
 
