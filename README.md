@@ -12,6 +12,24 @@ management, safe SQL generation, and clean backend architecture.
   MySqlConnector + Dapper for the tables users design
 - **Web:** Next.js (App Router, TypeScript, Tailwind)
 
+## Run with Docker (one command)
+
+Needs only Docker. From the repository root:
+
+```bash
+cp .env.example .env      # then change every password and the signing key
+docker compose up --build
+```
+
+Open http://localhost:3100 (change `WEB_PORT` in `.env` if that port is taken). The first start builds the images
+and creates the database: MySQL 8.4, the `corefoundry` metadata database and the two least-privilege accounts
+(`docker/mysql/init.sh`), then the API applies its migrations. Data is kept in the `db-data` volume;
+`docker compose down -v` removes it.
+
+Only the web app is published: it proxies `/api` to the API container, so the browser sees a single origin and the
+API isn't reachable directly. curl works through the same origin: `http://localhost:3100/api/...`.
+For a public deployment, put HTTPS in front of the web port (the refresh cookie is `Secure`).
+
 ## Run locally
 
 ### 1. MySQL (one time)

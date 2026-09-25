@@ -9,13 +9,18 @@ from the README, can run it with one command, and can try a live demo.
 
 ## 1. One-command run
 
-- [ ] `Dockerfile` for the API (multi-stage: `sdk` build → `aspnet` runtime, non-root user)
-- [ ] `Dockerfile` for web (Next.js `output: "standalone"`)
-- [ ] `docker-compose.yml`: `mysql`, `api`, `web`, and a reverse proxy (Caddy)
+- [x] `Dockerfile` for the API (multi-stage: `sdk` build → `aspnet` runtime, non-root user): `docker/api.Dockerfile`
+- [x] `Dockerfile` for web (Next.js `output: "standalone"`): `docker/web.Dockerfile`
+- [x] `docker-compose.yml`: `mysql`, `api`, `web`, and a reverse proxy (Caddy)
       serving both under **one origin**: `/` → web, `/api` → api.
       With one origin the refresh cookie stays `SameSite=Strict` and no CORS is needed.
-- [ ] Migrations run as a one-off `migrate` service (EF migrations bundle) before `api` starts
-- [ ] `docker compose up` from a fresh clone → working app at `http://localhost:8080`
+      **Built (user's choice):** no Caddy yet: the web app's `/api` proxy already gives one origin, and only the web
+      port (3100) is published. Caddy (HTTPS, security headers) comes with the deploy step.
+- [x] Migrations run as a one-off `migrate` service (EF migrations bundle) before `api` starts
+      **Built:** the API applies them on start when `Database:MigrateOnStartup` is set (only the compose file sets it);
+      the MySQL accounts come from `docker/mysql/init.sh` on the database's first start.
+- [ ] `docker compose up` from a fresh clone → working app at `http://localhost:3100` (files written and
+      validated with `docker compose config`; not built or run yet)
 
 ## 2. Demo data
 
