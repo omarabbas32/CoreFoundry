@@ -459,6 +459,8 @@ First the open M4 and M6 hands-on checks (Bookshop from the UI and with curl), t
 | `3afaa7f` | Tick M8 and M9's Definition of done, update the test counts and list the branch's commits |
 | `0a4b1a2` | Keep access edits from racing and match pending-drop handling on the API page |
 | `b29dbf5` | Show readable access level names in the selects |
+| `44b2782` | List the dashboard fix commits in the branch's commit table |
+| `d62be50` | Back off and retry lock timeouts in the exported backend's serializable sign-up and role changes |
 
 ## Commits on `m7-schema-templates`
 
