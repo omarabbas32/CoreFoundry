@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M1 done — auth, projects, members, and the dashboard**. Next: M2 table designer. See [the phases](docs/phases/README.md).
+> Status: **M3 done: the schema engine** (plan, apply, history, drift on real MySQL tables). Next: M4 Data API. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -26,6 +26,12 @@ mysql -u root -p -e "SET @meta_pwd='<meta-password>'; SET @engine_pwd='<engine-p
 |---|---|
 | `cf_meta` | only the `corefoundry` metadata database |
 | `cf_engine` | only `cf_p_*` project databases (never `corefoundry`) |
+
+`cf_engine` needs `REFERENCES` to create foreign keys. The script grants it; if you set up MySQL before M3, run once as root:
+
+```sql
+GRANT REFERENCES ON `cf\_p\_%`.* TO 'cf_engine'@'localhost';
+```
 
 ### 2. API
 Secrets are kept in .NET user-secrets, outside the repo:
@@ -55,9 +61,11 @@ and a project page with details, members (add, change role, remove, leave, trans
 rename, and delete (confirmed by typing the project name). Controls your role can't use are hidden;
 the API enforces the same rules.
 The table designer (`/projects/<id>/tables`) edits the draft schema: tables, columns with their
-type parameters and defaults, drag-to-reorder, delete with undo. Nothing is sent to the project's
-database yet; applying drafts comes with the schema engine (M3). Columns can reference other
-tables, and the schema diagram shows the relations (pan, zoom, drag).
+type parameters and defaults, drag-to-reorder, delete with undo. Columns can reference other
+tables, and the schema diagram shows the relations (pan, zoom, drag). Draft changes reach the
+project's database only through **Review plan** (`/projects/<id>/schema`): it shows every
+operation and the exact SQL, and Admins apply it from there. **History** lists every apply with
+its SQL and any error, and the project page warns when the database was changed outside CoreFoundry.
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
 
 ### Tests
@@ -105,6 +113,11 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | POST | `/api/projects/{id}/tables/{tableId}/columns/{columnId}/restore` | `{ version }` |
 | PUT | `/api/projects/{id}/tables/{tableId}/columns/order` | `{ version, columnIds }`, every column exactly once |
 | GET | `/api/projects/{id}/schema` | Developer+; every table with its columns and references (the diagram's data) |
+| GET | `/api/projects/{id}/schema/plan` | Developer+; `{ planHash, schemaVersion, operations, statements, warnings, unmanagedTables, unmanagedColumns, hasDestructive }`, reads only |
+| POST | `/api/projects/{id}/schema/apply` | Admin+; `{ planHash, acknowledgeDestructive }` → 200, or 409 `plan-stale` / 409 `apply-in-progress` / 422 `destructive-not-acknowledged` / 500 `apply-failed` |
+| GET | `/api/projects/{id}/schema/migrations?page=&pageSize=` | Developer+; applies, newest first |
+| GET | `/api/projects/{id}/schema/migrations/{migrationId}` | Developer+; statements, status, `statementsApplied`, `failedStatement`, error |
+| GET | `/api/projects/{id}/schema/drift` | Developer+; changes made to the database outside CoreFoundry since the last apply |
 
 Every table change carries the `version` the client last saw and returns the whole table with
 its new version; a stale version gets **409**.
@@ -120,6 +133,16 @@ that table's `id`, so it is BigInt with no default, and `onDelete` is `Restrict`
 `SetNull` (SetNull needs a nullable column). A table can't be deleted while other tables'
 columns reference it. The **Diagram** page (`/projects/<id>/tables/diagram`) draws the tables
 and their relations.
+
+**How applying works:** MySQL commits each DDL statement on its own, so an apply can't be one
+transaction. Instead, the API takes the project's lock (`GET_LOCK` on one dedicated connection),
+so two applies never overlap. It rebuilds the plan under the lock, and the plan must hash to the
+`planHash` you reviewed; otherwise nothing runs (409 `plan-stale`). A journal row records each
+statement as it runs. The draft is marked applied only after every statement succeeded, together
+with a snapshot of the real schema. If a statement fails, the journal row keeps the failed
+statement and MySQL's error. Planning again compares the draft with the real database, so the new
+plan contains only the changes that are still missing. Tables and columns that CoreFoundry didn't
+create are reported but never dropped.
 
 After pulling new migrations: `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`
 
