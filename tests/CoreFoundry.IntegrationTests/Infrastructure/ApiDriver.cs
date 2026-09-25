@@ -50,6 +50,15 @@ public sealed class ApiDriver(HttpClient client)
         return await client.SendAsync(request, Ct);
     }
 
+    /// <summary>Sends, asserts the status (showing the body if it's wrong) and reads the response.</summary>
+    public async Task<T> OkAsync<T>(
+        HttpMethod method, string path, SignedIn user, object? body = null, HttpStatusCode expected = HttpStatusCode.OK)
+    {
+        var response = await SendAsync(method, path, user, body);
+        response.StatusCode.ShouldBe(expected, await response.Content.ReadAsStringAsync(Ct));
+        return await ReadAsync<T>(response);
+    }
+
     public async Task<ProjectDto> CreateProjectAsync(SignedIn owner, string name)
     {
         var response = await SendAsync(HttpMethod.Post, "/api/projects", owner, new CreateProjectRequest(name));

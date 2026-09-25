@@ -42,6 +42,9 @@ public sealed record DataSchema(int SchemaVersion, IReadOnlyList<DataTable> Tabl
 public sealed record DataTable(string Name, IReadOnlyList<DataColumn> Columns)
 {
     public DataColumn? FindColumn(string name) => Columns.FirstOrDefault(column => column.Name == name);
+
+    /// <summary>What names a row in a reference picker: the first Varchar column, or null (id only).</summary>
+    public DataColumn? LabelColumn => Columns.FirstOrDefault(column => column.Type?.DataType == Domain.Schema.DataType.Varchar);
 }
 
 /// <param name="Type">Null when the column has a type CoreFoundry doesn't create (changed outside it): such a column is read-only.</param>

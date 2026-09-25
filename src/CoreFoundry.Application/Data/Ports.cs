@@ -12,6 +12,9 @@ public sealed class DataRow : Dictionary<string, object?>
     public long Id => (long)this["id"]!;
 }
 
+/// <param name="Label">The row's label column value (see <see cref="DataTable.LabelColumn"/>), or null.</param>
+public sealed record LookupItem(long Id, string? Label);
+
 /// <summary>Reads and writes rows of a project's applied tables (as <c>cf_engine</c>).</summary>
 /// <remarks>
 /// MySQL errors become application errors: duplicate unique value, row referenced by others and
@@ -31,6 +34,10 @@ public interface IDataRepository
 
     /// <returns>False if no row has that id.</returns>
     Task<bool> UpdateAsync(string databaseName, DataTable table, long id, IReadOnlyList<ColumnValue> values, CancellationToken cancellationToken);
+
+    /// <summary>Up to <paramref name="take"/> (id, label) pairs for a reference picker. See <see cref="DataTable.LabelColumn"/>.</summary>
+    Task<IReadOnlyList<LookupItem>> LookupAsync(
+        string databaseName, DataTable table, string? search, int take, CancellationToken cancellationToken);
 
     /// <returns>False if no row has that id.</returns>
     Task<bool> DeleteAsync(string databaseName, DataTable table, long id, CancellationToken cancellationToken);

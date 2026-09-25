@@ -54,6 +54,25 @@ public sealed partial class MySqlDataRepository(string engineConnectionString) :
             await connection.ExecuteAsync(Command(DataSql.Update(databaseName, table, id, values), cancellationToken)) > 0);
     }
 
+    public async Task<IReadOnlyList<LookupItem>> LookupAsync(
+        string databaseName, DataTable table, string? search, int take, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        await using var connection = await OpenAsync(cancellationToken);
+        return await Guard(table, [], async () =>
+        {
+            var command = Command(DataSql.Lookup(databaseName, table, table.LabelColumn, search, take), cancellationToken);
+            await using var reader = await connection.ExecuteReaderAsync(command);
+            var items = new List<LookupItem>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                items.Add(new LookupItem(reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+            }
+
+            return (IReadOnlyList<LookupItem>)items;
+        });
+    }
+
     public async Task<bool> DeleteAsync(string databaseName, DataTable table, long id, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);

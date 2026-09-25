@@ -99,6 +99,29 @@ public class DataSqlTests
         DataSql.Delete(Db, Books, 3).Sql.ShouldBe("DELETE FROM `cf_p_7`.`books` WHERE `id` = @id");
 
     [Fact]
+    public void Lookup_searches_the_label_with_escaped_wildcards_or_the_exact_id()
+    {
+        var command = DataSql.Lookup(Db, Books, Books.LabelColumn, @"12%_\", 20);
+
+        command.Sql.ShouldBe("SELECT `id`, `title` FROM `cf_p_7`.`books` WHERE `title` LIKE @search ORDER BY `title`, `id` LIMIT @take");
+        command.Parameters["search"].ShouldBe(@"%12\%\_\\%");
+
+        var byId = DataSql.Lookup(Db, Books, Books.LabelColumn, "42", 20);
+        byId.Sql.ShouldContain("WHERE `title` LIKE @search OR `id` = @id");
+        byId.Parameters["id"].ShouldBe(42L);
+    }
+
+    [Fact]
+    public void Lookup_without_a_label_column_lists_ids()
+    {
+        var numbers = new DataTable("numbers", [new DataColumn("n", new ColumnType(DataType.Int), "Int", true, false, null, null)]);
+
+        numbers.LabelColumn.ShouldBeNull();
+        DataSql.Lookup(Db, numbers, null, null, 5).Sql.ShouldBe("SELECT `id`, NULL FROM `cf_p_7`.`numbers` ORDER BY `id` LIMIT @take");
+        DataSql.Lookup(Db, numbers, null, "abc", 5).Sql.ShouldContain("WHERE FALSE");
+    }
+
+    [Fact]
     public void A_name_that_somehow_is_unsafe_never_reaches_the_sql()
     {
         var crafted = new DataTable("books`; DROP DATABASE x; --", []);

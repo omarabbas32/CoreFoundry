@@ -59,6 +59,38 @@ public static class DataSql
     public static DataCommand Delete(string database, DataTable table, long id) =>
         new($"DELETE FROM {Table(database, table)} WHERE `id` = @id", new Dictionary<string, object?> { ["id"] = id });
 
+    /// <summary>
+    /// Rows for a reference picker: <c>id</c> and the label column (or NULL), optionally filtered by a
+    /// search on the label (<c>LIKE</c>, with the user's <c>%</c>, <c>_</c> and <c>\</c> escaped) or an exact id.
+    /// </summary>
+    public static DataCommand Lookup(string database, DataTable table, DataColumn? label, string? search, int take)
+    {
+        var parameters = new Dictionary<string, object?> { ["take"] = take };
+        var labelSql = label is null ? "NULL" : Name(label.Name);
+        var where = "";
+        if (!string.IsNullOrEmpty(search))
+        {
+            var conditions = new List<string>();
+            if (label is not null)
+            {
+                parameters["search"] = "%" + search.Replace(@"\", @"\\", StringComparison.Ordinal)
+                    .Replace("%", @"\%", StringComparison.Ordinal).Replace("_", @"\_", StringComparison.Ordinal) + "%";
+                conditions.Add($"{labelSql} LIKE @search");
+            }
+
+            if (long.TryParse(search, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id))
+            {
+                parameters["id"] = id;
+                conditions.Add("`id` = @id");
+            }
+
+            where = conditions.Count == 0 ? " WHERE FALSE" : $" WHERE {string.Join(" OR ", conditions)}";
+        }
+
+        var order = label is null ? "`id`" : $"{labelSql}, `id`";
+        return new($"SELECT `id`, {labelSql} FROM {Table(database, table)}{where} ORDER BY {order} LIMIT @take", parameters);
+    }
+
     private static string Placeholder(ColumnValue value, int index, Dictionary<string, object?> parameters)
     {
         if (value.UseDefault)
