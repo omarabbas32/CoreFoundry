@@ -131,5 +131,5 @@ Admin role and the fallback policy from this phase as they are.
 ## 7. Definition of done
 - [x] Access rules can be set per table in the designer and on the API page, and saved
 - [x] A new E-commerce project has the defaults above
-- [ ] The exported backend enforces them (end-to-end test), the first user is Admin, and Swagger shows which endpoints are public
-- [ ] All tests pass
+- [x] The exported backend enforces them (end-to-end test), the first user is Admin, and Swagger shows which endpoints are public
+- [x] All tests pass

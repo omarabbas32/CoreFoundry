@@ -189,14 +189,14 @@ await subscribe("books");
 
 ## 7. Definition of done
 
-- [ ] The exported backend has a hub, and a subscribed client receives `insert` / `update` / `delete` notifications
+- [x] The exported backend has a hub, and a subscribed client receives `insert` / `update` / `delete` notifications
       for the tables it may read
-- [ ] M8's levels are enforced at subscribe time (Public without a token, Signed-in, Admin), and unknown table names
+- [x] M8's levels are enforced at subscribe time (Public without a token, Signed-in, Admin), and unknown table names
       are refused
-- [ ] A client that reconnects and re-subscribes keeps receiving events (end-to-end test)
-- [ ] A failed publish never fails a saved write, and a failed save publishes nothing
-- [ ] The generated solution still builds with **0 warnings** and its migration still matches its model
-- [ ] The export README documents subscribing, re-subscribing and refetching on reconnect, CORS, and the
+- [x] A client that reconnects and re-subscribes keeps receiving events (end-to-end test)
+- [x] A failed publish never fails a saved write, and a failed save publishes nothing
+- [x] The generated solution still builds with **0 warnings** and its migration still matches its model
+- [x] The export README documents subscribing, re-subscribing and refetching on reconnect, CORS, and the
       external-writer and cascade gaps
 - [x] `docs/PROGRESS.md`, the decisions log and `intial-plan.md` §1 are updated
-- [ ] All CoreFoundry tests pass (including the extended export test)
+- [x] All CoreFoundry tests pass (including the extended export test)

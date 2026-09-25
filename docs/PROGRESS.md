@@ -16,7 +16,7 @@ _Last updated: 2026-09-26 · branch `m8-m9-access-realtime`_
 | [M9 — Realtime in the export](phases/phase-9-realtime-export.md) | ✅ Built (`m8-m9-access-realtime`) | SignalR hub in the exported backend; M8's read level decides who may subscribe |
 | [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next (one-command Docker run written on `m5-one-command-run`) | One-command run, README, demo, deploy |
 
-**Tests:** 722 .NET tests pass (595 unit, 127 integration, of which 106 run against a real MySQL database; none skipped),
+**Tests:** 775 .NET tests pass (640 unit, 135 integration, of which 114 run against a real MySQL database; none skipped),
 plus headless browser runs of the dashboard (15 checks, M1), the table designer (29 checks, M2),
 relations + diagram (15 checks, M2.5) and a partial run of the schema engine (15 of 16 checks, M3).
 Coverage (gated in CI at ≥ 90%): `SchemaDiffer` 97.2%, `MySqlSqlRenderer` 96.6%.
@@ -432,6 +432,30 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D45).
 ## Next: M5 — Portfolio polish
 
 First the open M4 and M6 hands-on checks (Bookshop from the UI and with curl), then one-command run, demo data, README and deploy.
+
+## Commits on `m8-m9-access-realtime`
+
+| Commit | Change |
+|---|---|
+| `92fd0ea` | Plan M9: realtime in the exported backend, built on M8 |
+| `26220e9` | Add per-table access levels to the table designer |
+| `0f15083` | Set the E-commerce template's per-table access defaults |
+| `2e3e8ba` | Enforce per-table access levels in the exported backend |
+| `f778dc7` | Add Admin and User roles to the exported backend's auth |
+| `3456cd7` | Add per-table access selects and export/realtime summaries to the dashboard |
+| `e26373b` | Add end-to-end test for exported backend access levels and roles |
+| `adac3d1` | Reserve the realtime type names and namespace segment in exported code |
+| `ac88e7f` | Generate a realtime hub with per-table subscription checks in the exported backend |
+| `c52db3d` | Document the realtime hub in the export README |
+| `b579fc5` | Add end-to-end test for the exported backend's realtime hub |
+| `0c3efc4` | Bound each realtime send to five seconds so a stalled subscriber can't block writes |
+| `5968476` | Document M8 and M9: access rules and realtime in README, progress, phase checklists, decisions D38-D45 |
+| `429f712` | Rename the generated AccountDto to AppUserDto so an accounts table keeps its natural name |
+| `40db0dc` | Clarify first sign-up, demotion and send-timeout in the export README; tolerate duplicate applied names; set the access sentinel |
+| `5e4b732` | Ask an anonymous caller to sign in before refusing an Admin table's subscription |
+| `fadad92` | Share the exported backend's build, run and teardown between the three end-to-end tests |
+| `eea87c0` | Test the Swagger lock, simultaneous first sign-ups, the query-string hub token, a Signed-in table and the forgotten subscriptions end to end |
+| `0459d5e` | Describe the real access and realtime end-to-end tests, the hub wiring and the send bound in the docs |
 
 ## Commits on `m7-schema-templates`
 
