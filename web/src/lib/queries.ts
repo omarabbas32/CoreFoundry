@@ -15,6 +15,8 @@ import type {
   MigrationPage,
   Project,
   ProjectRole,
+  SampleDataResult,
+  SchemaTemplate,
   SchemaPlan,
   Table,
   TableSummary,
@@ -32,6 +34,7 @@ export const queryKeys = {
   migration: (projectId: number, id: number) => ["projects", projectId, "migration", id] as const,
   drift: (projectId: number) => ["projects", projectId, "drift"] as const,
   // Under the project, so an apply (which invalidates the project) refreshes them too.
+  templates: ["templates"] as const,
   data: (projectId: number) => ["projects", projectId, "data"] as const,
   rows: (projectId: number, table: string, page: number, pageSize: number, sort: string) =>
     ["projects", projectId, "data", table, "rows", page, pageSize, sort] as const,
@@ -323,5 +326,30 @@ export function useDeleteRow(projectId: number, table: string) {
   return useMutation({
     mutationFn: (id: number) => api<void>(`${dataPath(projectId, table)}/${id}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.data(projectId) }),
+  });
+}
+
+// ---- Schema templates ---------------------------------------------------------------------------
+
+export function useTemplates() {
+  return useQuery({ queryKey: queryKeys.templates, queryFn: () => api<SchemaTemplate[]>("/api/templates"), staleTime: Infinity });
+}
+
+/** Creates a template's draft tables in an empty project. Everything about the project is refetched. */
+export function useApplyTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, key, withSampleData }: { projectId: number; key: string; withSampleData: boolean }) =>
+      api<unknown>(`/api/projects/${projectId}/templates/${encodeURIComponent(key)}`, { method: "POST", body: { withSampleData } }),
+    onSuccess: (_, { projectId }) => queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) }),
+  });
+}
+
+/** Inserts the template's sample rows into applied tables that are still empty. */
+export function useLoadSampleData(projectId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<SampleDataResult>(`/api/projects/${projectId}/sample-data`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) }),
   });
 }

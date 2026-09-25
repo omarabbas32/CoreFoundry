@@ -16,6 +16,10 @@ export type Project = {
   schemaVersion: number;
   databaseName: string;
   createdAt: string;
+  /** The template the project started from, e.g. "ecommerce", or null. */
+  templateKey: string | null;
+  /** The template's sample rows are inserted after the next successful apply. */
+  sampleDataPending: boolean;
 };
 
 export type Member = { userId: number; email: string; role: ProjectRole; joinedAt: string };
@@ -111,7 +115,17 @@ export type SchemaPlan = {
 
 export type MigrationStatus = "Pending" | "Applied" | "Failed";
 
-export type ApplyResult = { migrationId: number; version: number; status: MigrationStatus; statements: number };
+/** What inserting a template's sample rows did; `skipped` explains rows that were left out. */
+export type SampleDataResult = { inserted: number; skipped: string[] };
+
+export type ApplyResult = {
+  migrationId: number;
+  version: number;
+  status: MigrationStatus;
+  statements: number;
+  /** Set when this apply also inserted the template's sample rows. */
+  sampleData: SampleDataResult | null;
+};
 
 export type MigrationSummary = {
   id: number;
@@ -164,3 +178,10 @@ export type DataRow = { id: number } & Record<string, unknown>;
 export type DataPage = { items: DataRow[]; page: number; pageSize: number; total: number };
 
 export type LookupItem = { id: number; label: string | null };
+
+// ---- Schema templates ---------------------------------------------------------------------------
+
+export type TemplateTable = { name: string; columnCount: number; references: string[] };
+
+/** A ready schema a project can start from. */
+export type SchemaTemplate = { key: string; name: string; description: string; tables: TemplateTable[]; sampleRowCount: number };

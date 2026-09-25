@@ -13,6 +13,7 @@ Finish a phase's **Definition of done** before starting the next one.
 | [M4](phase-4-data-api.md) (built) | Data API | Browse / add / edit / delete rows of generated tables | M3 |
 | [M5](phase-5-polish.md) | Portfolio polish | README, demo data, GIF, live deploy | M4 |
 | [M6](phase-6-code-export.md) (built) | Code export | Download a deployable .NET Clean Architecture backend (EF Core, JWT, Swagger, Docker) generated from the schema | M4 |
+| [M7](phase-7-schema-templates.md) (built) | Schema templates | Start a project from a ready schema (E-commerce) with optional sample rows | M4 |
 
 **If time gets tight:** M3 > M4 > M2 UI polish. M3 is the differentiator.
 

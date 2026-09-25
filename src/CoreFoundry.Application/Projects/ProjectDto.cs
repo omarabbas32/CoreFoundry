@@ -11,9 +11,11 @@ public sealed record ProjectDto(
     ProjectRole Role,
     int SchemaVersion,
     string DatabaseName,
-    DateTime CreatedAt)
+    DateTime CreatedAt,
+    string? TemplateKey = null,
+    bool SampleDataPending = false)
 {
     public static ProjectDto From(Project project, ProjectRole role) => new(
         project.Id, project.Name, project.Slug, project.Status, role,
-        project.SchemaVersion, project.DatabaseName, project.CreatedAt);
+        project.SchemaVersion, project.DatabaseName, project.CreatedAt, project.TemplateKey, project.SampleDataPending);
 }
