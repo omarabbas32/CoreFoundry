@@ -92,7 +92,7 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
 
     /// <summary>The types the generator writes for an entity class.</summary>
     private static string[] GeneratedFor(string name) =>
-        [name, $"{name}Dto", $"{name}Input", $"{name}Service", $"{name}Repository", $"I{name}Repository", $"{name}Configuration", $"{name}Controller"];
+        [name, $"{name}Dto", $"{name}Input", $"{name}Service", $"{name}Configuration", $"{name}Controller"];
 
     private static ColumnDefault? ParseDefault(DataColumn column) =>
         ColumnDefault.Parse(column.Type!.DataType, column.Default, column.Type.Length, column.Type.Precision, column.Type.Scale);
