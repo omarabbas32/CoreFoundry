@@ -1,6 +1,6 @@
 # CoreFoundry — Progress
 
-_Last updated: 2026-09-24 · branch `m2-table-designer`_
+_Last updated: 2026-09-25 · branch `m3-schema-engine`_
 
 | Phase | Status | Summary |
 |---|---|---|
@@ -8,13 +8,14 @@ _Last updated: 2026-09-24 · branch `m2-table-designer`_
 | [M1 — Auth, projects, members](phases/phase-1-auth-projects.md) | ✅ Done (PR #2 + `m1-models`) | Data model, auth, projects with real databases, members, dashboard |
 | [M2 — Table designer](phases/phase-2-table-designer.md) | ✅ Done (`m2-table-designer`) | Draft tables and columns with full validation, designer UI |
 | [M2.5 — Relations + diagram](phases/phase-2b-relations.md) | ✅ Done (`m2-table-designer`) | Column references (foreign keys) with on-delete rules, schema diagram |
-| [M3 — Schema engine](phases/phase-3-schema-engine.md) ⭐ | ⏭ Next | Plan / apply / history / drift |
-| [M4 — Data API](phases/phase-4-data-api.md) | Planned | Row CRUD on generated tables |
+| [M3 — Schema engine](phases/phase-3-schema-engine.md) ⭐ | ✅ Done (`m3-schema-engine`) | Plan / apply / history / drift on real MySQL tables |
+| [M4 — Data API](phases/phase-4-data-api.md) | ⏭ Next | Row CRUD on generated tables |
 | [M5 — Portfolio polish](phases/phase-5-polish.md) | Planned | One-command run, README, demo, deploy |
 
-**Tests:** 392 .NET tests pass (317 unit, 75 integration, of which 54 run against a real MySQL database; none skipped),
-plus headless browser runs of the dashboard (15 checks, M1), the table designer (29 checks, M2) and
-relations + diagram (15 checks, M2.5).
+**Tests:** 492 .NET tests pass (402 unit, 90 integration, of which 69 run against a real MySQL database; none skipped),
+plus headless browser runs of the dashboard (15 checks, M1), the table designer (29 checks, M2),
+relations + diagram (15 checks, M2.5) and a partial run of the schema engine (15 of 16 checks, M3).
+Coverage (gated in CI at ≥ 90%): `SchemaDiffer` 97.2%, `MySqlSqlRenderer` 96.6%.
 `npm run lint` and `npm run build` are clean.
 
 ---
@@ -95,19 +96,69 @@ before M3 so the schema engine is designed with constraints from the start.
 - **Fix found on the way:** concurrent column inserts on one table could deadlock in MySQL (each insert holds a
   shared lock on the parent row, then needs to update its `Version`); a deadlock on save is now a 409, like any lost race.
 
+## M3 — Schema engine ⭐
+
+The draft (M2, M2.5) becomes real MySQL tables. **Plan** diffs the draft against the live database and shows
+the exact SQL; **Apply** runs that SQL under a lock with a journal; **History** and **drift** show what happened.
+
+### Components
+| Component | Layer | What it does |
+|---|---|---|
+| `SchemaModel`, `Identifier` | Domain | Immutable tables → columns → unique/foreign keys; `Identifier` is the only thing SQL names are built from (`fk_<table>_<column>`, hashed when over 64 characters) |
+| `SchemaDiffer` | Domain | `(desired, actual)` → ordered operations: drop FKs → drop tables → rename tables → create tables → alter tables (columns, unique keys) → add FKs. Destructive/risky flags, unmanaged tables and columns reported, never dropped |
+| `DraftSchema` | Application | Pure mapping of the draft tables (`ProjectTable`) to the desired `SchemaModel` |
+| `MySqlSchemaIntrospector` | Infrastructure | `INFORMATION_SCHEMA` (tables, columns, statistics, referential constraints) → actual `SchemaModel`; unknown column types kept as raw text so they show as drift |
+| `MySqlSqlRenderer` | Infrastructure | Operations → MySQL DDL; one `CREATE TABLE` per new table, one `ALTER TABLE` per changed table, `RENAME TABLE` separately; defaults from the typed `ColumnDefault`; `Quote(Identifier)` has no raw-string overload |
+| `MySqlSchemaEngine` | Infrastructure | A dedicated `cf_engine` session per apply: `GET_LOCK('cf_apply_<id>', 0)`, statements, `RELEASE_LOCK`; also row/NULL counts for plan warnings |
+| `SchemaPlanService` | Application | Builds the plan, warnings, history pages, drift, and the `Changed` state of draft tables/columns |
+| `SchemaApplier` | Application | Lock → re-plan and compare `PlanHash` → journal row `Pending` → run statements (counting `StatementsApplied`) → one metadata save (`AppliedName`s, pending drops removed, `SchemaVersion + 1`, snapshot, `Applied`) |
+| `SchemaSnapshot`, `PlanHash` | Application | JSON snapshot of the database introspected **after** each apply (the base for drift and `Changed`); `SHA-256(schemaVersion + statements)` |
+
+### API
+`GET …/schema/plan` (Developer), `POST …/schema/apply` (Admin), `GET …/schema/migrations`, `GET …/schema/migrations/{id}`,
+`GET …/schema/drift` (Developer); routes and bodies in the [README](../README.md#api-so-far). New problem types:
+`plan-stale` (409), `apply-in-progress` (409), `destructive-not-acknowledged` (422), `apply-failed` (500, with the
+migration id, the failed statement and MySQL's error).
+
+### Dashboard
+- **Review plan** (`/projects/<id>/schema`): warnings first, operations grouped by table and coloured by kind, the SQL
+  with a copy button, unmanaged objects listed. Apply is shown to Admins and Owners only, needs the "I understand"
+  checkbox for destructive plans, and explains 409s ("review again" / "someone else is applying"). The outcome stays
+  visible after the plan refreshes.
+- **History** (`/projects/<id>/schema/history`): each migration with status and expandable SQL; a failed one shows
+  the statement that failed and the error.
+- **Drift banner** on the project page when the database differs from the last apply's snapshot.
+- Tables and columns edited since the last apply get a **`Changed`** badge in the designer.
+
+### How it's verified
+- **Differ:** 45 table-driven unit tests (renames keep data, rename table + column together, destructive/risky
+  flags, recovery, unmanaged, unique key renames, FK ordering incl. self-references and mutual drops). Coverage in CI:
+  `SchemaDiffer` **97.2%**, `MySqlSqlRenderer` **96.6%** (gate ≥ 90%, `build/check-coverage.py`).
+- **Renderer:** SQL snapshot tests for every operation, default escaping (`O'Reilly`, `back\slash`), one `ALTER` per table.
+- **Applier:** unit tests with fakes (success, pending drops removed, lock held, stale hash, acknowledgement,
+  empty plan, failure leaves the draft alone, hash stability, `Changed` state).
+- **Engine round trips on real MySQL:** every type, default, unique key and reference is applied and the next diff is
+  always empty; renames keep data; mutually referencing tables drop; unmanaged objects are left alone.
+- **API integration:** design → plan → apply → next plan empty; rename with data; forced failure journaled then
+  finished by re-planning; lock held → 409; stale hash → 409; Developer can plan but not apply (403); destructive
+  acknowledgement and FK changes; drift; a crafted name that skipped validation never reaches MySQL.
+- **Browser (partial):** 15 of 16 checks passed (apply + `SHOW CREATE TABLE`, rename keeps data, a forced failure
+  journaled and shown in History). The 16th failed on a bug in the script, not the app; the rest of the run was skipped.
+
 ## How it's verified
 
 | Layer | What runs |
 |---|---|
-| Domain / Application | Unit tests with in-memory fakes (entity rules, identifier/column/default/row-size rules, `AuthService`, `ProjectService`, `MemberService`, `TableService`) |
-| API + MySQL | Integration tests against a local `corefoundry_test` database, recreated each run; they create and drop real `cf_p_*` databases. Table tests simulate "applied" by setting `AppliedName` in the database and assert the project database stays empty |
-| Dashboard | Headless Chrome scripts (outside the repo). M1: register → create → add member → promote → transfer → delete → sign out with two users. M2: design Bookshop's `authors` and `books` (9 types), invalid names and defaults, duplicate name from the API, keyboard and mouse reorder persisted across reload, delete + undo, two-tab conflict → 409 banner, delete a draft table. M2.5: `books.author_id → authors` (cascade), a self-reference, SetNull on NOT NULL rejected, deleting `authors` refused naming `books.author_id`, diagram with 3 tables and 2 labelled edges, drag, open a table |
+| Domain / Application | Unit tests with in-memory fakes (entity rules, identifier/column/default/row-size rules, `AuthService`, `ProjectService`, `MemberService`, `TableService`, `SchemaDiffer`, `SchemaApplier`) |
+| Infrastructure (pure) | `MySqlSqlRenderer` SQL snapshot tests |
+| API + MySQL | Integration tests against a local `corefoundry_test` database, recreated each run; they create and drop real `cf_p_*` databases. M2 table tests simulate "applied" by setting `AppliedName`; M3 tests apply for real and check `INFORMATION_SCHEMA` |
+| Dashboard | Headless Chrome scripts (outside the repo). M1: register → create → add member → promote → transfer → delete → sign out with two users. M2: design Bookshop's `authors` and `books` (9 types), invalid names and defaults, duplicate name from the API, keyboard and mouse reorder persisted across reload, delete + undo, two-tab conflict → 409 banner, delete a draft table. M2.5: `books.author_id → authors` (cascade), a self-reference, SetNull on NOT NULL rejected, deleting `authors` refused naming `books.author_id`, diagram with 3 tables and 2 labelled edges, drag, open a table. M3 (partial, 15/16): review and apply Bookshop, `SHOW CREATE TABLE` matches, rename `price` → `price_usd` keeps rows, a forced failure is journaled and shown in History |
 
 Integration tests that need MySQL skip themselves when no connection string is configured (e.g. in CI).
 
 ## Changes from the original plan
 
-All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D25).
+All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D28).
 
 | Change | Why |
 |---|---|
@@ -126,24 +177,49 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D25).
 | Duplicate-key errors → 409 (D24) | Name races on unique indexes were 500s |
 | Foreign keys in scope, added as M2.5 with a schema diagram (D25, replaces D6) | Requested by the user; cheaper to design M3's differ with constraint ordering from the start |
 | Deadlocks on save → 409 | Found by the concurrency test once columns had a second FK to `ProjectTables` |
+| Schema-engine integration tests use the local MySQL, not Testcontainers (D26) | Follows from D10: no Docker yet |
+| Coverage via Microsoft.Testing.Extensions.CodeCoverage, gated in CI (D27) | Native to Microsoft.Testing.Platform (D12); no extra runner |
+| `SchemaMigrations (ProjectId, Version)` is a normal index, not unique (D28) | A failed apply and its retry aim for the same version; applies are already serialized by the lock |
+| `DraftSchemaReader` became a pure `DraftSchema.From(tables)` in Application | The draft is already loaded by the table repository; a pure mapping is unit-testable |
+| Unique keys are found by column (any single-column unique index) and renamed with `RENAME INDEX` when the name drifts from `uq_<table>_<column>` | MySQL keeps an index's name when its table or column is renamed; matching by column avoids dropping and re-creating the key |
+| Unique/foreign keys on columns created in the same plan are `Safe` | A new column has no data that could conflict |
+| `cf_engine` needs `REFERENCES` | Required for foreign keys (M2.5); `db/setup-local.sql` grants it |
 
 ## Known gaps / follow-ups
 
 - **Expired refresh tokens are never deleted.** They pile up, one per login and refresh. Cleanup is planned for M5 hardening.
 - **Two users creating a project with the same slug at the same moment** now get a 409 instead of a 500 (D24); an automatic retry with the next suffix would be nicer.
 - **The web keeps a copy of the reserved-word list** (`web/src/lib/mysql-reserved-words.ts`) for as-you-type hints. It must be regenerated with the Domain's list; the API's list is the one enforced.
-- **The `Changed` state** (applied but edited since) needs the M3 snapshot to compare against; until then tables and columns are `New`, `Applied` or `PendingDrop`.
+- **Column order changes aren't applied to MySQL.** `CREATE TABLE` uses the designer's order, but columns added later are appended and reordering doesn't move existing ones.
+- **Removing a reference leaves its supporting index** (`fk_…`) in MySQL; the constraint is dropped, the index stays.
+- **Swapping two table names in one plan** (a → b and b → a) fails: renames run one by one, so the first one hits the other table's name.
+- **Editing the draft while an apply runs** can make the final metadata save hit a version conflict: MySQL is already changed but the journal row stays `Pending`. Planning again recovers (objects are matched by name), but the `Pending` row isn't cleaned up.
+- **Plan warnings run one query per risky operation** (row or NULL counts). Fine for small schemas.
+- **Drift compares with the snapshot of the last successful apply.** After a failed apply, the partial changes show as drift until the next successful one.
 - **Diagram positions aren't saved**; every visit starts from the automatic layout. A self-reference edge loops behind its table box.
 - **Undo of a hard-deleted column re-creates it with a new id.** Harmless before apply; once columns are applied they use `PendingDrop` instead.
 - **Integration tests don't run in CI yet.** They need MySQL, and a container setup is deferred.
 - **Windows MySQL stores table names in lower case** (`lower_case_table_names=1`). This is harmless unless a dump is moved to Linux.
 - **The dev database contains test accounts and projects** (`smoke@…`, `member-smoke@…`, `ui-…@test.dev`, `ui-m2-…@test.dev` and `ui-m25-…@test.dev` with "Bookshop" projects) from manual and UI checks.
 
-## Next: M3 — Schema engine ⭐
+## Next: M4 — Data API
 
-Diff the draft (M2, M2.5) against the last applied snapshot, render DDL from the typed definitions and
-`ColumnDefault` values, order foreign-key constraints correctly, show the plan, apply it with the
-`SchemaMigrations` journal, and detect drift.
+Browse, add, edit and delete rows of the applied tables, through a REST API (Bearer token) and a data viewer in the
+dashboard. The API reads table and column definitions from the last apply's snapshot, so it only ever sees applied
+tables and uses the applied names.
+
+## Commits on `m3-schema-engine`
+
+| Commit | Change |
+|---|---|
+| `6e60a48` | Schema model + `SchemaDiffer` (45 table-driven tests), decisions D26–D27 |
+| `10652be` | `MySqlSqlRenderer` + coverage gate in CI |
+| `39d335e` | `MySqlSchemaIntrospector`, `DraftSchema` mapping, `cf_engine` gets `REFERENCES` |
+| `fd89a14` | `SchemaPlanService`, `SchemaApplier`, `Changed` state |
+| `8fd0724` | `SchemaController` + problem types, D28 (non-unique migration version) |
+| `284218b` | Web: Review plan, History, drift banner |
+| `ef11511` | Fix: the apply outcome stays visible after the plan refreshes |
+| `6e7c0a9`, `802b44d` | Plan for the next session (`docs/NEXT-PLAN.md`) |
 
 ## Commits on `m2-table-designer`
 
