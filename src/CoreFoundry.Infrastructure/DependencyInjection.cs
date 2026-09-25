@@ -1,9 +1,11 @@
 using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Common;
+using CoreFoundry.Application.Data;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Application.Schema;
 using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Infrastructure.Auth;
+using CoreFoundry.Infrastructure.Data;
 using CoreFoundry.Infrastructure.Engine;
 using CoreFoundry.Infrastructure.HealthChecks;
 using CoreFoundry.Infrastructure.Persistence;
@@ -42,6 +44,9 @@ public static class DependencyInjection
         services.AddSingleton<ISqlRenderer, MySqlSqlRenderer>();
         services.AddSingleton<ISchemaIntrospector>(new MySqlSchemaIntrospector(engine));
         services.AddSingleton<ISchemaEngine>(new MySqlSchemaEngine(engine));
+        services.AddMemoryCache();
+        services.AddScoped<ISnapshotProvider, CachedSnapshotProvider>();
+        services.AddSingleton<IDataRepository>(new MySqlDataRepository(engine));
 
         services.AddOptions<JwtOptions>()
             .Bind(configuration.GetSection(JwtOptions.SectionName))

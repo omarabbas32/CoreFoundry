@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using CoreFoundry.Domain.Schema;
 
@@ -57,6 +58,60 @@ public sealed record ColumnType(DataType DataType, int? Length = null, byte? Pre
         DataType.Decimal => $"Decimal({Precision},{Scale})",
         _ => DataType.ToString(),
     };
+
+    /// <summary>
+    /// The inverse of <see cref="ToString"/> (<c>Varchar(200)</c>, <c>Decimal(10,2)</c>, <c>Date</c> …).
+    /// Anything else, such as a raw MySQL type kept in a snapshot for a column CoreFoundry didn't
+    /// create, isn't a <see cref="ColumnType"/>. Case-sensitive, like <see cref="ToString"/>.
+    /// </summary>
+    public static bool TryParse(string? text, [NotNullWhen(true)] out ColumnType? type)
+    {
+        type = null;
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var open = text.IndexOf('(', StringComparison.Ordinal);
+        var name = open < 0 ? text : text[..open];
+        if (name.Length == 0 || !char.IsAsciiLetterUpper(name[0]) || !Enum.TryParse<DataType>(name, out var dataType)
+            || !Enum.IsDefined(dataType) || dataType.ToString() != name)
+        {
+            return false;
+        }
+
+        string[] arguments = [];
+        if (open >= 0)
+        {
+            if (!text.EndsWith(')'))
+            {
+                return false;
+            }
+
+            arguments = text[(open + 1)..^1].Split(',');
+        }
+
+        type = (dataType, arguments) switch
+        {
+            (DataType.Varchar, [var length]) when TryNumber(length, out var n) && n > 0 => new ColumnType(dataType, n),
+            (DataType.Decimal, [var precision, var scale])
+                when TryNumber(precision, out var p) && TryNumber(scale, out var s) && p is > 0 and <= byte.MaxValue && s <= p =>
+                new ColumnType(dataType, null, (byte)p, (byte)s),
+            (not DataType.Varchar and not DataType.Decimal, []) => new ColumnType(dataType),
+            _ => null,
+        };
+
+        // Only the exact form ToString writes (no "Varchar(0200)").
+        if (type?.ToString() != text)
+        {
+            type = null;
+        }
+
+        return type is not null;
+    }
+
+    private static bool TryNumber(string text, out int value) =>
+        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
 
     /// <summary>
     /// MySQL stores some defaults in a normalized form (a DECIMAL(10,2) default of 7.5 reads back as

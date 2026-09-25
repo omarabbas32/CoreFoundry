@@ -10,7 +10,7 @@ Finish a phase's **Definition of done** before starting the next one.
 | [M2](phase-2-table-designer.md) ✅ | Table designer | Draft tables & columns with full validation, designer UI | M1 |
 | [M2.5](phase-2b-relations.md) ✅ | Relations + diagram | Column references (foreign keys) with on-delete rules, schema diagram | M2 |
 | [M3](phase-3-schema-engine.md) ⭐ ✅ | Schema engine | Plan (diff + SQL preview), Apply, migration history, drift | M2 |
-| [M4](phase-4-data-api.md) | Data API | Browse / add / edit / delete rows of generated tables | M3 |
+| [M4](phase-4-data-api.md) (built) | Data API | Browse / add / edit / delete rows of generated tables | M3 |
 | [M5](phase-5-polish.md) | Portfolio polish | README, demo data, GIF, live deploy | M4 |
 
 **If time gets tight:** M3 > M4 > M2 UI polish. M3 is the differentiator.

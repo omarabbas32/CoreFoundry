@@ -47,6 +47,10 @@ backend architecture.
 | D26 | Schema-engine integration tests run against the **local MySQL** (like M1/M2), creating and dropping `cf_p_<id ≥ 1,000,000>` databases; Testcontainers stays deferred | Consequence of D10: no Docker yet. The tests skip themselves when no connection string is configured (CI). |
 | D27 | Coverage via **Microsoft.Testing.Extensions.CodeCoverage**, reported in CI for `SchemaDiffer` + `SqlRenderer` (target ≥ 90%) | Native to Microsoft.Testing.Platform (D12); no extra runner. |
 | D28 | `SchemaMigrations (ProjectId, Version)` is a **normal** index, not unique (migration `MigrationVersionAttempts`) | `Version` is the version an attempt aims for, so a failed apply and its retry share it. Applies are already serialized by the project's `GET_LOCK`. |
+| D29 | The Data API serves only **managed** tables and columns: those in the last applied snapshot whose name is an applied name in the draft. Types, nullability and defaults still come from the snapshot | The snapshot is the whole introspected database, including tables created outside CoreFoundry (which may have no `id` or names CoreFoundry won't quote). `AppliedName` only changes on a successful apply, which bumps `SchemaVersion`, so both share the version-keyed cache. |
+| D30 | The snapshot cache (`CachedSnapshotProvider`, `IMemoryCache`) lives in **Infrastructure** behind an Application port | Infrastructure already has the ASP.NET Core shared framework, so no new package reference; caching is an infrastructure concern. |
+| D31 | Foreign-key errors in the Data API: MySQL **1452** (referenced row missing) → 400 on the field; **1451** (row still referenced, `Restrict`) → 409; **1054** (unknown column) is drift like 1146 | Needed since M2.5 added references; not in the original error table. |
+| D32 | Reference columns in the row form use a **picker** backed by `GET …/data/{table}/lookup` (id + label = the first Varchar column, search by label or id) | Chosen by the user over a plain number input. |
 
 ---
 

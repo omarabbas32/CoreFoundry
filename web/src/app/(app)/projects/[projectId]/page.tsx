@@ -78,7 +78,9 @@ export default function ProjectPage() {
       <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
           <h2 className="font-semibold">Schema</h2>
-          <p className="text-sm text-muted">Design tables, review the SQL plan, then apply it to the project&apos;s database.</p>
+          <p className="text-sm text-muted">
+            Design tables, review the SQL plan, apply it to the project&apos;s database, then browse and edit rows.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -98,6 +100,18 @@ export default function ProjectPage() {
             className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
           >
             History
+          </Link>
+          <Link
+            href={`/projects/${data.id}/data`}
+            className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            Browse data
+          </Link>
+          <Link
+            href={`/projects/${data.id}/api`}
+            className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            API
           </Link>
         </div>
       </Card>

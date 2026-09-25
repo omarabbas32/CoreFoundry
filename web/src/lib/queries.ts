@@ -5,7 +5,11 @@ import { api } from "./api";
 import type {
   ApplyResult,
   ColumnInput,
+  DataPage,
+  DataRow,
+  DataSchema,
   Drift,
+  LookupItem,
   Member,
   Migration,
   MigrationPage,
@@ -27,6 +31,11 @@ export const queryKeys = {
   migrations: (projectId: number, page: number) => ["projects", projectId, "migrations", page] as const,
   migration: (projectId: number, id: number) => ["projects", projectId, "migration", id] as const,
   drift: (projectId: number) => ["projects", projectId, "drift"] as const,
+  // Under the project, so an apply (which invalidates the project) refreshes them too.
+  data: (projectId: number) => ["projects", projectId, "data"] as const,
+  rows: (projectId: number, table: string, page: number, pageSize: number, sort: string) =>
+    ["projects", projectId, "data", table, "rows", page, pageSize, sort] as const,
+  lookup: (projectId: number, table: string, search: string) => ["projects", projectId, "data", table, "lookup", search] as const,
 };
 
 export function useProjects() {
@@ -260,5 +269,59 @@ export function useApply(projectId: number) {
       api<ApplyResult>(`/api/projects/${projectId}/schema/apply`, { method: "POST", body: input }),
     // Also after a failure: part of the plan may have run, and history has a new row.
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) }),
+  });
+}
+
+// ---- Data API -----------------------------------------------------------------------------------
+
+/** The applied tables and their columns (the last apply's snapshot, not the draft). */
+export function useDataSchema(projectId: number) {
+  return useQuery({
+    queryKey: queryKeys.data(projectId),
+    queryFn: () => api<DataSchema>(`/api/projects/${projectId}/data`),
+  });
+}
+
+const dataPath = (projectId: number, table: string) => `/api/projects/${projectId}/data/${encodeURIComponent(table)}`;
+
+/** One page of rows. `sort` is a column name, "-" first for descending ("" = by id). */
+export function useRows(projectId: number, table: string, page: number, pageSize: number, sort: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.rows(projectId, table, page, pageSize, sort),
+    queryFn: () =>
+      api<DataPage>(`${dataPath(projectId, table)}?page=${page}&pageSize=${pageSize}${sort ? `&sort=${encodeURIComponent(sort)}` : ""}`),
+    enabled,
+    placeholderData: (previous) => previous, // keep the grid while the next page loads
+  });
+}
+
+/** Rows to choose from for a reference column, searched by label or id. */
+export function useLookup(projectId: number, table: string, search: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.lookup(projectId, table, search),
+    queryFn: () => api<LookupItem[]>(`${dataPath(projectId, table)}/lookup?limit=20${search ? `&q=${encodeURIComponent(search)}` : ""}`),
+    enabled,
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Adds (no id) or replaces (id) a row. Every page and lookup of the project's data may change. */
+export function useSaveRow(projectId: number, table: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, values }: { id: number | null; values: Record<string, unknown> }) =>
+      id === null
+        ? api<DataRow>(dataPath(projectId, table), { method: "POST", body: values })
+        : api<DataRow>(`${dataPath(projectId, table)}/${id}`, { method: "PUT", body: values }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.data(projectId) }),
+  });
+}
+
+/** Deleting can cascade to other tables, so all of the project's data is refetched. */
+export function useDeleteRow(projectId: number, table: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api<void>(`${dataPath(projectId, table)}/${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.data(projectId) }),
   });
 }

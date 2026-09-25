@@ -1,6 +1,6 @@
 # CoreFoundry — Progress
 
-_Last updated: 2026-09-25 · branch `m3-schema-engine`_
+_Last updated: 2026-09-25 · branch `m4-data-api`_
 
 | Phase | Status | Summary |
 |---|---|---|
@@ -9,10 +9,10 @@ _Last updated: 2026-09-25 · branch `m3-schema-engine`_
 | [M2 — Table designer](phases/phase-2-table-designer.md) | ✅ Done (`m2-table-designer`) | Draft tables and columns with full validation, designer UI |
 | [M2.5 — Relations + diagram](phases/phase-2b-relations.md) | ✅ Done (`m2-table-designer`) | Column references (foreign keys) with on-delete rules, schema diagram |
 | [M3 — Schema engine](phases/phase-3-schema-engine.md) ⭐ | ✅ Done (`m3-schema-engine`) | Plan / apply / history / drift on real MySQL tables |
-| [M4 — Data API](phases/phase-4-data-api.md) | ⏭ Next | Row CRUD on generated tables |
-| [M5 — Portfolio polish](phases/phase-5-polish.md) | Planned | One-command run, README, demo, deploy |
+| [M4 — Data API](phases/phase-4-data-api.md) | ✅ Built (`m4-data-api`), hands-on check open | Row CRUD on applied tables: REST API + data viewer |
+| [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next | One-command run, README, demo, deploy |
 
-**Tests:** 492 .NET tests pass (402 unit, 90 integration, of which 69 run against a real MySQL database; none skipped),
+**Tests:** 672 .NET tests pass (556 unit, 116 integration, of which 95 run against a real MySQL database; none skipped),
 plus headless browser runs of the dashboard (15 checks, M1), the table designer (29 checks, M2),
 relations + diagram (15 checks, M2.5) and a partial run of the schema engine (15 of 16 checks, M3).
 Coverage (gated in CI at ≥ 90%): `SchemaDiffer` 97.2%, `MySqlSqlRenderer` 96.6%.
@@ -145,20 +145,70 @@ migration id, the failed statement and MySQL's error).
 - **Browser (partial):** 15 of 16 checks passed (apply + `SHOW CREATE TABLE`, rename keeps data, a forced failure
   journaled and shown in History). The 16th failed on a bug in the script, not the app; the rest of the run was skipped.
 
+## M4 — Data API and data viewer
+
+Rows of the applied tables, from the dashboard or any HTTP client with a Bearer token. Nothing here reads the draft:
+tables and columns are those of the last successful apply.
+
+### Components
+| Component | Layer | What it does |
+|---|---|---|
+| `ColumnType.TryParse` | Domain | Inverse of `ColumnType.ToString()` (`Varchar(200)`, `Decimal(10,2)` …); strict, anything else is "unknown type" |
+| `DataSchema` | Application | Typed tables/columns from the last applied `SchemaSnapshot`, limited to tables and columns CoreFoundry manages (D29). A column whose type doesn't parse (changed outside CoreFoundry) is read-only |
+| `CachedSnapshotProvider` | Infrastructure | `IMemoryCache` under `snapshot:{projectId}:{schemaVersion}`; an apply bumps the version, so there's nothing to evict (D30) |
+| `RowCoercer` | Application | JSON body → typed values per column type (spec §4), every error collected per field; `id`, unknown and read-only fields rejected; full-replace semantics for PUT |
+| `SortOrder` | Application | `sort` looked up in the table (`-` for descending), never put into SQL |
+| `DataSql` | Infrastructure | Pure SQL builder: names only from the resolved table through `MySqlSqlRenderer.Quote`, values only as `@p_<ordinal>`; `id` tie-breaker; lookup with escaped `LIKE` |
+| `MySqlDataRepository` | Infrastructure | Dapper on `cf_engine`; decimals read as exact text (`MySqlDecimal`), dates/times as ISO strings, UUIDs canonical, Json as JSON; MySQL errors → 400/409 (1062, 1048, 1406, 1452, 1451, 1146/1054) |
+| `DataService`, `DataController` | Application / Api | Endpoints below; the project is loaded once per request and its `SchemaVersion` picks the cached schema |
+
+### API
+`GET …/data` (applied tables and columns), `GET/POST …/data/{table}`, `GET/PUT/DELETE …/data/{table}/{id}`,
+`GET …/data/{table}/lookup` (reference picker, D32), all Developer+. Details and curl examples in the
+[README](../README.md#data-api-with-curl).
+
+### Dashboard
+- **Browse data** (`/projects/<id>/data/<table>`): table picker, sortable column headers (ties by id), paging with a
+  page-size choice, cells formatted by type (numbers right-aligned, NULL muted, JSON collapsed).
+- **Side panel** to add or edit a row: generated from the applied columns (input per type, required marks, defaults
+  and "unique" as hints, read-only columns disabled), server errors under each field, other errors on top.
+- **Reference picker:** search the referenced table by its label (first Varchar column) or id.
+- Delete asks in an in-page dialog. Empty state "No rows yet"; a table that isn't applied yet links to Review plan.
+- "Browse data" links on the project page and in the designer (for applied tables, by their applied name).
+- **API page** (`/projects/<id>/api`): base URL, sign-in example and a "copy a fresh access token" button, then per
+  applied table its endpoints, a field table (type, JSON shape, required, notes) and curl / `fetch` examples with a
+  sample body built from the columns.
+
+### How it's verified
+- **Unit (154 new):** `ColumnType.TryParse` round trips and rejects; every coercion row of spec §4 with edge values
+  (INT/BIGINT min/max, decimal scale overflow and exponent, leap day, invalid UUID, offsets → UTC, 7-digit fractions,
+  non-ASCII digits, UTF-8 byte limit of Text, emoji length in Varchar); whole bodies (errors together, `id`, unknown,
+  duplicate and crafted keys); SQL snapshots for every statement; unknown/crafted sort; provider cache hit, new
+  version, nothing applied, unmanaged and draft-only objects hidden.
+- **Repository on real MySQL (10):** every type round trips (incl. `DECIMAL(65,30)`), defaults and full replace,
+  stable paging, duplicate → 409 naming the column, missing parent → 400, referenced row → 409, NULL past validation,
+  missing rows, drift → 409.
+- **API (16):** CRUD round trip (201 + Location, decimals as strings), paging/sort and bad paging, field errors,
+  `Restrict` delete → 409, draft-only column → 400 and a rename is used at once after apply, crafted table names → 404,
+  crafted sort/keys → 400 with the tables intact, unmanaged tables hidden, the tables endpoint, lookup (search, escaped
+  wildcards, id), Developer can write and non-members get 404, nothing applied → no tables.
+- **Web:** `tsc`, lint and build are clean. **Not yet run in a browser**, and the README's curl examples haven't been
+  run against a live API (the Definition of done's hands-on check is still open).
+
 ## How it's verified
 
 | Layer | What runs |
 |---|---|
 | Domain / Application | Unit tests with in-memory fakes (entity rules, identifier/column/default/row-size rules, `AuthService`, `ProjectService`, `MemberService`, `TableService`, `SchemaDiffer`, `SchemaApplier`) |
-| Infrastructure (pure) | `MySqlSqlRenderer` SQL snapshot tests |
-| API + MySQL | Integration tests against a local `corefoundry_test` database, recreated each run; they create and drop real `cf_p_*` databases. M2 table tests simulate "applied" by setting `AppliedName`; M3 tests apply for real and check `INFORMATION_SCHEMA` |
+| Infrastructure (pure) | `MySqlSqlRenderer` and `DataSql` SQL snapshot tests |
+| API + MySQL | Integration tests against a local `corefoundry_test` database, recreated each run; they create and drop real `cf_p_*` databases. M2 table tests simulate "applied" by setting `AppliedName`; M3 tests apply for real and check `INFORMATION_SCHEMA`; M4 tests write rows through the Data API and the repository |
 | Dashboard | Headless Chrome scripts (outside the repo). M1: register → create → add member → promote → transfer → delete → sign out with two users. M2: design Bookshop's `authors` and `books` (9 types), invalid names and defaults, duplicate name from the API, keyboard and mouse reorder persisted across reload, delete + undo, two-tab conflict → 409 banner, delete a draft table. M2.5: `books.author_id → authors` (cascade), a self-reference, SetNull on NOT NULL rejected, deleting `authors` refused naming `books.author_id`, diagram with 3 tables and 2 labelled edges, drag, open a table. M3 (partial, 15/16): review and apply Bookshop, `SHOW CREATE TABLE` matches, rename `price` → `price_usd` keeps rows, a forced failure is journaled and shown in History |
 
 Integration tests that need MySQL skip themselves when no connection string is configured (e.g. in CI).
 
 ## Changes from the original plan
 
-All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D28).
+All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D32).
 
 | Change | Why |
 |---|---|
@@ -184,6 +234,12 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D28).
 | Unique keys are found by column (any single-column unique index) and renamed with `RENAME INDEX` when the name drifts from `uq_<table>_<column>` | MySQL keeps an index's name when its table or column is renamed; matching by column avoids dropping and re-creating the key |
 | Unique/foreign keys on columns created in the same plan are `Safe` | A new column has no data that could conflict |
 | `cf_engine` needs `REFERENCES` | Required for foreign keys (M2.5); `db/setup-local.sql` grants it |
+| The Data API serves only managed tables and columns (D29) | The snapshot also holds objects created outside CoreFoundry, which may lack `id` or have names CoreFoundry won't quote |
+| The snapshot cache is in Infrastructure (D30), not an Application `SnapshotProvider` | No new package; caching is infrastructure |
+| FK errors 1452 → 400 and 1451 → 409, unknown column 1054 → drift 409 (D31) | References came with M2.5, after the spec's error table |
+| Reference picker + `GET …/data/{table}/lookup` (D32) | The user chose a picker over a number input |
+| `GET …/data` lists applied tables with their columns | The viewer builds its grid and form from it |
+| `TableDto.appliedName` | The designer's "Browse data" link needs the table's name in the database, which differs after a rename |
 
 ## Known gaps / follow-ups
 
@@ -196,17 +252,34 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D28).
 - **Editing the draft while an apply runs** can make the final metadata save hit a version conflict: MySQL is already changed but the journal row stays `Pending`. Planning again recovers (objects are matched by name), but the `Pending` row isn't cleaned up.
 - **Plan warnings run one query per risky operation** (row or NULL counts). Fine for small schemas.
 - **Drift compares with the snapshot of the last successful apply.** After a failed apply, the partial changes show as drift until the next successful one.
+- **The data viewer hasn't been checked in a browser yet**, and the README's curl examples haven't been run against a live API.
+- **BIGINT values above 2^53** lose precision in JavaScript. The API is exact, but the form refuses such numbers ("use the API").
+- **The picker's label is always the first Varchar column** of the referenced table; it can't be chosen.
+- **Emptying a nullable text field in the form saves NULL**, so an empty string can't be stored from the UI for such a column (the API can).
+- **Date-time fields are text inputs** (ISO format) so microseconds survive; there's no date-time picker.
+- **Every list request runs `COUNT(*)`**; fine for small tables.
+- **Columns created outside CoreFoundry are invisible** to the Data API and are left as they are by a PUT.
 - **Diagram positions aren't saved**; every visit starts from the automatic layout. A self-reference edge loops behind its table box.
 - **Undo of a hard-deleted column re-creates it with a new id.** Harmless before apply; once columns are applied they use `PendingDrop` instead.
 - **Integration tests don't run in CI yet.** They need MySQL, and a container setup is deferred.
 - **Windows MySQL stores table names in lower case** (`lower_case_table_names=1`). This is harmless unless a dump is moved to Linux.
 - **The dev database contains test accounts and projects** (`smoke@…`, `member-smoke@…`, `ui-…@test.dev`, `ui-m2-…@test.dev` and `ui-m25-…@test.dev` with "Bookshop" projects) from manual and UI checks.
 
-## Next: M4 — Data API
+## Next: M5 — Portfolio polish
 
-Browse, add, edit and delete rows of the applied tables, through a REST API (Bearer token) and a data viewer in the
-dashboard. The API reads table and column definitions from the last apply's snapshot, so it only ever sees applied
-tables and uses the applied names.
+First the open M4 check (Bookshop from the UI and with curl), then one-command run, demo data, README and deploy.
+
+## Commits on `m4-data-api`
+
+| Commit | Change |
+|---|---|
+| `84be3fb` | `ColumnType.TryParse`, `DataSchema`, snapshot provider cached by schema version |
+| `fbf412b` | Value coercion (`RowCoercer`) |
+| `0a0dfd6` | Serve only tables and columns CoreFoundry manages (D29) |
+| `8408011` | Query builder (`DataSql`) and `SortOrder` |
+| `6cf43aa` | `MySqlDataRepository` (Dapper), MySQL error mapping |
+| `03fa8dd` | `DataService`, `DataController`, lookup endpoint |
+| `4eca44a` | Web: data viewer, row panel with reference picker, links; `TableDto.appliedName` |
 
 ## Commits on `m3-schema-engine`
 
