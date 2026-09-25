@@ -3,7 +3,6 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using CoreFoundry.Api.Projects;
@@ -14,7 +13,6 @@ using CoreFoundry.Domain.Projects;
 using CoreFoundry.Domain.Schema;
 using CoreFoundry.Infrastructure.Engine;
 using CoreFoundry.IntegrationTests.Infrastructure;
-using MySqlConnector;
 using Shouldly;
 
 namespace CoreFoundry.IntegrationTests.Export;
@@ -97,14 +95,14 @@ public sealed class ExportEndpointsTests : IDisposable
             var root = Path.Combine(folder.FullName, "bookstore-backend");
 
             // 1. It builds, without warnings.
-            var build = await RunAsync("dotnet", "build BookStore.slnx -c Release -nologo", root, TimeSpan.FromMinutes(6));
+            var build = await ExportedBackendSupport.RunAsync("dotnet", "build BookStore.slnx -c Release -nologo", root, TimeSpan.FromMinutes(6));
             build.ExitCode.ShouldBe(0, build.Output);
             build.Output.ShouldContain(" 0 Warning(s)", Case.Sensitive, build.Output);
 
             // 2. The hand-written migration describes exactly the model the configurations build.
-            if (FindOnPath("dotnet-ef") is { } ef)
+            if (ExportedBackendSupport.FindOnPath("dotnet-ef") is { } ef)
             {
-                var check = await RunAsync(ef,
+                var check = await ExportedBackendSupport.RunAsync(ef,
                     "migrations has-pending-model-changes --project src/BookStore.Infrastructure --startup-project src/BookStore.Api --no-build --configuration Release",
                     root, TimeSpan.FromMinutes(3));
                 check.ExitCode.ShouldBe(0, check.Output);
@@ -112,9 +110,9 @@ public sealed class ExportEndpointsTests : IDisposable
             }
 
             // 3. It runs: the migration creates its database, then auth and CRUD work over HTTP.
-            var port = FreePort();
+            var port = ExportedBackendSupport.FreePort();
             var log = new StringBuilder();
-            api = Start(log, Path.Combine(root, "src/BookStore.Api/bin/Release/net10.0/BookStore.Api.dll"), new Dictionary<string, string>
+            api = ExportedBackendSupport.Start(log, Path.Combine(root, "src/BookStore.Api/bin/Release/net10.0/BookStore.Api.dll"), new Dictionary<string, string>
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}",
@@ -126,7 +124,7 @@ public sealed class ExportEndpointsTests : IDisposable
             using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
             try
             {
-                await WaitUntilHealthyAsync(http, api);
+                await ExportedBackendSupport.WaitUntilHealthyAsync(http, api);
                 await UseTheApiAsync(http);
             }
             catch (ShouldAssertException ex)
@@ -160,7 +158,7 @@ public sealed class ExportEndpointsTests : IDisposable
             }
 
             api?.Dispose();
-            await ExecuteAsync($"DROP DATABASE IF EXISTS `{database}`");
+            await ExportedBackendSupport.ExecuteAsync(_api.EngineConnectionString, $"DROP DATABASE IF EXISTS `{database}`");
             try
             {
                 folder.Delete(recursive: true);
@@ -178,18 +176,19 @@ public sealed class ExportEndpointsTests : IDisposable
         (await http.GetAsync(new Uri("/api/books", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
 
         var credentials = new { email = "Reader@Example.com", password = "a long password" };
-        (await PostAsync(http, "/api/auth/register", credentials)).StatusCode.ShouldBe(HttpStatusCode.Created);
-        (await PostAsync(http, "/api/auth/register", credentials)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await PostAsync(http, "/api/auth/login", new { email = "reader@example.com", password = "wrong password" })).StatusCode
+        (await ExportedBackendSupport.PostAsync(http, "/api/auth/register", credentials)).StatusCode.ShouldBe(HttpStatusCode.Created);
+        (await ExportedBackendSupport.PostAsync(http, "/api/auth/register", credentials)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await ExportedBackendSupport.PostAsync(http, "/api/auth/login", new { email = "reader@example.com", password = "wrong password" })).StatusCode
             .ShouldBe(HttpStatusCode.Unauthorized);
-        var login = await Json(await PostAsync(http, "/api/auth/login", new { email = "reader@example.com", password = "a long password" }), HttpStatusCode.OK);
+        var login = await ExportedBackendSupport.Json(
+            await ExportedBackendSupport.PostAsync(http, "/api/auth/login", new { email = "reader@example.com", password = "a long password" }), HttpStatusCode.OK);
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.GetProperty("accessToken").GetString());
 
-        var ann = (await Json(await PostAsync(http, "/api/authors", new { name = "Ann" }), HttpStatusCode.Created)).GetProperty("id").GetInt64();
-        var bob = (await Json(await PostAsync(http, "/api/authors", new { name = "Bob", mentor_id = ann }), HttpStatusCode.Created)).GetProperty("id").GetInt64();
-        (await PostAsync(http, "/api/authors", new { name = "Ann" })).StatusCode.ShouldBe(HttpStatusCode.Conflict); // unique
+        var ann = (await ExportedBackendSupport.Json(await ExportedBackendSupport.PostAsync(http, "/api/authors", new { name = "Ann" }), HttpStatusCode.Created)).GetProperty("id").GetInt64();
+        var bob = (await ExportedBackendSupport.Json(await ExportedBackendSupport.PostAsync(http, "/api/authors", new { name = "Bob", mentor_id = ann }), HttpStatusCode.Created)).GetProperty("id").GetInt64();
+        (await ExportedBackendSupport.PostAsync(http, "/api/authors", new { name = "Ann" })).StatusCode.ShouldBe(HttpStatusCode.Conflict); // unique
 
-        var book = await Json(await PostAsync(http, "/api/books", new
+        var book = await ExportedBackendSupport.Json(await ExportedBackendSupport.PostAsync(http, "/api/books", new
         {
             title = "Dune",
             price_usd = "19.9",
@@ -206,18 +205,18 @@ public sealed class ExportEndpointsTests : IDisposable
         Guid.Parse(book.GetProperty("public_id").GetString()!).ShouldNotBe(Guid.Empty); // (UUID()) default
         book.GetProperty("metadata").GetProperty("tags")[0].GetString().ShouldBe("sf");
 
-        var missingParent = await Json(await PostAsync(http, "/api/books", new { title = "x", copies = 1, author_id = 999_999 }), HttpStatusCode.BadRequest);
+        var missingParent = await ExportedBackendSupport.Json(await ExportedBackendSupport.PostAsync(http, "/api/books", new { title = "x", copies = 1, author_id = 999_999 }), HttpStatusCode.BadRequest);
         missingParent.GetProperty("errors").TryGetProperty("author_id", out _).ShouldBeTrue();
-        var invalid = await Json(await PostAsync(http, "/api/books", new { title = "x", copies = 1, author_id = ann, price_usd = 1.999 }), HttpStatusCode.BadRequest);
+        var invalid = await ExportedBackendSupport.Json(await ExportedBackendSupport.PostAsync(http, "/api/books", new { title = "x", copies = 1, author_id = ann, price_usd = 1.999 }), HttpStatusCode.BadRequest);
         invalid.GetProperty("errors").TryGetProperty("price_usd", out _).ShouldBeTrue();
-        (await PostAsync(http, "/api/books", new { title = "x", copies = 1, author_id = ann, nope = 1 })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ExportedBackendSupport.PostAsync(http, "/api/books", new { title = "x", copies = 1, author_id = ann, nope = 1 })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
 
-        var page = await Json(await http.GetAsync(new Uri("/api/books?sort=-price_usd&pageSize=10", UriKind.Relative), Ct), HttpStatusCode.OK);
+        var page = await ExportedBackendSupport.Json(await http.GetAsync(new Uri("/api/books?sort=-price_usd&pageSize=10", UriKind.Relative), Ct), HttpStatusCode.OK);
         (page.GetProperty("total").GetInt64(), page.GetProperty("items").GetArrayLength()).ShouldBe((1L, 1));
         (await http.GetAsync(new Uri("/api/books?sort=nope", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
 
         // Full replace: fields left out get their default.
-        var replaced = await Json(await http.PutAsJsonAsync(new Uri($"/api/books/{id}", UriKind.Relative),
+        var replaced = await ExportedBackendSupport.Json(await http.PutAsJsonAsync(new Uri($"/api/books/{id}", UriKind.Relative),
             new { title = "Dune Messiah", copies = 5, author_id = ann, editor_id = bob }, Ct), HttpStatusCode.OK);
         replaced.GetProperty("price_usd").GetString().ShouldBe("7.50");
 
@@ -271,111 +270,4 @@ public sealed class ExportEndpointsTests : IDisposable
         string name, DataType type, int? length = null, int? precision = null, int? scale = null,
         bool nullable = true, bool unique = false, string? defaultValue = null) =>
         new(name, type, length, precision, scale, nullable, unique, defaultValue);
-
-    private static Task<HttpResponseMessage> PostAsync(HttpClient http, string path, object body) =>
-        http.PostAsJsonAsync(new Uri(path, UriKind.Relative), body, Ct);
-
-    private static async Task<JsonElement> Json(HttpResponseMessage response, HttpStatusCode expected)
-    {
-        var text = await response.Content.ReadAsStringAsync(Ct);
-        response.StatusCode.ShouldBe(expected, text);
-        using var document = JsonDocument.Parse(text);
-        return document.RootElement.Clone();
-    }
-
-    private static async Task WaitUntilHealthyAsync(HttpClient http, Process api)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(90);
-        while (DateTime.UtcNow < deadline)
-        {
-            api.HasExited.ShouldBeFalse("The exported API stopped while starting.");
-            try
-            {
-                if ((await http.GetAsync(new Uri("/health", UriKind.Relative), Ct)).IsSuccessStatusCode)
-                {
-                    return;
-                }
-            }
-            catch (HttpRequestException)
-            {
-                // Not listening yet.
-            }
-
-            await Task.Delay(500, Ct);
-        }
-
-        throw new ShouldAssertException("The exported API didn't become healthy within 90 seconds.");
-    }
-
-    private static Process Start(StringBuilder log, string dll, Dictionary<string, string> environment)
-    {
-        var info = new ProcessStartInfo("dotnet", $"\"{dll}\"") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var (key, value) in environment)
-        {
-            info.Environment[key] = value;
-        }
-
-        var process = Process.Start(info)!;
-        process.OutputDataReceived += (_, line) => { lock (log) { log.AppendLine(line.Data); } };
-        process.ErrorDataReceived += (_, line) => { lock (log) { log.AppendLine(line.Data); } };
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        return process;
-    }
-
-    private static async Task<(int ExitCode, string Output)> RunAsync(string file, string arguments, string directory, TimeSpan timeout)
-    {
-        var info = new ProcessStartInfo(file, arguments)
-        {
-            WorkingDirectory = directory,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        using var process = Process.Start(info)!;
-        var output = new StringBuilder();
-        process.OutputDataReceived += (_, line) => { lock (output) { output.AppendLine(line.Data); } };
-        process.ErrorDataReceived += (_, line) => { lock (output) { output.AppendLine(line.Data); } };
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        cancel.CancelAfter(timeout);
-        try
-        {
-            await process.WaitForExitAsync(cancel.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            throw;
-        }
-
-        lock (output)
-        {
-            return (process.ExitCode, output.ToString());
-        }
-    }
-
-    private static string? FindOnPath(string tool)
-    {
-        var names = OperatingSystem.IsWindows() ? [tool + ".exe"] : new[] { tool };
-        var folders = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)
-            .Append(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "tools"));
-        return folders.SelectMany(folder => names.Select(name => Path.Combine(folder, name))).FirstOrDefault(File.Exists);
-    }
-
-    private static int FreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
-    }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var connection = new MySqlConnection(_api.EngineConnectionString);
-        await connection.OpenAsync(CancellationToken.None);
-        await using var command = new MySqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
-    }
 }
