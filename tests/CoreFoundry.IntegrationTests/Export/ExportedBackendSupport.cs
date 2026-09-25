@@ -11,8 +11,8 @@ namespace CoreFoundry.IntegrationTests.Export;
 
 /// <summary>
 /// Shared plumbing for tests that build and run an exported backend over HTTP: process management, waiting
-/// for it to come up, and small JSON/HTTP helpers. Shared by <see cref="ExportEndpointsTests"/> and
-/// <see cref="AccessEndpointsTests"/>.
+/// for it to come up, and small JSON/HTTP helpers. Shared by <see cref="ExportEndpointsTests"/>,
+/// <see cref="AccessEndpointsTests"/> and <see cref="RealtimeEndpointsTests"/>.
 /// </summary>
 internal static class ExportedBackendSupport
 {
