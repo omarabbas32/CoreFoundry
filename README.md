@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M3 done: the schema engine** (plan, apply, history, drift on real MySQL tables). Next: M4 Data API. See [the phases](docs/phases/README.md).
+> Status: **M4 built: the Data API and data viewer** (rows of the applied tables, from the UI or any HTTP client); the hands-on UI and curl check is still open. Next: M5 polish. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -66,6 +66,9 @@ tables, and the schema diagram shows the relations (pan, zoom, drag). Draft chan
 project's database only through **Review plan** (`/projects/<id>/schema`): it shows every
 operation and the exact SQL, and Admins apply it from there. **History** lists every apply with
 its SQL and any error, and the project page warns when the database was changed outside CoreFoundry.
+**Browse data** (`/projects/<id>/data/<table>`) shows the rows of applied tables: sortable columns,
+paging, and a side panel to add or edit a row. The form is generated from the applied columns,
+reference columns get a picker that searches the other table, and deletes ask for confirmation first.
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
 
 ### Tests
@@ -118,6 +121,13 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | GET | `/api/projects/{id}/schema/migrations?page=&pageSize=` | Developer+; applies, newest first |
 | GET | `/api/projects/{id}/schema/migrations/{migrationId}` | Developer+; statements, status, `statementsApplied`, `failedStatement`, error |
 | GET | `/api/projects/{id}/schema/drift` | Developer+; changes made to the database outside CoreFoundry since the last apply |
+| GET | `/api/projects/{id}/data` | Developer+; the applied tables and their columns (type, nullable, unique, default, references, writable) |
+| GET | `/api/projects/{id}/data/{table}?page=&pageSize=&sort=` | Developer+; `{ items, page, pageSize, total }`; `pageSize` 1–100 (default 25), `sort` a column, `-` first for descending |
+| GET | `/api/projects/{id}/data/{table}/{rowId}` | Developer+; one row |
+| POST | `/api/projects/{id}/data/{table}` | Developer+; JSON object of column values → 201 + the row |
+| PUT | `/api/projects/{id}/data/{table}/{rowId}` | Developer+; full replace: columns left out get their default, or NULL |
+| DELETE | `/api/projects/{id}/data/{table}/{rowId}` | Developer+; 204; 409 if other rows still reference it (`Restrict`) |
+| GET | `/api/projects/{id}/data/{table}/lookup?q=&limit=` | Developer+; `[{ id, label }]` for reference pickers (label = first Varchar column) |
 
 Every table change carries the `version` the client last saw and returns the whole table with
 its new version; a stale version gets **409**.
@@ -143,6 +153,49 @@ with a snapshot of the real schema. If a statement fails, the journal row keeps 
 statement and MySQL's error. Planning again compares the draft with the real database, so the new
 plan contains only the changes that are still missing. Tables and columns that CoreFoundry didn't
 create are reported but never dropped.
+
+### Data API with curl
+
+Once a plan has created `authors` and `books` in project 7, rows can be written with any HTTP
+client. The access token comes from register/login and lasts 15 minutes:
+
+```bash
+API=http://localhost:5172
+curl -s $API/api/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"me@example.com","password":"correct horse battery"}'
+# → {"accessToken":"eyJ…","expiresAt":"…","user":{"id":1,"email":"me@example.com"}}
+TOKEN=eyJ…   # paste the accessToken
+AUTH="Authorization: Bearer $TOKEN"
+
+# Insert: 201 with the stored row
+curl -s -X POST $API/api/projects/7/data/authors -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"name":"Frank Herbert"}'
+# → {"id":1,"name":"Frank Herbert"}
+curl -s -X POST $API/api/projects/7/data/books -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"title":"Dune","price_usd":"19.99","published_on":"1965-08-01","author_id":1}'
+
+# List, most expensive first, 10 per page
+curl -s "$API/api/projects/7/data/books?sort=-price_usd&pageSize=10&page=1" -H "$AUTH"
+# → {"items":[{"id":1,"title":"Dune","price_usd":"19.99",…}],"page":1,"pageSize":10,"total":1}
+
+# Replace (columns left out get their default, or NULL), then delete
+curl -s -X PUT $API/api/projects/7/data/books/1 -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"title":"Dune","price_usd":"17.50","author_id":1}'
+curl -s -X DELETE $API/api/projects/7/data/books/1 -H "$AUTH" -o /dev/null -w "%{http_code}\n"   # → 204
+```
+
+**Values:** Int/BigInt are JSON integers (the API returns ids as numbers; above 2^53 JavaScript
+loses precision). Decimals may be sent as numbers or strings but are always returned as **strings**,
+so no digits are lost, and more decimals than the column has is an error, never rounded. Bool is
+`true`/`false`, Date is `yyyy-MM-dd`, DateTime is ISO-8601 (a value with an offset is stored in UTC;
+values come back without an offset), Uuid is the canonical form and Json takes any JSON value.
+Invalid fields come back together as a 400 `ValidationProblemDetails` keyed by column. A duplicate
+unique value or a row that others still reference is a 409; a reference to a missing row is a 400
+on that column.
+
+**What the Data API sees:** the tables and columns as they were after the last successful apply,
+never the draft. A column you just renamed in the designer keeps its old name here until you apply.
+Tables and columns created outside CoreFoundry aren't served.
 
 After pulling new migrations: `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`
 
