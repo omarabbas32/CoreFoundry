@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { isRequired } from "@/lib/data-form";
 import { useDataSchema, useProject } from "@/lib/queries";
 import type { DataColumn, DataTable } from "@/lib/types";
+import { ExportCard } from "../export-card";
 
 /** The browser's origin, or "" while rendering on the server (the page is a client page, but still prerendered). */
 function useOrigin() {
@@ -60,6 +61,8 @@ export default function ApiPage() {
       </Card>
 
       <AuthCard origin={origin} email={user?.email ?? "you@example.com"} />
+
+      <ExportCard projectId={projectId} />
 
       {tables.length === 0 ? (
         <Card className="grid justify-items-center gap-2 px-6 py-12 text-center">

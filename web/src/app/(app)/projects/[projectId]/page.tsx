@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api";
 import { useDrift, useProject } from "@/lib/queries";
 import { atLeast } from "@/lib/types";
 import { DeleteProjectSection } from "./delete-project-section";
+import { ExportCard } from "./export-card";
 import { MembersSection } from "./members-section";
 import { RenameProjectForm } from "./rename-project-form";
 
@@ -115,6 +116,8 @@ export default function ProjectPage() {
           </Link>
         </div>
       </Card>
+
+      {data.status === "Active" && <ExportCard projectId={data.id} />}
 
       <MembersSection project={data} />
 

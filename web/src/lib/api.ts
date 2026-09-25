@@ -93,8 +93,8 @@ async function send(path: string, { method = "GET", body }: RequestOptions) {
   return fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
 }
 
-/** Calls the API; on 401 refreshes the session once and retries. Throws {@link ApiError} on failure. */
-export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/** Sends with the access token; on 401 refreshes the session once and retries. Throws {@link ApiError} on failure. */
+async function authorized(path: string, options: RequestOptions): Promise<Response> {
   let response = await send(path, options);
 
   if (response.status === 401 && !path.startsWith("/api/auth/")) {
@@ -108,6 +108,21 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   if (!response.ok) throw await toApiError(response);
+  return response;
+}
+
+/** Calls the API and reads its JSON. Throws {@link ApiError} on failure. */
+export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await authorized(path, options);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+/** Downloads a file (e.g. a zip) with the same auth as {@link api}; the name comes from Content-Disposition. */
+export async function download(path: string, fallbackName: string): Promise<{ blob: Blob; fileName: string }> {
+  const response = await authorized(path, {});
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1];
+  return { blob: await response.blob(), fileName: encoded ? decodeURIComponent(encoded) : (plain ?? fallbackName) };
 }
