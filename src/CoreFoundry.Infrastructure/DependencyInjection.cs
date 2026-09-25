@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddSingleton<ISchemaEngine>(new MySqlSchemaEngine(engine));
         services.AddMemoryCache();
         services.AddScoped<ISnapshotProvider, CachedSnapshotProvider>();
+        services.AddSingleton<IDataRepository>(new MySqlDataRepository(engine));
 
         services.AddOptions<JwtOptions>()
             .Bind(configuration.GetSection(JwtOptions.SectionName))
