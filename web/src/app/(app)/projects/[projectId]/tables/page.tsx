@@ -8,12 +8,14 @@ import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Button, Card } from "@/components/ui";
 import { useProject, useTables } from "@/lib/queries";
 import { CreateTableDialog } from "./create-table-dialog";
+import { TemplateDialog } from "./template-dialog";
 
 export default function TablesPage() {
   const projectId = Number(useParams<{ projectId: string }>().projectId);
   const project = useProject(projectId);
   const tables = useTables(projectId);
   const [creating, setCreating] = useState(false);
+  const [choosingTemplate, setChoosingTemplate] = useState(false);
 
   if (tables.isPending) return <FullPageSpinner label="Loading tables…" />;
 
@@ -50,8 +52,15 @@ export default function TablesPage() {
       {tables.data?.length === 0 && (
         <Card className="grid justify-items-center gap-3 px-6 py-14 text-center">
           <p className="font-medium">No tables yet</p>
-          <p className="max-w-sm text-sm text-muted">Design your first table, for example authors or books.</p>
-          <Button onClick={() => setCreating(true)}>Create a table</Button>
+          <p className="max-w-sm text-sm text-muted">
+            Design your first table, for example authors or books, or start from a ready schema.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button onClick={() => setCreating(true)}>Create a table</Button>
+            <Button variant="secondary" onClick={() => setChoosingTemplate(true)}>
+              Start from a template
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -78,6 +87,7 @@ export default function TablesPage() {
       )}
 
       <CreateTableDialog projectId={projectId} open={creating} onClose={() => setCreating(false)} />
+      <TemplateDialog projectId={projectId} open={choosingTemplate} onClose={() => setChoosingTemplate(false)} />
     </div>
   );
 }

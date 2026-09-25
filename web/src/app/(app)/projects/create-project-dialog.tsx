@@ -2,11 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { TemplatePicker, type TemplateChoice } from "@/components/template-picker";
 import { Alert, Button, Dialog, Field, Input } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useCreateProject } from "@/lib/queries";
+import { useCreateProject, useApplyTemplate } from "@/lib/queries";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Give the project a name.").max(100, "Use at most 100 characters."),
@@ -15,6 +17,8 @@ const schema = z.object({
 export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const create = useCreateProject();
+  const applyTemplate = useApplyTemplate();
+  const [choice, setChoice] = useState<TemplateChoice>({ key: null, withSampleData: true });
   const {
     register,
     handleSubmit,
@@ -26,14 +30,24 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
   function close() {
     reset();
     create.reset();
+    applyTemplate.reset();
+    setChoice({ key: null, withSampleData: true });
     onClose();
   }
 
   const submit = handleSubmit(async ({ name }) => {
     try {
       const project = await create.mutateAsync(name);
+      if (choice.key) {
+        try {
+          await applyTemplate.mutateAsync({ projectId: project.id, key: choice.key, withSampleData: choice.withSampleData });
+        } catch {
+          // The project exists; its empty designer offers the template again.
+        }
+      }
+
       close();
-      router.push(`/projects/${project.id}`);
+      router.push(choice.key ? `/projects/${project.id}/tables` : `/projects/${project.id}`);
     } catch (error) {
       if (error instanceof ApiError && error.fieldErrors.name) setError("name", { message: error.fieldErrors.name[0] });
     }
@@ -57,11 +71,12 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
             {...register("name")}
           />
         </Field>
+        <TemplatePicker value={choice} onChange={setChoice} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={close}>
             Cancel
           </Button>
-          <Button type="submit" loading={create.isPending}>
+          <Button type="submit" loading={create.isPending || applyTemplate.isPending}>
             Create project
           </Button>
         </div>

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { FullPageSpinner } from "@/components/full-page-spinner";
 import { Alert, Button, Card, ConfirmDialog, Select } from "@/components/ui";
 import { formatCell } from "@/lib/data-form";
-import { useDataSchema, useDeleteRow, useProject, useRows } from "@/lib/queries";
+import { useDataSchema, useDeleteRow, useLoadSampleData, useProject, useRows } from "@/lib/queries";
 import type { DataColumn, DataRow, DataTable } from "@/lib/types";
 import { RowPanel } from "./row-panel";
 
@@ -70,7 +70,7 @@ export default function DataViewerPage() {
       {schema.error && <Alert>{schema.error.message}</Alert>}
       {schema.data &&
         (table ? (
-          <TableData key={table.name} projectId={projectId} table={table} />
+          <TableData key={table.name} projectId={projectId} table={table} fromTemplate={Boolean(project.data?.templateKey)} />
         ) : (
           <Card className="grid justify-items-center gap-2 px-6 py-12 text-center">
             <p className="font-medium">
@@ -88,7 +88,7 @@ export default function DataViewerPage() {
 
 type Editing = { row: DataRow | null } | null;
 
-function TableData({ projectId, table }: { projectId: number; table: DataTable }) {
+function TableData({ projectId, table, fromTemplate }: { projectId: number; table: DataTable; fromTemplate: boolean }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sort, setSort] = useState("");
@@ -97,6 +97,7 @@ function TableData({ projectId, table }: { projectId: number; table: DataTable }
   const [notice, setNotice] = useState<string | null>(null);
   const rows = useRows(projectId, table.name, page, pageSize, sort, true);
   const remove = useDeleteRow(projectId, table.name);
+  const loadSample = useLoadSampleData(projectId);
 
   const total = rows.data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -142,8 +143,29 @@ function TableData({ projectId, table }: { projectId: number; table: DataTable }
       {rows.data && total === 0 ? (
         <Card className="grid justify-items-center gap-3 px-6 py-12 text-center">
           <p className="font-medium">No rows yet</p>
-          <p className="text-sm text-muted">Add the first one.</p>
-          <Button onClick={() => setEditing({ row: null })}>Add row</Button>
+          <p className="text-sm text-muted">Add the first one{fromTemplate ? ", or load the template's sample data" : ""}.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button onClick={() => setEditing({ row: null })}>Add row</Button>
+            {fromTemplate && (
+              <Button
+                variant="secondary"
+                loading={loadSample.isPending}
+                onClick={() =>
+                  void loadSample
+                    .mutateAsync()
+                    .then((result) =>
+                      setNotice(
+                        `Added ${result.inserted} sample rows.` + (result.skipped.length ? ` Left out: ${result.skipped.join("; ")}.` : ""),
+                      ),
+                    )
+                    .catch(() => undefined) // shown below
+                }
+              >
+                Load sample data
+              </Button>
+            )}
+          </div>
+          {loadSample.error && <Alert>{loadSample.error.message}</Alert>}
         </Card>
       ) : (
         <Card className="overflow-x-auto">

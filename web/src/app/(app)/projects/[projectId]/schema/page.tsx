@@ -74,6 +74,16 @@ export default function ReviewPlanPage() {
           <Link href={`/projects/${projectId}/schema/history`} className="underline">
             See history
           </Link>
+          {applied.sampleData && (
+            <>
+              <br />
+              Added {applied.sampleData.inserted} sample rows.{" "}
+              <Link href={`/projects/${projectId}/data`} className="underline">
+                Browse data
+              </Link>
+              {applied.sampleData.skipped.length > 0 && <> Left out: {applied.sampleData.skipped.join("; ")}.</>}
+            </>
+          )}
         </p>
       )}
       {apply.error && <ApplyError error={apply.error} projectId={projectId} onRefresh={() => void plan.refetch()} />}
