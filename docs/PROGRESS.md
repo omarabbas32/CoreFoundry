@@ -456,6 +456,9 @@ First the open M4 and M6 hands-on checks (Bookshop from the UI and with curl), t
 | `fadad92` | Share the exported backend's build, run and teardown between the three end-to-end tests |
 | `eea87c0` | Test the Swagger lock, simultaneous first sign-ups, the query-string hub token, a Signed-in table and the forgotten subscriptions end to end |
 | `0459d5e` | Describe the real access and realtime end-to-end tests, the hub wiring and the send bound in the docs |
+| `3afaa7f` | Tick M8 and M9's Definition of done, update the test counts and list the branch's commits |
+| `0a4b1a2` | Keep access edits from racing and match pending-drop handling on the API page |
+| `b29dbf5` | Show readable access level names in the selects |
 
 ## Commits on `m7-schema-templates`
 
