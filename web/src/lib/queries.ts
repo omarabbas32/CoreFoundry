@@ -2,7 +2,19 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
-import type { ColumnInput, Member, Project, ProjectRole, Table, TableSummary } from "./types";
+import type {
+  ApplyResult,
+  ColumnInput,
+  Drift,
+  Member,
+  Migration,
+  MigrationPage,
+  Project,
+  ProjectRole,
+  SchemaPlan,
+  Table,
+  TableSummary,
+} from "./types";
 
 export const queryKeys = {
   projects: ["projects"] as const,
@@ -11,6 +23,10 @@ export const queryKeys = {
   tables: (projectId: number) => ["projects", projectId, "tables"] as const,
   table: (projectId: number, tableId: number) => ["projects", projectId, "tables", tableId] as const,
   schema: (projectId: number) => ["projects", projectId, "schema"] as const,
+  plan: (projectId: number) => ["projects", projectId, "plan"] as const,
+  migrations: (projectId: number, page: number) => ["projects", projectId, "migrations", page] as const,
+  migration: (projectId: number, id: number) => ["projects", projectId, "migration", id] as const,
+  drift: (projectId: number) => ["projects", projectId, "drift"] as const,
 };
 
 export function useProjects() {
@@ -197,5 +213,52 @@ export function useTableChange(projectId: number, tableId: number) {
       else queryClient.removeQueries({ queryKey: key });
       return invalidateTableLists(queryClient, projectId);
     },
+  });
+}
+
+// ---- Schema engine ------------------------------------------------------------------------------
+
+/** The plan is computed fresh each time (it reads the real database), never served stale. */
+export function usePlan(projectId: number) {
+  return useQuery({
+    queryKey: queryKeys.plan(projectId),
+    queryFn: () => api<SchemaPlan>(`/api/projects/${projectId}/schema/plan`),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useMigrations(projectId: number, page: number) {
+  return useQuery({
+    queryKey: queryKeys.migrations(projectId, page),
+    queryFn: () => api<MigrationPage>(`/api/projects/${projectId}/schema/migrations?page=${page}`),
+  });
+}
+
+/** Loaded when a history row is expanded. */
+export function useMigration(projectId: number, id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.migration(projectId, id),
+    queryFn: () => api<Migration>(`/api/projects/${projectId}/schema/migrations/${id}`),
+    enabled,
+  });
+}
+
+export function useDrift(projectId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.drift(projectId),
+    queryFn: () => api<Drift>(`/api/projects/${projectId}/schema/drift`),
+    enabled,
+  });
+}
+
+/** Applies the reviewed plan. Afterwards everything about the project may have changed, so all of it is refetched. */
+export function useApply(projectId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { planHash: string; acknowledgeDestructive: boolean }) =>
+      api<ApplyResult>(`/api/projects/${projectId}/schema/apply`, { method: "POST", body: input }),
+    // Also after a failure: part of the plan may have run, and history has a new row.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) }),
   });
 }

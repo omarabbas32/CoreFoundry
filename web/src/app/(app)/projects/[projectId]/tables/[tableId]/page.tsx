@@ -133,7 +133,7 @@ function Designer({
         </div>
       </div>
 
-      <DraftBanner />
+      <DraftBanner projectId={projectId} />
 
       {conflict ? (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">

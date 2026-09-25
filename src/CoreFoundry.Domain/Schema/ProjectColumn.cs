@@ -70,4 +70,6 @@ public sealed class ProjectColumn
     internal void MoveTo(int ordinalPosition) => OrdinalPosition = ordinalPosition;
 
     internal void SetPendingDrop(bool pendingDrop) => PendingDrop = pendingDrop;
+
+    internal void MarkApplied() => AppliedName = Name;
 }

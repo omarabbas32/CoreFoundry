@@ -16,8 +16,16 @@ jobs:
           global-json-file: global.json
       - run: dotnet restore
       - run: dotnet build --no-restore -c Release
-      # Tests that need MySQL come later with a test container; current tests need no database.
-      - run: dotnet test --no-build -c Release
+      # Unit tests with coverage; the schema engine's differ and renderer must stay at >= 90% (M3).
+      - run: dotnet test --no-build -c Release --project tests/CoreFoundry.UnitTests --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+      - run: python3 build/check-coverage.py TestResults/coverage.cobertura.xml 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: TestResults/coverage.cobertura.xml
+      # Integration tests skip themselves without a MySQL connection string (local MySQL only, D26).
+      - run: dotnet test --no-build -c Release --project tests/CoreFoundry.IntegrationTests
 
   web:
     name: Web (lint + build)

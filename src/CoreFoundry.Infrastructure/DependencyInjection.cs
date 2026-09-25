@@ -2,6 +2,7 @@ using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Common;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Application.Schema;
+using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Infrastructure.Auth;
 using CoreFoundry.Infrastructure.Engine;
 using CoreFoundry.Infrastructure.HealthChecks;
@@ -37,6 +38,10 @@ public static class DependencyInjection
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<ITableRepository, TableRepository>();
         services.AddSingleton<IProjectDatabaseProvisioner>(new MySqlProjectDatabaseProvisioner(engine));
+        services.AddScoped<ISchemaMigrationRepository, SchemaMigrationRepository>();
+        services.AddSingleton<ISqlRenderer, MySqlSqlRenderer>();
+        services.AddSingleton<ISchemaIntrospector>(new MySqlSchemaIntrospector(engine));
+        services.AddSingleton<ISchemaEngine>(new MySqlSchemaEngine(engine));
 
         services.AddOptions<JwtOptions>()
             .Bind(configuration.GetSection(JwtOptions.SectionName))

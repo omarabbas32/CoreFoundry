@@ -12,11 +12,14 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Shouldly" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CoreFoundry.Application\CoreFoundry.Application.csproj" />
     <ProjectReference Include="..\..\src\CoreFoundry.Domain\CoreFoundry.Domain.csproj" />
+    <!-- For the SQL renderer, which is MySQL-specific but pure. -->
+    <ProjectReference Include="..\..\src\CoreFoundry.Infrastructure\CoreFoundry.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

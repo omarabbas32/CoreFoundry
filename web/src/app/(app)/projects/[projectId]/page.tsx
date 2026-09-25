@@ -6,7 +6,7 @@ import { FullPageSpinner } from "@/components/full-page-spinner";
 import { RoleBadge, StatusBadge } from "@/components/project-badges";
 import { Alert, Card } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useProject } from "@/lib/queries";
+import { useDrift, useProject } from "@/lib/queries";
 import { atLeast } from "@/lib/types";
 import { DeleteProjectSection } from "./delete-project-section";
 import { MembersSection } from "./members-section";
@@ -73,23 +73,65 @@ export default function ProjectPage() {
         </Alert>
       )}
 
+      {data.status === "Active" && <DriftBanner projectId={data.id} />}
+
       <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
-          <h2 className="font-semibold">Tables</h2>
-          <p className="text-sm text-muted">Design the tables and columns of the project&apos;s database.</p>
+          <h2 className="font-semibold">Schema</h2>
+          <p className="text-sm text-muted">Design tables, review the SQL plan, then apply it to the project&apos;s database.</p>
         </div>
-        <Link
-          href={`/projects/${data.id}/tables`}
-          className="inline-flex h-9 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
-        >
-          Open table designer
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/projects/${data.id}/tables`}
+            className="inline-flex h-9 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
+          >
+            Open table designer
+          </Link>
+          <Link
+            href={`/projects/${data.id}/schema`}
+            className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            Review plan
+          </Link>
+          <Link
+            href={`/projects/${data.id}/schema/history`}
+            className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            History
+          </Link>
+        </div>
       </Card>
 
       <MembersSection project={data} />
 
       {atLeast(data.role, "Admin") && <RenameProjectForm project={data} />}
       {data.role === "Owner" && <DeleteProjectSection project={data} />}
+    </div>
+  );
+}
+
+/** Shown when the database was changed outside CoreFoundry since the last apply. */
+function DriftBanner({ projectId }: { projectId: number }) {
+  const drift = useDrift(projectId, true);
+  if (!drift.data || drift.data.differences.length === 0) return null;
+
+  return (
+    <div role="alert" className="grid gap-1 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn" data-testid="drift-banner">
+      <p className="font-medium">
+        The database was changed outside CoreFoundry
+        {drift.data.sinceVersion !== null ? ` since schema version ${drift.data.sinceVersion}` : ""}.
+      </p>
+      <ul className="list-disc pl-5">
+        {drift.data.differences.map((difference) => (
+          <li key={difference}>{difference}</li>
+        ))}
+      </ul>
+      <p>
+        <Link href={`/projects/${projectId}/schema`} className="underline">
+          Review the plan
+        </Link>{" "}
+        to see what applying the draft would change now.
+      </p>
     </div>
   );
 }

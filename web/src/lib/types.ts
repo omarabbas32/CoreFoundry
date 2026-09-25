@@ -37,7 +37,7 @@ export const referenceActions = ["Restrict", "Cascade", "SetNull"] as const;
 export type ReferenceAction = (typeof referenceActions)[number];
 
 /** Where a table or column stands relative to the real database ("Changed" arrives with the schema engine). */
-export type SchemaObjectState = "New" | "Applied" | "PendingDrop";
+export type SchemaObjectState = "New" | "Applied" | "Changed" | "PendingDrop";
 
 export type Column = {
   id: number;
@@ -81,3 +81,50 @@ export type ColumnInput = Pick<
   Column,
   "name" | "dataType" | "length" | "precision" | "scale" | "isNullable" | "isUnique" | "defaultValue" | "referencesTableId" | "onDelete"
 >;
+
+// ---- Schema engine ------------------------------------------------------------------------------
+
+export type OperationRisk = "Safe" | "Risky" | "Destructive";
+
+export type PlanOperation = {
+  /** The operation type, e.g. "CreateTable", "RenameColumn", "AddForeignKey". */
+  kind: string;
+  table: string;
+  description: string;
+  risk: OperationRisk;
+  riskReason: string | null;
+};
+
+/** `planHash` must be sent back to apply exactly this plan. */
+export type SchemaPlan = {
+  planHash: string;
+  schemaVersion: number;
+  operations: PlanOperation[];
+  statements: string[];
+  warnings: string[];
+  unmanagedTables: string[];
+  unmanagedColumns: string[];
+  hasDestructive: boolean;
+};
+
+export type MigrationStatus = "Pending" | "Applied" | "Failed";
+
+export type ApplyResult = { migrationId: number; version: number; status: MigrationStatus; statements: number };
+
+export type MigrationSummary = {
+  id: number;
+  version: number;
+  status: MigrationStatus;
+  statementCount: number;
+  statementsApplied: number;
+  requestedBy: number | null;
+  createdAt: string;
+  completedAt: string | null;
+  error: string | null;
+};
+
+export type Migration = MigrationSummary & { statements: string[]; failedStatement: number | null };
+
+export type MigrationPage = { items: MigrationSummary[]; total: number; page: number; pageSize: number };
+
+export type Drift = { differences: string[]; sinceVersion: number | null };

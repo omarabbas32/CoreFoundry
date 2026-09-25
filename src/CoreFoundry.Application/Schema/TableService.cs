@@ -2,6 +2,7 @@ using CoreFoundry.Application.Common;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Domain.Common;
 using CoreFoundry.Domain.Projects;
+using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Domain.Schema;
 
 namespace CoreFoundry.Application.Schema;
@@ -14,12 +15,15 @@ namespace CoreFoundry.Application.Schema;
 /// Every change to an existing table takes the <c>version</c> the caller last saw. If someone else
 /// changed the table since, the change is refused with a conflict instead of overwriting theirs.
 /// </remarks>
-public sealed class TableService(IProjectRepository projects, ITableRepository tables, IUnitOfWork unitOfWork)
+public sealed class TableService(
+    IProjectRepository projects, ITableRepository tables, ISchemaMigrationRepository migrations, IUnitOfWork unitOfWork)
 {
     public async Task<IReadOnlyList<TableSummaryDto>> ListAsync(long projectId, CancellationToken cancellationToken)
     {
         await EnsureProjectVisibleAsync(projectId, cancellationToken);
-        return [.. (await tables.ListAsync(projectId, cancellationToken)).Select(TableDto.SummaryFrom)];
+        var all = await tables.ListAsync(projectId, cancellationToken);
+        var context = await ContextAsync(projectId, all, cancellationToken);
+        return [.. all.Select(table => TableDto.SummaryFrom(table, context))];
     }
 
     public async Task<TableDto> GetAsync(long projectId, long tableId, CancellationToken cancellationToken) =>
@@ -30,8 +34,8 @@ public sealed class TableService(IProjectRepository projects, ITableRepository t
     {
         await EnsureProjectVisibleAsync(projectId, cancellationToken);
         var all = await tables.ListAsync(projectId, cancellationToken);
-        var names = all.ToDictionary(table => table.Id, table => table.Name);
-        return [.. all.Select(table => TableDto.From(table, names))];
+        var context = await ContextAsync(projectId, all, cancellationToken);
+        return [.. all.Select(table => TableDto.From(table, context))];
     }
 
     /// <summary>Creates a table, optionally with its first columns. Errors are keyed like <c>columns[2].length</c>.</summary>
@@ -167,7 +171,16 @@ public sealed class TableService(IProjectRepository projects, ITableRepository t
     }
 
     private async Task<TableDto> ToDtoAsync(ProjectTable table, CancellationToken cancellationToken) =>
-        TableDto.From(table, await tables.ListNamesAsync(table.ProjectId, cancellationToken));
+        TableDto.From(table, new SchemaContext(
+            await tables.ListNamesAsync(table.ProjectId, cancellationToken),
+            await SnapshotAsync(table.ProjectId, cancellationToken)));
+
+    private async Task<SchemaContext> ContextAsync(long projectId, IReadOnlyList<ProjectTable> all, CancellationToken cancellationToken) =>
+        new(all.ToDictionary(table => table.Id, table => new TableName(table.Name, table.AppliedName)),
+            await SnapshotAsync(projectId, cancellationToken));
+
+    private async Task<SchemaSnapshot> SnapshotAsync(long projectId, CancellationToken cancellationToken) =>
+        SchemaSnapshot.FromJson((await migrations.LatestAppliedAsync(projectId, cancellationToken))?.SnapshotJson);
 
     /// <summary>The referenced table must be in this project (a self-reference is the table itself) and not pending drop.</summary>
     private async Task EnsureReferenceTargetAsync(

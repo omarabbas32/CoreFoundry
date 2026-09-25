@@ -47,12 +47,17 @@ public sealed class MetadataModelTests : IDisposable
     [InlineData(typeof(Project), new[] { nameof(Project.Slug) })]
     [InlineData(typeof(ProjectTable), new[] { nameof(ProjectTable.ProjectId), nameof(ProjectTable.Name) })]
     [InlineData(typeof(ProjectColumn), new[] { nameof(ProjectColumn.TableId), nameof(ProjectColumn.Name) })]
-    [InlineData(typeof(SchemaMigration), new[] { nameof(SchemaMigration.ProjectId), nameof(SchemaMigration.Version) })]
     public void Has_unique_index(Type entity, string[] columns) =>
         Model.FindEntityType(entity)!.GetIndexes()
             .Where(index => index.IsUnique)
             .Select(index => index.Properties.Select(property => property.Name).ToArray())
             .ShouldContain(unique => unique.SequenceEqual(columns));
+
+    [Fact]
+    public void Migration_versions_repeat_for_retries_of_a_failed_apply() =>
+        Model.FindEntityType(typeof(SchemaMigration))!.GetIndexes()
+            .Single(index => index.Properties.Select(property => property.Name).SequenceEqual([nameof(SchemaMigration.ProjectId), nameof(SchemaMigration.Version)]))
+            .IsUnique.ShouldBeFalse();
 
     [Theory]
     [InlineData(typeof(RefreshToken), nameof(RefreshToken.UserId), DeleteBehavior.Cascade)]
