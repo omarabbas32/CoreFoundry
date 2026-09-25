@@ -4,6 +4,13 @@ import { Select } from "./ui";
 /** What each level means in the exported API; shown once next to the selects. */
 export const accessLevelHint = "Public: anyone, no token · Signed-in: any signed-in user · Admin: users with the Admin role";
 
+/** Human-readable label for each level; the option `value`s stay the raw API names ("Public" / "SignedIn" / "Admin"). */
+export const accessLevelLabels: Record<AccessLevel, string> = {
+  Public: "Public",
+  SignedIn: "Signed-in",
+  Admin: "Admin",
+};
+
 /** Bumps `write` up to `read` when it would otherwise be wider than the new read level. */
 export function clampWrite(read: AccessLevel, write: AccessLevel): AccessLevel {
   return accessLevelRank[write] < accessLevelRank[read] ? read : write;
@@ -43,7 +50,7 @@ export function AccessSelects({
         >
           {accessLevels.map((level) => (
             <option key={level} value={level}>
-              {level}
+              {accessLevelLabels[level]}
             </option>
           ))}
         </Select>
@@ -60,7 +67,7 @@ export function AccessSelects({
         >
           {accessLevels.map((level) => (
             <option key={level} value={level} disabled={accessLevelRank[level] < accessLevelRank[read]}>
-              {level}
+              {accessLevelLabels[level]}
             </option>
           ))}
         </Select>
