@@ -111,18 +111,28 @@ internal static class RealtimeFiles
             namespace {{n}}.Infrastructure.Realtime;
 
             /// <summary>
-            /// Sends <c>change</c> with <c>{ table, operation, id }</c> to the table's subscribers. A failed send is logged,
-            /// never thrown: the row is saved already.
+            /// Sends <c>change</c> with <c>{ table, operation, id }</c> to the table's subscribers. A failed or timed-out send
+            /// is logged, never thrown: the row is saved already.
             /// </summary>
             internal sealed class SignalRChangePublisher(IHubContext<RealtimeHub> hub, ILogger<SignalRChangePublisher> logger) : IChangePublisher
             {
+                /// <summary>How long one change may wait for its subscribers' connections before the send is given up.</summary>
+                private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(5);
+
                 public async Task PublishAsync(ChangeEvent change, CancellationToken cancellationToken)
                 {
                     ArgumentNullException.ThrowIfNull(change);
+                    // Bounded: the send waits for every subscriber's connection, so one that stops reading would otherwise hold up every write to the table.
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeout.CancelAfter(SendTimeout);
                     try
                     {
                         await hub.Clients.Group(RealtimeHub.GroupName(change.Table))
-                            .SendAsync("change", new { table = change.Table, operation = Name(change.Operation), id = change.Id }, cancellationToken);
+                            .SendAsync("change", new { table = change.Table, operation = Name(change.Operation), id = change.Id }, timeout.Token);
+                    }
+                    catch (OperationCanceledException ex)
+                    {
+                        logger.LogWarning(ex, "Gave up sending the {Operation} of {Table} row {Id} to its subscribers after {Timeout}.", change.Operation, change.Table, change.Id, SendTimeout);
                     }
                     catch (Exception ex)
                     {

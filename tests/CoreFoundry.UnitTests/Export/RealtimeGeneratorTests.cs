@@ -100,12 +100,25 @@ public class RealtimeGeneratorTests
         publisher.ShouldContain("IHubContext<RealtimeHub> hub");
         publisher.ShouldContain(": IChangePublisher");
         publisher.ShouldContain("hub.Clients.Group(RealtimeHub.GroupName(change.Table))");
-        publisher.ShouldContain(".SendAsync(\"change\", new { table = change.Table, operation = Name(change.Operation), id = change.Id }, cancellationToken);");
+        publisher.ShouldContain(".SendAsync(\"change\", new { table = change.Table, operation = Name(change.Operation), id = change.Id }, timeout.Token);");
         publisher.ShouldContain("ChangeOperation.Insert => \"insert\",");
         publisher.ShouldContain("ChangeOperation.Update => \"update\",");
         publisher.ShouldContain("ChangeOperation.Delete => \"delete\",");
         publisher.ShouldContain("catch (Exception ex)");
         publisher.ShouldContain("logger.LogError(ex,");
+    }
+
+    [Fact]
+    public void The_publisher_gives_up_on_a_send_after_five_seconds_and_logs_it()
+    {
+        var publisher = File("src/Bookshop.Infrastructure/Realtime/SignalRChangePublisher.cs");
+        publisher.ShouldContain("private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(5);");
+        publisher.ShouldContain("using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);\n        timeout.CancelAfter(SendTimeout);");
+        publisher.ShouldNotContain("}, cancellationToken);"); // the send gets the bounded token only
+        publisher.ShouldContain("catch (OperationCanceledException ex)\n        {\n            logger.LogWarning(ex,");
+        publisher.IndexOf("catch (OperationCanceledException ex)", StringComparison.Ordinal)
+            .ShouldBeLessThan(publisher.IndexOf("catch (Exception ex)", StringComparison.Ordinal));
+        publisher.ShouldNotContain("throw;");
     }
 
     [Fact]
