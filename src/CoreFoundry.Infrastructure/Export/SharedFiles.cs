@@ -804,6 +804,8 @@ internal static class SharedFiles
                     {
                         // MySQL takes shared locks on what a serializable transaction reads. Two of them that read the
                         // same rows and then write end in a deadlock: MySQL rolls one back, and it runs again here.
+                        // MySql.Data sets the isolation level per session, so the pooled connection may keep SERIALIZABLE
+                        // until EF's next transaction on it resets the level (accepted: the effect is negligible).
                         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
                         try
                         {

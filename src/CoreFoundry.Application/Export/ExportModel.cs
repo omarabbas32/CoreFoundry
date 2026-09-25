@@ -40,8 +40,12 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
     {
         ArgumentNullException.ThrowIfNull(schema);
         var solution = CodeNames.Solution(projectName);
-        var access = (tables ?? []).Where(table => table.AppliedName is not null)
-            .ToDictionary(table => table.AppliedName!, table => (table.ReadAccess, table.WriteAccess), StringComparer.Ordinal);
+        // TryAdd, not ToDictionary: two drafts claiming one applied name must not fail the export (the first one wins).
+        var access = new Dictionary<string, (AccessLevel Read, AccessLevel Write)>(StringComparer.Ordinal);
+        foreach (var table in (tables ?? []).Where(table => table.AppliedName is not null))
+        {
+            access.TryAdd(table.AppliedName!, (table.ReadAccess, table.WriteAccess));
+        }
 
         var unknown = schema.Tables.SelectMany(table => table.Columns.Where(column => column.Type is null).Select(column => $"{table.Name}.{column.Name} ({column.RawType})")).ToList();
         if (unknown.Count > 0)

@@ -211,6 +211,21 @@ public class ExportModelTests
     }
 
     [Fact]
+    public void Two_drafts_with_the_same_AppliedName_do_not_fail_the_export()
+    {
+        var schema = new DataSchema(1, [new DataTable("books", [])]);
+        var first = new ProjectTable(1, "books");
+        first.SetAccess(AccessLevel.Public, AccessLevel.Admin);
+        first.MarkApplied();
+        var second = new ProjectTable(1, "books");
+        second.MarkApplied();
+
+        var model = ExportModel.From("Shop", schema, [first, second]);
+
+        (model.Entity("books").Read, model.Entity("books").Write).ShouldBe((AccessLevel.Public, AccessLevel.Admin)); // the first wins
+    }
+
+    [Fact]
     public void No_tables_or_no_match_defaults_every_entity_to_SignedIn()
     {
         var schema = new DataSchema(1, [new DataTable("books", [])]);

@@ -205,10 +205,12 @@ internal static class DeployFiles
             `List`/`Get` need Read; `Create`/`Replace`/`Delete` need Write.
 
             {{access}}
-            **Becoming Admin:** The first account registered becomes `Admin`; every later one is a `User`. An Admin
+            **Becoming Admin:** The first account registered becomes `Admin`; every later one is a `User`. Whoever registers
+            first gets Admin, so register your own account right after the first deploy, before the API is public. An Admin
             lists the accounts with `GET /api/auth/users` and promotes or demotes one with
             `PUT /api/auth/users/{id}/role` and `{ "role": "Admin" }` or `{ "role": "User" }` (the last Admin can't be
-            demoted: 409). The role travels in the token, so a changed role counts from the account's next login.
+            demoted: 409). The role travels in the token, so a changed role counts from the account's next login: a
+            demoted Admin keeps Admin rights until their current token expires (`Jwt:LifetimeMinutes`).
 
             **No ownership yet:** whoever may write a table can set any column value. On a Signed-in table, a customer
             creating an order could set another customer's id. Keep such tables Admin, or add your own checks.
@@ -281,7 +283,8 @@ internal static class DeployFiles
 
             {{subscribers}}
             - **Reconnecting:** a reconnect is a new connection, and the server forgets its subscriptions. Subscribe again in
-              `onreconnected` (as above) and refetch: events sent while disconnected are lost, nothing is replayed.
+              `onreconnected` (as above) and refetch: events sent while disconnected are lost, nothing is replayed. A
+              connection that doesn't take an event within 5 s misses it too; refetch on reconnect.
             - **Access is checked when subscribing.** A user demoted by an Admin keeps receiving events until the connection
               closes; a connection made with a token closes when that token expires. Events carry only ids.
             - **CORS:** a browser frontend on another origin must be listed in `Cors:AllowedOrigins` (`appsettings.json`, or
