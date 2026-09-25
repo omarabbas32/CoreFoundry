@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -48,7 +49,8 @@ public sealed class AccessEndpointsTests : IDisposable
 
     /// <summary>
     /// Drives the exported API with <c>books</c> (Read Public, Write Admin) and <c>authors</c> (Read Admin,
-    /// Write Admin): the checks from phase-8-access-rules.md §4, plus roles and the last-Admin guard.
+    /// Write Admin): the checks from phase-8-access-rules.md §4, plus simultaneous first sign-ups, roles, the last-Admin
+    /// guard and the OpenAPI document's per-operation lock.
     /// </summary>
     private static async Task UseAccessApiAsync(HttpClient http)
     {
@@ -57,16 +59,26 @@ public sealed class AccessEndpointsTests : IDisposable
         (await ExportedBackendSupport.PostAsync(http, "/api/books", new { title = "Dune" })).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         (await http.GetAsync(new Uri("/api/authors", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
 
-        // The first registered account is Admin: reads and writes on both tables work.
-        var adminToken = await RegisterAsync(http, "admin@example.com");
+        // Simultaneous first sign-ups: all succeed, and exactly one of them becomes Admin.
+        var emails = Enumerable.Range(1, 5).Select(i => $"first{i}@example.com").ToList();
+        var tokens = await Task.WhenAll(emails.Select(email => RegisterAsync(http, email)));
+        var admins = tokens.Select((token, i) => (Token: token, Email: emails[i])).Where(account => RoleOf(account.Token) == "Admin").ToList();
+        admins.Count.ShouldBe(1, string.Join(", ", tokens.Select(RoleOf)));
+        tokens.Select(RoleOf).Count(role => role == "User").ShouldBe(4);
+        var (adminToken, adminEmail) = admins[0];
         Authorize(http, adminToken);
+        var accounts = await ExportedBackendSupport.Json(await http.GetAsync(new Uri("/api/auth/users", UriKind.Relative), Ct), HttpStatusCode.OK);
+        accounts.EnumerateArray().Where(account => account.GetProperty("role").GetString() == "Admin")
+            .Select(account => account.GetProperty("email").GetString()).ShouldBe([adminEmail]);
+
+        // The Admin reads and writes both tables.
         (await http.GetAsync(new Uri("/api/books", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await ExportedBackendSupport.PostAsync(http, "/api/books", new { title = "Dune" })).StatusCode.ShouldBe(HttpStatusCode.Created);
         (await http.GetAsync(new Uri("/api/authors", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await ExportedBackendSupport.PostAsync(http, "/api/authors", new { name = "Frank Herbert" })).StatusCode.ShouldBe(HttpStatusCode.Created);
 
         // The only Admin can't demote themselves.
-        var adminId = await AccountIdAsync(http, "admin@example.com");
+        var adminId = await AccountIdAsync(http, adminEmail);
         (await http.PutAsJsonAsync(new Uri($"/api/auth/users/{adminId}/role", UriKind.Relative), new { role = "User" }, Ct)).StatusCode
             .ShouldBe(HttpStatusCode.Conflict);
 
@@ -89,10 +101,15 @@ public sealed class AccessEndpointsTests : IDisposable
         Authorize(http, promotedToken);
         (await ExportedBackendSupport.PostAsync(http, "/api/books", new { title = "Dune Messiah" })).StatusCode.ShouldBe(HttpStatusCode.Created);
 
-        // The OpenAPI document is public, whether or not Swagger UI is on.
+        // The OpenAPI document is public, whether or not Swagger UI is on, and locks only the operations that need a
+        // token: reading books (Public) and registering are open; writing books and reading authors need the Bearer token.
         Authorize(http, null);
-        var openApi = await http.GetStringAsync(new Uri("/openapi/v1.json", UriKind.Relative), Ct);
-        openApi.ShouldContain("/api/books");
+        var openApi = await ExportedBackendSupport.Json(await http.GetAsync(new Uri("/openapi/v1.json", UriKind.Relative), Ct), HttpStatusCode.OK);
+        var paths = openApi.GetProperty("paths");
+        paths.GetProperty("/api/books").GetProperty("get").TryGetProperty("security", out _).ShouldBeFalse();
+        paths.GetProperty("/api/books").GetProperty("post").GetProperty("security")[0].TryGetProperty("Bearer", out _).ShouldBeTrue();
+        paths.GetProperty("/api/authors").GetProperty("get").TryGetProperty("security", out _).ShouldBeTrue();
+        paths.GetProperty("/api/auth/register").GetProperty("post").TryGetProperty("security", out _).ShouldBeFalse();
     }
 
     private static async Task<string> RegisterAsync(HttpClient http, string email)
@@ -113,6 +130,13 @@ public sealed class AccessEndpointsTests : IDisposable
     {
         var accounts = await ExportedBackendSupport.Json(await http.GetAsync(new Uri("/api/auth/users", UriKind.Relative), Ct), HttpStatusCode.OK);
         return accounts.EnumerateArray().Single(account => account.GetProperty("email").GetString() == email).GetProperty("id").GetInt64();
+    }
+
+    /// <summary>The <c>role</c> claim of an access token (its payload is base64url JSON; the signature isn't checked here).</summary>
+    private static string? RoleOf(string accessToken)
+    {
+        using var document = JsonDocument.Parse(Base64Url.DecodeFromChars(accessToken.Split('.')[1]));
+        return document.RootElement.GetProperty("role").GetString();
     }
 
     private static void Authorize(HttpClient http, string? accessToken) =>

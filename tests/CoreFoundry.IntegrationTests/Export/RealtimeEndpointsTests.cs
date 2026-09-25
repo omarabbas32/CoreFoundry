@@ -54,12 +54,13 @@ public sealed class RealtimeEndpointsTests : IDisposable
         var shop = await BookshopAsync();
         var zip = await (await _driver.SendAsync(HttpMethod.Get, $"/api/projects/{shop.Project.Id}/export", shop.Owner)).Content.ReadAsByteArrayAsync(Ct);
         await ExportedBackendSupport.RunExportedBackendAsync(
-            zip, "Bookshop", _api.EngineConnectionString, (http, _) => UseRealtimeAsync(http), checkMigration: false, swagger: false);
+            zip, "Bookshop", _api.EngineConnectionString, (http, _) => UseRealtimeAsync(http), swagger: false);
     }
 
     /// <summary>
-    /// Drives the hub with <c>books</c> (Read Public, Write Admin) and <c>authors</c> (Read Admin, Write Admin): the
-    /// checks from phase-9-realtime-export.md §4. Writes go through the REST API as the Admin.
+    /// Drives the hub with <c>books</c> (Read Public, Write Admin), <c>authors</c> (Read Admin, Write Admin) and
+    /// <c>categories</c> (the Signed-in default): the checks from phase-9-realtime-export.md §4. Writes go through the
+    /// REST API as the Admin.
     /// </summary>
     private static async Task UseRealtimeAsync(HttpClient http)
     {
@@ -72,9 +73,21 @@ public sealed class RealtimeEndpointsTests : IDisposable
         await using var member = await ConnectAsync(http.BaseAddress!, memberToken);
         var adminChanges = new ChangeCollector(admin);
         var anonymousChanges = new ChangeCollector(anonymous);
+        var memberChanges = new ChangeCollector(member);
 
-        // Anyone may subscribe to the public table; authors needs a sign-in, then the Admin role; unknown tables are refused.
+        // The token in the URL is read for the hubs only: on the REST API it counts for nothing.
+        using (var bare = new HttpClient { BaseAddress = http.BaseAddress })
+        {
+            (await bare.GetAsync(new Uri($"/api/authors?access_token={Uri.EscapeDataString(adminToken)}", UriKind.Relative), Ct))
+                .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        }
+
+        // Anyone may subscribe to the public table; categories needs a sign-in; authors needs a sign-in, then the Admin
+        // role; unknown tables are refused.
         await anonymous.InvokeAsync("Subscribe", "books", Ct);
+        (await Should.ThrowAsync<HubException>(() => anonymous.InvokeAsync("Subscribe", "categories", Ct)))
+            .Message.ShouldContain("Sign in to subscribe to categories.");
+        await member.InvokeAsync("Subscribe", "categories", Ct);
         (await Should.ThrowAsync<HubException>(() => anonymous.InvokeAsync("Subscribe", "authors", Ct)))
             .Message.ShouldContain("Sign in to subscribe to authors.");
         (await Should.ThrowAsync<HubException>(() => member.InvokeAsync("Subscribe", "authors", Ct)))
@@ -97,6 +110,10 @@ public sealed class RealtimeEndpointsTests : IDisposable
         var herbert = await CreateAsync(http, "/api/authors", new { name = "Frank Herbert" });
         (await adminChanges.NextAsync()).ShouldBe(new Change("authors", "insert", herbert));
 
+        // A signed-in User subscribed to the Signed-in table gets its changes.
+        var scienceFiction = await CreateAsync(http, "/api/categories", new { name = "Science fiction" });
+        (await memberChanges.NextAsync()).ShouldBe(new Change("categories", "insert", scienceFiction));
+
         (await http.DeleteAsync(new Uri($"/api/books/{dune}", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await adminChanges.NextAsync()).ShouldBe(new Change("books", "delete", dune));
         (await anonymousChanges.NextAsync()).ShouldBe(new Change("books", "delete", dune));
@@ -108,29 +125,34 @@ public sealed class RealtimeEndpointsTests : IDisposable
         (await ExportedBackendSupport.PostAsync(http, "/api/books", new { title = "Emma again", isbn = "978-0141439587" }))
             .StatusCode.ShouldBe(HttpStatusCode.Conflict);
         await Task.Delay(QuietPeriod, Ct);
-        adminChanges.ShouldBeEmpty();
-        anonymousChanges.ShouldBeEmpty(); // nor did the authors insert reach a client subscribed to books only
+        adminChanges.ShouldBeEmpty(); // nor did the categories insert reach the Admin, who didn't subscribe to it
+        anonymousChanges.ShouldBeEmpty(); // nor did the authors or categories inserts reach a client subscribed to books only
+        memberChanges.ShouldBeEmpty(); // nor did the books changes reach a client subscribed to categories only
 
-        // Reconnect: a new connection has no subscriptions; once re-subscribed, the next write still arrives.
+        // Reconnect: the restarted connection is a new one, and the server has forgotten the old one's subscriptions, so a
+        // write before re-subscribing doesn't reach it (the anonymous client's copy shows it was published). Once
+        // re-subscribed, the next write arrives.
         await admin.StopAsync(Ct);
         await admin.StartAsync(Ct);
+        var persuasion = await CreateAsync(http, "/api/books", new { title = "Persuasion", isbn = "978-0141439686" });
+        (await anonymousChanges.NextAsync()).ShouldBe(new Change("books", "insert", persuasion));
+        await Task.Delay(QuietPeriod, Ct);
+        adminChanges.ShouldBeEmpty();
         await admin.InvokeAsync("Subscribe", "books", Ct);
         (await http.DeleteAsync(new Uri($"/api/books/{emma}", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await adminChanges.NextAsync()).ShouldBe(new Change("books", "delete", emma));
     }
 
-    /// <summary>A started connection to the hub over WebSockets, so a token travels as <c>?access_token=</c>.</summary>
+    /// <summary>
+    /// A started connection to the hub over WebSockets. A token goes in the URL as <c>?access_token=</c>, the way browsers
+    /// send it: outside a browser the .NET client would send an <c>AccessTokenProvider</c> token as a header instead.
+    /// </summary>
     private static async Task<HubConnection> ConnectAsync(Uri baseAddress, string? accessToken)
     {
-        var connection = new HubConnectionBuilder()
-            .WithUrl(new Uri(baseAddress, "/hubs/realtime"), HttpTransportType.WebSockets, options =>
-            {
-                if (accessToken is not null)
-                {
-                    options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
-                }
-            })
-            .Build();
+        var url = accessToken is null
+            ? new Uri(baseAddress, "/hubs/realtime")
+            : new Uri(baseAddress, $"/hubs/realtime?access_token={Uri.EscapeDataString(accessToken)}");
+        var connection = new HubConnectionBuilder().WithUrl(url, HttpTransportType.WebSockets).Build();
         await connection.StartAsync(Ct);
         return connection;
     }
@@ -185,8 +207,8 @@ public sealed class RealtimeEndpointsTests : IDisposable
     private sealed record Shop(SignedIn Owner, ProjectDto Project);
 
     /// <summary>
-    /// A project with <c>books</c> (Read Public, Write Admin; a unique <c>isbn</c>) and <c>authors</c> (Read Admin,
-    /// Write Admin), applied.
+    /// A project with <c>books</c> (Read Public, Write Admin; a unique <c>isbn</c>), <c>authors</c> (Read Admin,
+    /// Write Admin) and <c>categories</c> (left at Signed-in for both), applied.
     /// </summary>
     private async Task<Shop> BookshopAsync()
     {
@@ -196,6 +218,7 @@ public sealed class RealtimeEndpointsTests : IDisposable
             new ColumnRequest("title", DataType.Text, null, null, null, true, false, null),
             new ColumnRequest("isbn", DataType.Varchar, 20, null, null, true, true, null));
         var authors = await CreateTableAsync(project, owner, "authors", new ColumnRequest("name", DataType.Text, null, null, null, true, false, null));
+        await CreateTableAsync(project, owner, "categories", new ColumnRequest("name", DataType.Text, null, null, null, true, false, null));
         await SetAccessAsync(project, owner, books, AccessLevel.Public, AccessLevel.Admin);
         await SetAccessAsync(project, owner, authors, AccessLevel.Admin, AccessLevel.Admin);
 

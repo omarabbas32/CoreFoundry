@@ -281,12 +281,15 @@ public sealed class TableEndpointsTests : IDisposable
     [Fact]
     public async Task Setting_access_for_a_non_member_is_404()
     {
-        var (_, project) = await OwnedProjectAsync("AccessStranger");
+        var (owner, project) = await OwnedProjectAsync("AccessStranger");
+        var table = await CreateAsync(project, owner, "books");
         var stranger = await _driver.SignUpAsync();
 
-        (await _driver.SendAsync(HttpMethod.Put, $"{Tables(project)}/1/access", stranger,
-            new TableAccessRequest(1, AccessLevel.Public, AccessLevel.Public)))
+        (await _driver.SendAsync(HttpMethod.Put, $"{Tables(project)}/{table.Id}/access", stranger,
+            new TableAccessRequest(table.Version, AccessLevel.Public, AccessLevel.Public)))
             .StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var unchanged = await OkAsync<TableDto>(HttpMethod.Get, $"{Tables(project)}/{table.Id}", owner);
+        (unchanged.ReadAccess, unchanged.WriteAccess, unchanged.Version).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn, table.Version));
     }
 
     [Fact]

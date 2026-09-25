@@ -26,7 +26,7 @@ internal static class ExportedBackendSupport
     /// </summary>
     /// <param name="solution">The solution's name, e.g. <c>BookStore</c> (the zip holds <c>bookstore-backend/</c>).</param>
     public static async Task RunExportedBackendAsync(
-        byte[] zip, string solution, string engineConnectionString, Func<HttpClient, string, Task> use, bool checkMigration = true, bool swagger = true)
+        byte[] zip, string solution, string engineConnectionString, Func<HttpClient, string, Task> use, bool swagger = true)
     {
         var folder = Directory.CreateTempSubdirectory("cf-export-");
         var database = $"cf_p_{1_900_000_000L + Random.Shared.NextInt64(99_999_999)}";
@@ -42,7 +42,7 @@ internal static class ExportedBackendSupport
             build.Output.ShouldContain(" 0 Warning(s)", Case.Sensitive, build.Output);
 
             // The hand-written migration describes exactly the model the configurations build.
-            if (checkMigration && FindOnPath("dotnet-ef") is { } ef)
+            if (FindOnPath("dotnet-ef") is { } ef)
             {
                 var check = await RunAsync(ef,
                     $"migrations has-pending-model-changes --project src/{solution}.Infrastructure --startup-project src/{solution}.Api --no-build --configuration Release",
