@@ -1,5 +1,6 @@
 using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Data;
+using CoreFoundry.Application.Export;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Application.Schema;
 using CoreFoundry.Application.SchemaEngine;
@@ -18,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<SchemaPlanService>();
         services.AddScoped<SchemaApplier>();
         services.AddScoped<DataService>();
+        services.AddScoped<ExportService>();
         return services;
     }
 }
