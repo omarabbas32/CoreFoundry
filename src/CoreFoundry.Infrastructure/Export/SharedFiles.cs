@@ -570,6 +570,7 @@ internal static class SharedFiles
 
         yield return new($"src/{n}.Infrastructure/Persistence/AppDbContext.cs", $$"""
             using Microsoft.EntityFrameworkCore;
+            using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
             using {{n}}.Domain.Entities;
 
             namespace {{n}}.Infrastructure.Persistence;
@@ -582,6 +583,14 @@ internal static class SharedFiles
 
                 protected override void OnModelCreating(ModelBuilder modelBuilder) =>
                     modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+                /// <summary>The MySQL connector reads DATE columns as DateTime, so DateOnly values travel as DateTime.</summary>
+                protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
+                    configurationBuilder.Properties<DateOnly>().HaveConversion<DateOnlyConverter>();
+
+                private sealed class DateOnlyConverter() : ValueConverter<DateOnly, DateTime>(
+                    date => date.ToDateTime(TimeOnly.MinValue),
+                    dateTime => DateOnly.FromDateTime(dateTime));
             }
 
             """);

@@ -159,7 +159,13 @@ internal static class EntityFiles
         if (CSharp.EntityNullable(property) && !property.IsNullable)
         {
             // Defaulted NOT NULL column: EF read the stored value back after the insert.
-            return CSharp.ClrType(property.Type) == "string" ? $"{value} ?? string.Empty" : $"{value}.GetValueOrDefault()";
+            value = CSharp.ClrType(property.Type) == "string" ? $"{value} ?? string.Empty" : $"{value}.GetValueOrDefault()";
+        }
+
+        // Written with the column's scale, as MySQL stores it (19.9 → 19.90): adding 0.00m sets the scale, not the value.
+        if (property.Type is { DataType: DataType.Decimal, Scale: > 0 and var scale })
+        {
+            value = $"{value} + 0.{new string('0', scale)}m";
         }
 
         return value;
