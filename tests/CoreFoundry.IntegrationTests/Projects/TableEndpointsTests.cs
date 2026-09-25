@@ -2,6 +2,7 @@ using System.Net;
 using CoreFoundry.Api.Projects;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Application.Schema;
+using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Domain.Projects;
 using CoreFoundry.Domain.Schema;
 using CoreFoundry.IntegrationTests.Infrastructure;
@@ -233,6 +234,88 @@ public sealed class TableEndpointsTests : IDisposable
         (await _driver.SendAsync(HttpMethod.Delete, $"{Tables(project)}/{table.Id}", owner)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
+    // ---- Access (M8) ---------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task New_tables_default_to_signed_in_read_and_write_in_list_and_single()
+    {
+        var (owner, project) = await OwnedProjectAsync("AccessDefaults");
+        var table = await CreateAsync(project, owner, "books");
+
+        (table.ReadAccess, table.WriteAccess).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+
+        var fetched = await OkAsync<TableDto>(HttpMethod.Get, $"{Tables(project)}/{table.Id}", owner);
+        (fetched.ReadAccess, fetched.WriteAccess).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+
+        var list = await OkAsync<List<TableSummaryDto>>(HttpMethod.Get, Tables(project), owner);
+        list.Single().ReadAccess.ShouldBe(AccessLevel.SignedIn);
+        list.Single().WriteAccess.ShouldBe(AccessLevel.SignedIn);
+    }
+
+    [Fact]
+    public async Task Setting_access_updates_it_and_returns_the_new_version()
+    {
+        var (owner, project) = await OwnedProjectAsync("AccessUpdate");
+        var table = await CreateAsync(project, owner, "books");
+
+        var updated = await OkAsync<TableDto>(HttpMethod.Put, $"{Tables(project)}/{table.Id}/access", owner,
+            new TableAccessRequest(table.Version, AccessLevel.Public, AccessLevel.Admin));
+
+        (updated.ReadAccess, updated.WriteAccess).ShouldBe((AccessLevel.Public, AccessLevel.Admin));
+        updated.Version.ShouldBeGreaterThan(table.Version);
+    }
+
+    [Fact]
+    public async Task Setting_access_with_a_stale_version_is_409()
+    {
+        var (owner, project) = await OwnedProjectAsync("AccessStale");
+        var table = await CreateAsync(project, owner, "books");
+        await OkAsync<TableDto>(HttpMethod.Put, $"{Tables(project)}/{table.Id}/access", owner,
+            new TableAccessRequest(table.Version, AccessLevel.Public, AccessLevel.Public));
+
+        (await _driver.SendAsync(HttpMethod.Put, $"{Tables(project)}/{table.Id}/access", owner,
+            new TableAccessRequest(table.Version, AccessLevel.Admin, AccessLevel.Admin)))
+            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Setting_access_for_a_non_member_is_404()
+    {
+        var (_, project) = await OwnedProjectAsync("AccessStranger");
+        var stranger = await _driver.SignUpAsync();
+
+        (await _driver.SendAsync(HttpMethod.Put, $"{Tables(project)}/1/access", stranger,
+            new TableAccessRequest(1, AccessLevel.Public, AccessLevel.Public)))
+            .StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Write_wider_than_read_is_400()
+    {
+        var (owner, project) = await OwnedProjectAsync("AccessInvalid");
+        var table = await CreateAsync(project, owner, "books");
+
+        var problem = await ValidationProblemAsync(await _driver.SendAsync(HttpMethod.Put, $"{Tables(project)}/{table.Id}/access", owner,
+            new TableAccessRequest(table.Version, AccessLevel.Admin, AccessLevel.Public)));
+
+        problem.Errors.Keys.ShouldBe(["write"]);
+    }
+
+    [Fact]
+    public async Task Changing_access_does_not_appear_in_the_schema_plan()
+    {
+        var (owner, project) = await OwnedProjectAsync("AccessPlan");
+        var table = await CreateAsync(project, owner, "books", Column("title", DataType.Text));
+
+        var before = await OkAsync<SchemaPlanDto>(HttpMethod.Get, $"/api/projects/{project.Id}/schema/plan", owner);
+        await OkAsync<TableDto>(HttpMethod.Put, $"{Tables(project)}/{table.Id}/access", owner,
+            new TableAccessRequest(table.Version, AccessLevel.Public, AccessLevel.Admin));
+        var after = await OkAsync<SchemaPlanDto>(HttpMethod.Get, $"/api/projects/{project.Id}/schema/plan", owner);
+
+        after.PlanHash.ShouldBe(before.PlanHash);
+        after.Statements.ShouldBe(before.Statements);
+    }
+
     // ---- References (M2.5) -------------------------------------------------------------------------
 
     [Fact]
@@ -303,10 +386,10 @@ public sealed class TableEndpointsTests : IDisposable
     private static ColumnRequest Reference(string name, long tableId, ReferenceAction onDelete, bool nullable = true) =>
         new(name, DataType.BigInt, null, null, null, nullable, false, null, tableId, onDelete);
 
-    private async Task<(SignedIn Owner, ProjectDto Project)> OwnedProjectAsync()
+    private async Task<(SignedIn Owner, ProjectDto Project)> OwnedProjectAsync(string name = "Bookshop")
     {
         var owner = await _driver.SignUpAsync();
-        return (owner, await _driver.CreateProjectAsync(owner, "Bookshop"));
+        return (owner, await _driver.CreateProjectAsync(owner, name));
     }
 
     private async Task<TableDto> CreateAsync(ProjectDto project, SignedIn user, string name, params ColumnRequest[] columns)

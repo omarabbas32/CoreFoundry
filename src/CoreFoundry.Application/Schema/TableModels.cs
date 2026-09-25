@@ -56,7 +56,9 @@ public sealed record TableSummaryDto(
     SchemaObjectState State,
     int ColumnCount,
     int Version,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    AccessLevel ReadAccess,
+    AccessLevel WriteAccess);
 
 /// <param name="Version">Send this back with the next change; a stale value gets 409.</param>
 /// <param name="Columns">Ordered by position, including columns pending drop.</param>
@@ -69,6 +71,8 @@ public sealed record TableDto(
     IReadOnlyList<ColumnDto> Columns,
     DateTime CreatedAt,
     DateTime UpdatedAt,
+    AccessLevel ReadAccess,
+    AccessLevel WriteAccess,
     string? AppliedName = null)
 {
     public static TableDto From(ProjectTable table, SchemaContext context)
@@ -83,6 +87,8 @@ public sealed record TableDto(
             [.. table.Columns.Select(column => ColumnFrom(table, column, context))],
             table.CreatedAt,
             table.UpdatedAt,
+            table.ReadAccess,
+            table.WriteAccess,
             table.AppliedName);
     }
 
@@ -90,7 +96,9 @@ public sealed record TableDto(
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(context);
-        return new(table.Id, table.Name, context.StateOf(table), table.Columns.Count, table.Version, table.UpdatedAt);
+        return new(
+            table.Id, table.Name, context.StateOf(table), table.Columns.Count, table.Version, table.UpdatedAt,
+            table.ReadAccess, table.WriteAccess);
     }
 
     private static ColumnDto ColumnFrom(ProjectTable table, ProjectColumn column, SchemaContext context) => new(
