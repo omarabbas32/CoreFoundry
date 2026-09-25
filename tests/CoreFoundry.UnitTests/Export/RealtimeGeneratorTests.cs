@@ -154,4 +154,27 @@ public class RealtimeGeneratorTests
         settings.ShouldContain("\"Cors\": {\n    \"AllowedOrigins\": []\n  }");
         System.Text.Json.JsonDocument.Parse(settings).RootElement.GetProperty("Cors").GetProperty("AllowedOrigins").GetArrayLength().ShouldBe(0);
     }
+
+    [Fact]
+    public void The_README_has_a_Realtime_section_with_the_snippet_and_the_subscribable_tables()
+    {
+        var readme = File("README.md");
+        readme.ShouldContain("\n## Realtime\n");
+        var realtime = readme[readme.IndexOf("## Realtime", StringComparison.Ordinal)..readme.IndexOf("## Tables", StringComparison.Ordinal)];
+
+        realtime.ShouldContain("import { HubConnectionBuilder } from \"@microsoft/signalr\";");
+        realtime.ShouldContain("  .withUrl(\"http://localhost:8080/hubs/realtime\", { accessTokenFactory: () => token })\n  .withAutomaticReconnect()\n");
+        realtime.ShouldContain("  for (const table of tables) await connection.invoke(\"Subscribe\", table);\n  refreshEverything(); // events sent while disconnected are lost\n");
+        realtime.ShouldContain("| Table | Who may subscribe |");
+        realtime.ShouldContain("| `books` | Public |");
+        realtime.ShouldContain("| `authors` | Admin |");
+        realtime.ShouldContain("| `categories` | Signed-in |");
+        realtime.ShouldContain("`Cors:AllowedOrigins`");
+        realtime.ShouldContain("proxy access logs");
+        realtime.ShouldContain("WebSocket upgrades");
+        realtime.ShouldContain("backplane");
+        realtime.ShouldContain("Only this API's writes send events.");
+        realtime.ShouldContain("Cascades send no event");
+        realtime.ShouldContain("checked when subscribing");
+    }
 }
