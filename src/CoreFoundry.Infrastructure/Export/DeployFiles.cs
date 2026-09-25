@@ -126,6 +126,12 @@ internal static class DeployFiles
             }
         }
 
+        var access = new StringBuilder("| Table | Read | Write |\n|---|---|---|\n");
+        foreach (var entity in model.Entities)
+        {
+            access.Append($"| `{entity.Table}` | {AccessName(entity.Read)} | {AccessName(entity.Write)} |\n");
+        }
+
         var wideDecimals = model.Entities
             .SelectMany(entity => entity.Properties.Where(property => property.Type.Precision > 28).Select(property => $"`{entity.Table}.{property.Column}`"))
             .ToList();
@@ -193,6 +199,12 @@ internal static class DeployFiles
             - Errors are ProblemDetails. Invalid fields: 400 with `errors` per field. Duplicate unique value or a row
               that other rows still reference: 409. A reference to a missing row: 400 on that field.
             {{decimalNote}}
+            ## Access
+
+            **Public**: anyone, no token. **Signed-in**: any registered user. **Admin**: the `Admin` role only.
+            `List`/`Get` need Read; `Create`/`Replace`/`Delete` need Write.
+
+            {{access}}
             ## Tables
             {{tables}}
             ## Changing the schema
@@ -209,4 +221,12 @@ internal static class DeployFiles
 
             """;
     }
+
+    private static string AccessName(AccessLevel level) => level switch
+    {
+        AccessLevel.Public => "Public",
+        AccessLevel.SignedIn => "Signed-in",
+        AccessLevel.Admin => "Admin",
+        _ => throw new ArgumentOutOfRangeException(nameof(level), level, null),
+    };
 }

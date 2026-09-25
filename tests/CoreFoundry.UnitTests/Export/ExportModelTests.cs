@@ -166,4 +166,33 @@ public class ExportModelTests
         ]);
         properties.Select(property => property.Type).ShouldBe(columns.Select(column => column.Type!));
     }
+
+    [Fact]
+    public void Entities_get_access_from_the_draft_table_with_the_matching_AppliedName()
+    {
+        var schema = new DataSchema(1, [new DataTable("books", []), new DataTable("authors", [])]);
+        var books = new ProjectTable(1, "books");
+        books.SetAccess(AccessLevel.Public, AccessLevel.Admin);
+        books.MarkApplied();
+        var authors = new ProjectTable(1, "authors"); // never touched: stays at the SignedIn/SignedIn default
+        authors.MarkApplied();
+
+        var model = ExportModel.From("Shop", schema, [books, authors]);
+
+        (model.Entity("books").Read, model.Entity("books").Write).ShouldBe((AccessLevel.Public, AccessLevel.Admin));
+        (model.Entity("authors").Read, model.Entity("authors").Write).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+    }
+
+    [Fact]
+    public void No_tables_or_no_match_defaults_every_entity_to_SignedIn()
+    {
+        var schema = new DataSchema(1, [new DataTable("books", [])]);
+        var unrelated = new ProjectTable(1, "other");
+        unrelated.MarkApplied();
+
+        (ExportModel.From("Shop", schema).Entity("books").Read, ExportModel.From("Shop", schema).Entity("books").Write)
+            .ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+        var model = ExportModel.From("Shop", schema, [unrelated]);
+        (model.Entity("books").Read, model.Entity("books").Write).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+    }
 }

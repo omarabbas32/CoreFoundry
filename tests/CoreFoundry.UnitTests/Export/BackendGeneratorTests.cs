@@ -97,4 +97,69 @@ public class BackendGeneratorTests
             System.IO.File.WriteAllText(path, file.Content);
         }
     }
+
+    [Fact]
+    public void No_class_level_Authorize_and_each_action_gets_its_level_s_attribute()
+    {
+        var model = Bookshop() with
+        {
+            Entities = [.. Bookshop().Entities.Select(entity => entity.Table switch
+            {
+                "books" => entity with { Read = AccessLevel.Public, Write = AccessLevel.Admin },
+                "authors" => entity with { Read = AccessLevel.Admin, Write = AccessLevel.Admin },
+                _ => entity, // categories: left at the SignedIn/SignedIn default
+            })],
+        };
+        var files = new DotNetBackendGenerator().Generate(model);
+        string Controller(string name) => files.Single(file => file.Path == $"src/Bookshop.Api/Controllers/{name}Controller.cs").Content;
+
+        var books = Controller("Book");
+        books.ShouldNotContain("[Authorize]\npublic sealed class");
+        books.ShouldContain("    [HttpGet]\n    [AllowAnonymous]\n    public Task<PagedResult<BookDto>> List(");
+        books.ShouldContain("    [HttpGet(\"{id:long}\")]\n    [AllowAnonymous]\n    public Task<BookDto> Get(");
+        books.ShouldContain("    [HttpPost]\n    [Authorize(Roles = \"Admin\")]\n    public async Task<ActionResult<BookDto>> Create(");
+        books.ShouldContain("    [HttpPut(\"{id:long}\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<BookDto> Replace(");
+        books.ShouldContain("    [HttpDelete(\"{id:long}\")]\n    [Authorize(Roles = \"Admin\")]\n    public async Task<IActionResult> Delete(");
+
+        var authors = Controller("Author");
+        authors.ShouldNotContain("[Authorize]\npublic sealed class");
+        authors.ShouldContain("    [HttpGet]\n    [Authorize(Roles = \"Admin\")]\n    public Task<PagedResult<AuthorDto>> List(");
+        authors.ShouldContain("    [HttpPost]\n    [Authorize(Roles = \"Admin\")]\n    public async Task<ActionResult<AuthorDto>> Create(");
+
+        var categories = Controller("Category");
+        categories.ShouldNotContain("[Authorize]\npublic sealed class");
+        categories.ShouldContain("    [HttpGet]\n    [Authorize]\n    public Task<PagedResult<CategoryDto>> List(");
+        categories.ShouldContain("    [HttpPost]\n    [Authorize]\n    public async Task<ActionResult<CategoryDto>> Create(");
+    }
+
+    [Fact]
+    public void Program_has_a_fallback_policy_registers_the_transformer_and_allows_anonymous_OpenApi()
+    {
+        var program = File("src/Bookshop.Api/Program.cs");
+        program.ShouldContain("options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build()");
+        program.ShouldContain("app.MapOpenApi().AllowAnonymous()");
+        program.ShouldContain("options.AddOperationTransformer<BearerSecurityRequirementTransformer>()");
+        program.ShouldContain("app.MapGet(\"/health\", () => Results.Ok(new { status = \"ok\" })).AllowAnonymous()"); // unchanged
+    }
+
+    [Fact]
+    public void The_operation_transformer_locks_only_non_anonymous_endpoints_document_wide_lock_is_gone()
+    {
+        var transformer = File("src/Bookshop.Api/OpenApi/BearerSecuritySchemeTransformer.cs");
+        transformer.ShouldNotContain("document.Security"); // no more document-wide requirement
+        transformer.ShouldContain("internal sealed class BearerSecurityRequirementTransformer : IOpenApiOperationTransformer");
+        transformer.ShouldContain("IAllowAnonymous");
+        transformer.ShouldContain("document.Components.SecuritySchemes[\"Bearer\"]"); // the scheme itself stays
+    }
+
+    [Fact]
+    public void The_README_has_the_access_table()
+    {
+        var readme = File("README.md");
+        readme.ShouldContain("## Access");
+        readme.ShouldContain("| Table | Read | Write |");
+        readme.ShouldContain("| `books` | Signed-in | Signed-in |");
+        readme.ShouldContain("| `authors` | Signed-in | Signed-in |");
+        readme.ShouldContain("| `categories` | Signed-in | Signed-in |");
+    }
 }

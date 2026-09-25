@@ -875,6 +875,7 @@ internal static class SharedFiles
             using System.Text;
             using System.Text.Json.Serialization;
             using Microsoft.AspNetCore.Authentication.JwtBearer;
+            using Microsoft.AspNetCore.Authorization;
             using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
             using Microsoft.EntityFrameworkCore;
             using Microsoft.IdentityModel.Tokens;
@@ -902,7 +903,11 @@ internal static class SharedFiles
                 });
             builder.Services.AddProblemDetails();
             builder.Services.AddExceptionHandler<ExceptionHandler>();
-            builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
+            builder.Services.AddOpenApi(options =>
+            {
+                options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+                options.AddOperationTransformer<BearerSecurityRequirementTransformer>();
+            });
 
             var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
             builder.Services
@@ -918,7 +923,10 @@ internal static class SharedFiles
                         ClockSkew = TimeSpan.FromSeconds(30),
                     };
                 });
-            builder.Services.AddAuthorization();
+            // Anything without its own [AllowAnonymous]/[Authorize] needs a signed-in user; the entity controllers
+            // set their own level per table, and every other endpoint gets an explicit AllowAnonymous instead.
+            builder.Services.AddAuthorization(options =>
+                options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
             var app = builder.Build();
 
@@ -933,7 +941,7 @@ internal static class SharedFiles
 
             if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
             {
-                app.MapOpenApi();
+                app.MapOpenApi().AllowAnonymous();
                 app.UseSwaggerUI(options =>
                 {
                     options.SwaggerEndpoint("/openapi/v1.json", "{{n}} API");
@@ -1069,6 +1077,7 @@ internal static class SharedFiles
             """);
 
         yield return new($"src/{n}.Api/OpenApi/BearerSecuritySchemeTransformer.cs", $$"""
+            using Microsoft.AspNetCore.Authorization;
             using Microsoft.AspNetCore.OpenApi;
             using Microsoft.OpenApi;
 
@@ -1088,8 +1097,26 @@ internal static class SharedFiles
                         BearerFormat = "JWT",
                         Description = "An accessToken from POST /api/auth/login.",
                     };
-                    document.Security ??= [];
-                    document.Security.Add(new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference("Bearer", document)] = [] });
+                    return Task.CompletedTask;
+                }
+            }
+
+            /// <summary>
+            /// Locks only the operations whose endpoint needs a token, instead of the whole document: an endpoint
+            /// marked <see cref="IAllowAnonymous"/> (directly or through <c>[AllowAnonymous]</c>) is left open;
+            /// everything else needs the fallback policy's token anyway.
+            /// </summary>
+            internal sealed class BearerSecurityRequirementTransformer : IOpenApiOperationTransformer
+            {
+                public Task TransformAsync(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
+                {
+                    var anonymous = context.Description.ActionDescriptor.EndpointMetadata.OfType<IAllowAnonymous>().Any();
+                    if (!anonymous)
+                    {
+                        operation.Security ??= [];
+                        operation.Security.Add(new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference("Bearer", context.Document)] = [] });
+                    }
+
                     return Task.CompletedTask;
                 }
             }
