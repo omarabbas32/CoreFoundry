@@ -58,6 +58,7 @@ Secrets are kept in .NET user-secrets, outside the repo:
 cd src/CoreFoundry.Api
 dotnet user-secrets set "ConnectionStrings:Metadata" "Server=127.0.0.1;Port=3306;Database=corefoundry;User=cf_meta;Password=<meta-password>"
 dotnet user-secrets set "ConnectionStrings:Engine"   "Server=127.0.0.1;Port=3306;User=cf_engine;Password=<engine-password>"
+dotnet user-secrets set "Jwt:SigningKey" "$(openssl rand -base64 48)"   # at least 32 characters; the API refuses to start without it
 dotnet run --launch-profile http
 ```
 
