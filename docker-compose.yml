@@ -1,0 +1,56 @@
+# CoreFoundry in one command: MySQL + API + web.
+#
+#   cp .env.example .env    # then change every value
+#   docker compose up --build
+#   → http://localhost:3100
+#
+# Only the web app is published. It proxies /api to the API, so the browser sees one origin
+# (the refresh cookie stays SameSite=Strict) and the API is never reachable directly.
+
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      CF_META_PASSWORD: ${CF_META_PASSWORD:?Set CF_META_PASSWORD in .env}
+      CF_ENGINE_PASSWORD: ${CF_ENGINE_PASSWORD:?Set CF_ENGINE_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./docker/mysql/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      ConnectionStrings__Metadata: Server=db;Port=3306;Database=corefoundry;User=cf_meta;Password=${CF_META_PASSWORD}
+      ConnectionStrings__Engine: Server=db;Port=3306;User=cf_engine;Password=${CF_ENGINE_PASSWORD}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env (at least 32 characters)}
+      Database__MigrateOnStartup: "true"
+      # Only the web container can reach the API, so it may trust X-Forwarded-For (per-user rate limits).
+      ForwardedHeaders__TrustAllProxies: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: web
+      dockerfile: ../docker/web.Dockerfile
+      args:
+        API_ORIGIN: http://api:8080
+    ports:
+      - "${WEB_PORT:-3100}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db-data:
