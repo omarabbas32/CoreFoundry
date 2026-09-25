@@ -1,6 +1,6 @@
 # CoreFoundry — Progress
 
-_Last updated: 2026-09-25 · branch `m6-code-export`_
+_Last updated: 2026-09-25 · branch `m7-schema-templates`_
 
 | Phase | Status | Summary |
 |---|---|---|
@@ -11,9 +11,10 @@ _Last updated: 2026-09-25 · branch `m6-code-export`_
 | [M3 — Schema engine](phases/phase-3-schema-engine.md) ⭐ | ✅ Done (`m3-schema-engine`) | Plan / apply / history / drift on real MySQL tables |
 | [M4 — Data API](phases/phase-4-data-api.md) | ✅ Built (`m4-data-api`), hands-on check open | Row CRUD on applied tables: REST API + data viewer |
 | [M6 — Code export](phases/phase-6-code-export.md) | ✅ Built (`m6-code-export`), UI click and Docker run open | Download a project as a deployable .NET Clean Architecture backend |
-| [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next | One-command run, README, demo, deploy |
+| [M7 — Schema templates](phases/phase-7-schema-templates.md) | ✅ Built (`m7-schema-templates`), browser check open | Start a project from a ready E-commerce schema with sample rows |
+| [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next (one-command Docker run written on `m5-one-command-run`) | One-command run, README, demo, deploy |
 
-**Tests:** 709 .NET tests pass (590 unit, 119 integration, of which 98 run against a real MySQL database; none skipped),
+**Tests:** 722 .NET tests pass (595 unit, 127 integration, of which 106 run against a real MySQL database; none skipped),
 plus headless browser runs of the dashboard (15 checks, M1), the table designer (29 checks, M2),
 relations + diagram (15 checks, M2.5) and a partial run of the schema engine (15 of 16 checks, M3).
 Coverage (gated in CI at ≥ 90%): `SchemaDiffer` 97.2%, `MySqlSqlRenderer` 96.6%.
@@ -196,6 +197,26 @@ tables and columns are those of the last successful apply.
 - **Web:** `tsc`, lint and build are clean. **Not yet run in a browser**, and the README's curl examples haven't been
   run against a live API (the Definition of done's hands-on check is still open).
 
+## M7 — Schema templates
+
+A project can start from a ready schema instead of an empty designer: the **New project** dialog and an empty
+project's designer offer **E-commerce** (8 tables: customers, addresses, categories with a tree, products, orders,
+order items, payments, reviews; every column type and all three on-delete rules).
+
+- **Draft only (D36):** `POST /api/projects/{id}/templates/{key}` creates the tables through `TableService` (the
+  designer's rules), only in a project without tables. References to a table that isn't created yet are added in a
+  second pass. The user edits, reviews the plan and applies as usual.
+- **Sample rows (D37):** with "Add sample data", 68 made-up rows are inserted right after the first successful apply,
+  through the Data API's coercion and repository, parents first, `@key` references resolved to real ids. Tables
+  renamed before applying, or already holding rows, are skipped with a reason; the apply never fails because of
+  them. "Load sample data" on an empty table does it later (`POST …/sample-data`).
+- **Verified:** a unit test runs every template through the Domain rules and every sample row through the Data
+  API's coercion (references must point to earlier rows); integration tests cover the list, using a template
+  (tables, references, 409 on a non-empty project, 404s), plan + apply of all 8 tables, sample rows with real ids
+  and correct totals, loading later, skipping tables with rows, and a table renamed before the apply.
+- **After pulling:** the migration `ProjectTemplates` adds two columns to `Projects`:
+  `dotnet ef database update --project src/CoreFoundry.Infrastructure --startup-project src/CoreFoundry.Api`.
+
 ## M6 — Code export
 
 `GET /api/projects/{id}/export` and the **Export code** card return `<project>-backend.zip`: a .NET 10 Clean Architecture
@@ -236,7 +257,7 @@ Integration tests that need MySQL skip themselves when no connection string is c
 
 ## Changes from the original plan
 
-All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D35).
+All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D37).
 
 | Change | Why |
 |---|---|
@@ -267,6 +288,8 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D35).
 | FK errors 1452 → 400 and 1451 → 409, unknown column 1054 → drift 409 (D31) | References came with M2.5, after the spec's error table |
 | Reference picker + `GET …/data/{table}/lookup` (D32) | The user chose a picker over a number input |
 | Code export added as M6 (D33–D35), before M5 polish | Requested by the user |
+| Schema templates added as M7 (D36–D37) | Requested by the user |
+| Docker Compose without Caddy, migrations on API start (M5 one-command run) | The user's choice of layout; Next's `/api` proxy already gives one origin |
 | `GET …/data` lists applied tables with their columns | The viewer builds its grid and form from it |
 | `TableDto.appliedName` | The designer's "Browse data" link needs the table's name in the database, which differs after a rename |
 
@@ -281,6 +304,9 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D35).
 - **Editing the draft while an apply runs** can make the final metadata save hit a version conflict: MySQL is already changed but the journal row stays `Pending`. Planning again recovers (objects are matched by name), but the `Pending` row isn't cleaned up.
 - **Plan warnings run one query per risky operation** (row or NULL counts). Fine for small schemas.
 - **Drift compares with the snapshot of the last successful apply.** After a failed apply, the partial changes show as drift until the next successful one.
+- **Templates: only E-commerce so far**, and only for a project without tables; more templates are data, not code changes.
+- **Templates: a template's column added in the second pass** (a self-reference) goes to the end of its table.
+- **Docker: `docker compose up` for CoreFoundry is written and validated, but not built or run yet.**
 - **At most 50 projects can share a name** (slugs `name`, `name-2` … `name-50`); the 51st gets a 409. Found when the test suite passed 50 "Bookshop" projects; the export tests now use their own name.
 - **Export: not run with Docker yet** (Docker isn't installed), and the download button hasn't been clicked in a browser.
 - **Export: a full replace (PUT) of a `CURRENT_TIMESTAMP` column left out uses the API server's UTC time**, while MySQL's default uses the database session's time zone.
@@ -303,6 +329,22 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D35).
 ## Next: M5 — Portfolio polish
 
 First the open M4 and M6 hands-on checks (Bookshop from the UI and with curl), then one-command run, demo data, README and deploy.
+
+## Commits on `m7-schema-templates`
+
+| Commit | Change |
+|---|---|
+| `e038967` | Plan M7 |
+| `b729e73` | Template model and the E-commerce template, Domain-rules test |
+| `805bc62` | Start a project from a template: endpoints, `ProjectTemplates` migration |
+| `3924199` | Sample rows after the first apply; load sample data endpoint |
+| `e05a8ff` | Web: template picker in New project and the empty designer, sample data messages |
+
+## Commits on `m5-one-command-run`
+
+| Commit | Change |
+|---|---|
+| `c93fcd7` | `docker compose up`: MySQL, API and web; `Database:MigrateOnStartup`, `ForwardedHeaders:TrustAllProxies` |
 
 ## Commits on `m6-code-export`
 
