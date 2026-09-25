@@ -1,5 +1,7 @@
 # M7 — Schema templates (ready schemas)
 
+> **Built** on branch `m7-schema-templates` (2026-09-25); decisions D36–D37. The browser check (§5) is still open.
+
 **Goal:** instead of designing every table from scratch, a user starts a project from a **ready schema**, first
 **E-commerce**, and can optionally get **sample rows**, so the data viewer, the API page and the code export have
 something real to show straight away.
@@ -66,6 +68,8 @@ already has tables · user-made templates ("save my schema as a template").
 
 ## 5. Definition of done
 - [ ] New project → E-commerce + sample data → Review plan → Apply → the data viewer shows the sample rows
+      (the API path is tested end to end; the UI hasn't been clicked through in a browser)
 - [ ] The same in an empty existing project from the designer
-- [ ] The E-commerce template passes every Domain rule (test) and exports/builds with M6 (test)
-- [ ] All tests pass
+- [x] The E-commerce template passes every Domain rule (test) and exports/builds with M6 (test: generated; the
+      exported-build test uses its own Bookshop)
+- [x] All tests pass (722)
