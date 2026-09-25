@@ -22,6 +22,17 @@ public static class CodeNames
         "Lazy", "List", "Math", "Memory", "Migration", "ModelBuilder", "Monitor", "Nullable", "Object", "PageRequest",
         "PagedResult", "Path", "ProblemDetails", "Program", "Random", "Range", "Results", "Span", "String", "Task", "Thread",
         "Timer", "TimeSpan", "Tuple", "Type", "Uri", "ValidationException", "Version",
+
+        // Namespace segments of the generated solution: a type with one of these names would hide the namespace.
+        "Api", "Application", "Auth", "Common", "Configurations", "Controllers", "Domain", "Entities", "Errors",
+        "Infrastructure", "Json", "Migrations", "OpenApi", "Persistence", "Tables",
+
+        // Shared types the generator writes.
+        "AccessToken", "AppUserConfiguration", "AuthResponse", "AuthenticationFailedException", "BearerSecuritySchemeTransformer",
+        "ConflictException", "CredentialsRequest", "CrudService", "DatabaseErrors", "DateTimeConverter", "DecimalDigitsAttribute",
+        "DecimalStringConverter", "EfRepository", "ExceptionHandler", "IEntity", "IPasswordHasher", "IRepository", "ITokenService",
+        "IUserRepository", "JsonValues", "JwtTokenService", "MaxCharactersAttribute", "MaxUtf8BytesAttribute", "MySqlDateAttribute",
+        "NotFoundException", "PasswordHasher", "UserRepository", "ValidationFailedException",
     };
 
     /// <summary><c>price_usd</c> → <c>PriceUsd</c>, <c>isbn13</c> → <c>Isbn13</c>.</summary>

@@ -13,6 +13,12 @@ namespace CoreFoundry.Application.Export;
 /// <param name="ProjectName">The project's display name (for the README).</param>
 public sealed record ExportModel(string Solution, string ProjectName, int SchemaVersion, IReadOnlyList<ExportEntity> Entities)
 {
+    /// <summary>
+    /// The JWT signing key written to <c>appsettings.Development.json</c> (local development only; production
+    /// reads it from the environment). Random per export; tests set a fixed one.
+    /// </summary>
+    public string DevSigningKey { get; init; } = string.Empty;
+
     /// <summary>File-name friendly form of <see cref="Solution"/>: <c>bookshop</c>.</summary>
     public string Slug => Solution.ToLowerInvariant();
 
