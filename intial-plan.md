@@ -24,7 +24,7 @@ backend architecture.
 | D3 | **No reliance on DDL transactions** — atomic single statements + a `SchemaMigrations` journal | MySQL implicitly commits on every DDL statement; you cannot roll back a batch of DDL. Design around it instead of pretending. |
 | D4 | Every generated table gets a **system `id BIGINT AUTO_INCREMENT PRIMARY KEY`** column (not editable/deletable) | Gives the Data API a guaranteed row identity; removes "composite / missing PK" edge cases from v1. |
 | D5 | **Data viewer + generic CRUD API** for generated tables is in scope | The demo shouldn't end at "a table exists." Reuses the same safe-identifier layer. |
-| D6 | **Foreign keys / relationships: roadmap only** | FKs complicate diffing, drop ordering and type changes considerably. |
+| D6 | ~~**Foreign keys / relationships: roadmap only**~~ — superseded by D25 | FKs complicate diffing, drop ordering and type changes considerably. |
 | D7 | Stack: **.NET 10 LTS, MySQL 8.4 LTS, Next.js (latest, App Router, TS)** | Current LTS versions. |
 | D8 | Columns and tables have **stable metadata Ids + `AppliedName`** | Lets the differ tell a *rename* (`RENAME COLUMN`, keeps data) from a *drop + add* (loses data). |
 | D9 | EF Core provider: **Oracle `MySql.EntityFrameworkCore` 10.x** (decided in M0) | Pomelo has no EF Core 10 release (latest is 9.0.0). |
@@ -36,6 +36,14 @@ backend architecture.
 | D15 | EF Core's provider runs on Oracle's **MySql.Data** driver; the schema engine/Data API use **MySqlConnector** | Consequence of D9: two drivers, one per data-access strategy. |
 | D16 | Web dev server on **port 3100** | A local VPN service holds `127.0.0.1:3000`, which made `:3000` only intermittently reachable. |
 | D17 | Next.js **proxies `/api/*`** to the API (`next.config.ts` rewrites); the API trusts `X-Forwarded-For` from loopback proxies only | One origin for the SameSite=Strict refresh cookie (as planned for production), while the login rate limit stays per client IP. |
+| D18 | Identifier regex is `^[a-z][a-z0-9_]{0,63}$` (64 characters, MySQL's limit), not `{0,62}`; the reserved-word list is generated from MySQL 9.2's `INFORMATION_SCHEMA.KEYWORDS` (`db/reserved-words.sql`) | `{0,62}` allowed only 63 characters, contradicting the 64/65-character tests. A newer server's list is a superset of 8.4's, so it only rejects more. |
+| D19 | The row-size guard computes **MySQL's exact row size** (per-type bytes, length prefixes, the `id` column, NULL bitmap), verified against MySQL at the 65,535-byte boundary for every type; UNIQUE is refused on Text/Json and on Varchar > 768 | The planned "sum of Varchar × 4" passed tables MySQL rejects. Text/Json can't be indexed without a prefix, and InnoDB keys are capped at 3,072 bytes. |
+| D20 | Optimistic concurrency via **`ProjectTables.Version`** (int), bumped by every change to the table or its columns; every write sends the version it last saw (`?version=` on DELETE) | MySQL has no rowversion type; a whole-table version makes two people editing different columns of one table conflict instead of producing a mix neither saw. |
+| D21 | A table pending drop does **not** set `PendingDrop` on its columns; they are reported as `PendingDrop` while their table is | Restoring the table then can't also resurrect a column that was deleted on its own. Same UI result. |
+| D22 | Deleting a never-applied column (a hard delete) offers an **Undo** in the designer that re-adds it at the same position | In M2 nothing is applied yet, so every delete is a hard delete; the Definition of done still needs "delete one and undo it". The re-added column gets a new id, which is harmless before apply. |
+| D23 | Column reordering uses **@dnd-kit** (core + sortable) | Animated sorting with pointer, touch and keyboard support built in. |
+| D24 | MySQL duplicate-key errors (1062) on save map to **409** | Unique indexes are the backstop for name races the services can't see; they were surfacing as 500s. |
+| D25 | **Foreign keys are in scope** (replaces D6): many-to-one references to another table's `id`, on delete `Restrict`/`Cascade`/`SetNull`, plus a schema diagram (React Flow). Added as M2.5, before M3 | Relations are what make the generated schema a real data model. Designing the M3 differ with constraint ordering from the start is cheaper than retrofitting it. Composite keys and non-`id` targets stay on the roadmap. |
 
 ---
 
@@ -52,7 +60,7 @@ Build:
   → data viewer
 
 Explicitly **cut** (mention as "future roadmap" in the README, don't build):
-- Foreign keys / relationships between generated tables
+- Composite foreign keys and references to columns other than `id` (single-column references are in scope, D25)
 - Indexes beyond `UNIQUE` (composite indexes, full-text)
 - Redis caching, background jobs
 - Full code generator (schema → downloadable backend project)
@@ -197,7 +205,7 @@ latest applied snapshot (cached), **never the draft**.
 (DDL defaults can't be parameterized).
 
 ### Identifier rules
-- Regex `^[a-z][a-z0-9_]{0,62}$`
+- Regex `^[a-z][a-z0-9_]{0,63}$` (64 characters, D18)
 - Reject MySQL reserved words and system names (`id`, anything `cf_*`)
 - Always rendered backtick-quoted, and backticks are impossible anyway
   because of the regex — defense in depth.

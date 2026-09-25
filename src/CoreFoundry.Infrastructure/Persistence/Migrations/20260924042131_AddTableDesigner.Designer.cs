@@ -3,6 +3,7 @@ using System;
 using CoreFoundry.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CoreFoundry.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MetadataDbContext))]
-    partial class MetadataDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260924042131_AddTableDesigner")]
+    partial class AddTableDesigner
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -119,9 +122,6 @@ namespace CoreFoundry.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)");
 
-                    b.Property<byte?>("OnDelete")
-                        .HasColumnType("tinyint unsigned");
-
                     b.Property<int>("OrdinalPosition")
                         .HasColumnType("int");
 
@@ -130,9 +130,6 @@ namespace CoreFoundry.Infrastructure.Persistence.Migrations
 
                     b.Property<byte?>("Precision")
                         .HasColumnType("tinyint unsigned");
-
-                    b.Property<long?>("ReferencesTableId")
-                        .HasColumnType("bigint");
 
                     b.Property<byte?>("Scale")
                         .HasColumnType("tinyint unsigned");
@@ -145,8 +142,6 @@ namespace CoreFoundry.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ReferencesTableId");
 
                     b.HasIndex("TableId", "Name")
                         .IsUnique();
@@ -346,11 +341,6 @@ namespace CoreFoundry.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("CoreFoundry.Domain.Schema.ProjectColumn", b =>
                 {
-                    b.HasOne("CoreFoundry.Domain.Schema.ProjectTable", null)
-                        .WithMany()
-                        .HasForeignKey("ReferencesTableId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
                     b.HasOne("CoreFoundry.Domain.Schema.ProjectTable", null)
                         .WithMany("Columns")
                         .HasForeignKey("TableId")

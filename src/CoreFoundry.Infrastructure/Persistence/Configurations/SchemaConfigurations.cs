@@ -17,6 +17,9 @@ internal sealed class ProjectTableConfiguration : IEntityTypeConfiguration<Proje
         builder.Property(table => table.AppliedName).HasMaxLength(ProjectTable.NameMaxLength);
         builder.HasIndex(table => new { table.ProjectId, table.Name }).IsUnique();
 
+        // Bumped by every change to the table or its columns; a stale Version makes the save fail (409).
+        builder.Property(table => table.Version).IsConcurrencyToken();
+
         builder.HasOne<Project>()
             .WithMany()
             .HasForeignKey(table => table.ProjectId)
@@ -44,7 +47,16 @@ internal sealed class ProjectColumnConfiguration : IEntityTypeConfiguration<Proj
         builder.Property(column => column.DefaultValue).HasMaxLength(ProjectColumn.DefaultValueMaxLength);
         builder.HasIndex(column => new { column.TableId, column.Name }).IsUnique();
 
+        // A reference to another draft table. The Domain refuses to delete a referenced table, so the
+        // cascade only runs when a whole project (all its tables) is deleted.
+        builder.HasOne<ProjectTable>()
+            .WithMany()
+            .HasForeignKey(column => column.ReferencesTableId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Ignore(column => column.IsApplied);
+        builder.Ignore(column => column.Default);
+        builder.Ignore(column => column.Definition);
     }
 }
 

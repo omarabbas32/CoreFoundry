@@ -1,6 +1,7 @@
 using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Common;
 using CoreFoundry.Application.Projects;
+using CoreFoundry.Application.Schema;
 using CoreFoundry.Infrastructure.Auth;
 using CoreFoundry.Infrastructure.Engine;
 using CoreFoundry.Infrastructure.HealthChecks;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<ITableRepository, TableRepository>();
         services.AddSingleton<IProjectDatabaseProvisioner>(new MySqlProjectDatabaseProvisioner(engine));
 
         services.AddOptions<JwtOptions>()

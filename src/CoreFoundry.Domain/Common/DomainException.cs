@@ -8,4 +8,7 @@ public sealed class DomainException : Exception
     public DomainException() { }
 
     public DomainException(string message, Exception innerException) : base(message, innerException) { }
+
+    /// <summary>The input field (camelCase, e.g. <c>length</c>) the rule is about, if there is one.</summary>
+    public string? Field { get; init; }
 }

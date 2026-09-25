@@ -221,6 +221,13 @@ POST /api/projects/{projectId}/schema/apply        (Admin)
 
 ---
 
+### Foreign keys (from M2.5, D25)
+- [ ] Constraint names `fk_<table>_<column>`, shortened with a hash when over 64 characters
+- [ ] Order: create tables → add/modify columns → add constraints; drop constraints before
+      dropping or modifying their columns and before dropping or renaming tables they block
+- [ ] Introspect `INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS` + `KEY_COLUMN_USAGE`; diff on-delete changes as drop + add constraint
+- [ ] Tests: create `authors` + `books` with a reference in one plan; drop `authors` with `books` pending drop in the same plan; change `Cascade` → `SetNull`
+
 ## 9. Definition of done
 - [ ] Bookshop: design `authors` + `books`, review the plan, apply, then see the tables in
       MySQL Workbench / `SHOW CREATE TABLE`

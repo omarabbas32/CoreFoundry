@@ -2,12 +2,15 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
-import type { Member, Project, ProjectRole } from "./types";
+import type { ColumnInput, Member, Project, ProjectRole, Table, TableSummary } from "./types";
 
 export const queryKeys = {
   projects: ["projects"] as const,
   project: (id: number) => ["projects", id] as const,
   members: (id: number) => ["projects", id, "members"] as const,
+  tables: (projectId: number) => ["projects", projectId, "tables"] as const,
+  table: (projectId: number, tableId: number) => ["projects", projectId, "tables", tableId] as const,
+  schema: (projectId: number) => ["projects", projectId, "schema"] as const,
 };
 
 export function useProjects() {
@@ -98,5 +101,101 @@ export function useTransferOwnership(projectId: number) {
     mutationFn: (userId: number) =>
       api<Member[]>(`/api/projects/${projectId}/transfer-ownership`, { method: "POST", body: { userId } }),
     onSuccess: invalidate,
+  });
+}
+
+// ---- Table designer ----------------------------------------------------------------------------
+
+export function useTables(projectId: number) {
+  return useQuery({
+    queryKey: queryKeys.tables(projectId),
+    queryFn: () => api<TableSummary[]>(`/api/projects/${projectId}/tables`),
+  });
+}
+
+export function useTable(projectId: number, tableId: number) {
+  return useQuery({
+    queryKey: queryKeys.table(projectId, tableId),
+    queryFn: () => api<Table>(`/api/projects/${projectId}/tables/${tableId}`),
+  });
+}
+
+/** Every table with its columns and references (for the diagram). */
+export function useSchema(projectId: number) {
+  return useQuery({
+    queryKey: queryKeys.schema(projectId),
+    queryFn: () => api<Table[]>(`/api/projects/${projectId}/schema`),
+  });
+}
+
+/** After any table change: the list and the whole-schema view are stale (each table is updated in place). */
+function invalidateTableLists(queryClient: ReturnType<typeof useQueryClient>, projectId: number) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.tables(projectId), exact: true }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.schema(projectId), exact: true }),
+  ]);
+}
+
+export function useCreateTable(projectId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api<Table>(`/api/projects/${projectId}/tables`, { method: "POST", body: { name } }),
+    onSuccess: (table) => {
+      queryClient.setQueryData(queryKeys.table(projectId, table.id), table);
+      return invalidateTableLists(queryClient, projectId);
+    },
+  });
+}
+
+/** A change to one table. Every change carries the version the page shows; 409 means someone else got there first. */
+type TableChange =
+  | { kind: "rename"; name: string }
+  | { kind: "delete" }
+  | { kind: "restore" }
+  | { kind: "addColumn"; column: ColumnInput }
+  | { kind: "updateColumn"; columnId: number; column: ColumnInput }
+  | { kind: "deleteColumn"; columnId: number }
+  | { kind: "restoreColumn"; columnId: number }
+  | { kind: "reorder"; columnIds: number[] };
+
+function sendTableChange(base: string, version: number, change: TableChange) {
+  switch (change.kind) {
+    case "rename":
+      return api<Table>(base, { method: "PUT", body: { version, name: change.name } });
+    case "delete":
+      return api<Table | undefined>(`${base}?version=${version}`, { method: "DELETE" });
+    case "restore":
+      return api<Table>(`${base}/restore`, { method: "POST", body: { version } });
+    case "addColumn":
+      return api<Table>(`${base}/columns`, { method: "POST", body: { version, ...change.column } });
+    case "updateColumn":
+      return api<Table>(`${base}/columns/${change.columnId}`, { method: "PUT", body: { version, ...change.column } });
+    case "deleteColumn":
+      return api<Table>(`${base}/columns/${change.columnId}?version=${version}`, { method: "DELETE" });
+    case "restoreColumn":
+      return api<Table>(`${base}/columns/${change.columnId}/restore`, { method: "POST", body: { version } });
+    case "reorder":
+      return api<Table>(`${base}/columns/order`, { method: "PUT", body: { version, columnIds: change.columnIds } });
+  }
+}
+
+/**
+ * Applies changes to a table. The response is the whole table with its new version, so it replaces
+ * the cached copy directly; a hard-deleted table (204) is removed from the cache instead.
+ */
+export function useTableChange(projectId: number, tableId: number) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.table(projectId, tableId);
+  return useMutation({
+    mutationFn: (change: TableChange) => {
+      const current = queryClient.getQueryData<Table>(key);
+      if (!current) throw new Error("The table isn't loaded yet.");
+      return sendTableChange(`/api/projects/${projectId}/tables/${tableId}`, current.version, change);
+    },
+    onSuccess: (table) => {
+      if (table) queryClient.setQueryData(key, table);
+      else queryClient.removeQueries({ queryKey: key });
+      return invalidateTableLists(queryClient, projectId);
+    },
   });
 }

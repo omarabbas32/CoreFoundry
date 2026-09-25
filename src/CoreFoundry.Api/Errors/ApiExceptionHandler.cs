@@ -37,6 +37,12 @@ internal sealed class ApiExceptionHandler(IProblemDetailsService problemDetails)
                 Title = "Conflict.",
                 Detail = conflict.Message,
             },
+            ConcurrencyConflictException concurrency => new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflict.",
+                Detail = concurrency.Message,
+            },
             ForbiddenException forbidden => new ProblemDetails
             {
                 Status = StatusCodes.Status403Forbidden,
