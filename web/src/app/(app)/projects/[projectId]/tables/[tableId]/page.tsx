@@ -195,7 +195,7 @@ function Designer({
           idPrefix="table-access"
           read={table.readAccess}
           write={table.writeAccess}
-          disabled={!editable}
+          disabled={!editable || access.isPending || change.isPending}
           onChange={({ read, write }) => {
             access.reset();
             access.mutate({ tableId: table.id, version: table.version, read, write });

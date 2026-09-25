@@ -241,6 +241,15 @@ export function useSetTableAccess(projectId: number) {
       api<Table>(`/api/projects/${projectId}/tables/${tableId}/access`, { method: "PUT", body: { version, read, write } }),
     onSuccess: (table) => {
       queryClient.setQueryData(queryKeys.table(projectId, table.id), table);
+      // Patch the tables-list row too so an immediate second edit has the new version, not a stale one
+      // (the invalidation below refetches in the background, but that hasn't landed yet).
+      queryClient.setQueryData<TableSummary[]>(queryKeys.tables(projectId), (rows) =>
+        rows?.map((row) =>
+          row.id === table.id
+            ? { ...row, version: table.version, readAccess: table.readAccess, writeAccess: table.writeAccess }
+            : row,
+        ),
+      );
       return invalidateTableLists(queryClient, projectId);
     },
   });

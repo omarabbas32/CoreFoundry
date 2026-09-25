@@ -137,6 +137,8 @@ function AccessSection({ projectId }: { projectId: number }) {
           <Alert>{access.error.message}</Alert>
         ))}
 
+      {tables.error && <Alert>{tables.error.message}</Alert>}
+
       {tables.isPending ? (
         <p className="text-sm text-muted">Loading tables…</p>
       ) : tables.data && tables.data.length === 0 ? (
@@ -153,7 +155,7 @@ function AccessSection({ projectId }: { projectId: number }) {
                 idPrefix={`access-${table.id}`}
                 read={table.readAccess}
                 write={table.writeAccess}
-                disabled={access.isPending}
+                disabled={access.isPending || table.state === "PendingDrop"}
                 onChange={({ read, write }) => {
                   access.reset();
                   access.mutate({ tableId: table.id, version: table.version, read, write });
