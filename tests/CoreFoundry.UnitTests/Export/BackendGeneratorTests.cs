@@ -221,7 +221,7 @@ public class BackendGeneratorTests
         auth.ShouldContain("throw new ConflictException(");
 
         // The listing never exposes the password hash.
-        auth.ShouldContain("public sealed record AccountDto(long Id, string Email, string Role, DateTime CreatedAt);");
+        auth.ShouldContain("public sealed record AppUserDto(long Id, string Email, string Role, DateTime CreatedAt);");
         auth.ShouldNotContain("PasswordHash)");
     }
 
@@ -241,8 +241,8 @@ public class BackendGeneratorTests
         controller.ShouldNotContain("[AllowAnonymous]\npublic sealed class"); // a class-level AllowAnonymous would win over the actions' [Authorize]
         controller.ShouldContain("    [HttpPost(\"register\")]\n    [AllowAnonymous]\n");
         controller.ShouldContain("    [HttpPost(\"login\")]\n    [AllowAnonymous]\n");
-        controller.ShouldContain("    [HttpGet(\"users\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<IReadOnlyList<AccountDto>> ListUsers(");
-        controller.ShouldContain("    [HttpPut(\"users/{id:long}/role\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<AccountDto> SetRole(long id, RoleRequest request,");
+        controller.ShouldContain("    [HttpGet(\"users\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<IReadOnlyList<AppUserDto>> ListUsers(");
+        controller.ShouldContain("    [HttpPut(\"users/{id:long}/role\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<AppUserDto> SetRole(long id, RoleRequest request,");
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public static class CodeNames
         "Infrastructure", "Json", "Migrations", "OpenApi", "Persistence", "Realtime", "Tables",
 
         // Shared types the generator writes.
-        "AccessToken", "AccountDto", "AppUserConfiguration", "AuthResponse", "AuthenticationFailedException",
+        "AccessToken", "AppUserConfiguration", "AppUserDto", "AuthResponse", "AuthenticationFailedException",
         "BearerSecurityRequirementTransformer", "BearerSecuritySchemeTransformer", "ChangeEvent", "ChangeOperation",
         "ConflictException", "CredentialsRequest", "CrudService", "DatabaseErrors", "DateTimeConverter", "DecimalDigitsAttribute",
         "DecimalStringConverter", "EfRepository", "ExceptionHandler", "IChangePublisher", "IEntity", "IPasswordHasher",

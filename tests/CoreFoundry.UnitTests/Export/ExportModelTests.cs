@@ -134,6 +134,14 @@ public class ExportModelTests
     }
 
     [Fact]
+    public void A_table_named_accounts_keeps_its_singular_name()
+    {
+        var model = ExportModel.From("Shop", new DataSchema(1, [new DataTable("accounts", [])]));
+
+        model.Entity("accounts").ClassName.ShouldBe("Account"); // the generated auth's record is AppUserDto, not AccountDto
+    }
+
+    [Fact]
     public void Tables_named_like_the_realtime_types_get_non_clashing_names()
     {
         var schema = new DataSchema(1,

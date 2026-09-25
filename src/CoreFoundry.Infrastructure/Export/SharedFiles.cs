@@ -454,7 +454,7 @@ internal static class SharedFiles
             public sealed record AccessToken(string Token, DateTimeOffset ExpiresAt);
 
             /// <summary>An account as Admins see it; never the password hash.</summary>
-            public sealed record AccountDto(long Id, string Email, string Role, DateTime CreatedAt);
+            public sealed record AppUserDto(long Id, string Email, string Role, DateTime CreatedAt);
 
             /// <param name="Role"><c>Admin</c> or <c>User</c>.</param>
             public sealed record RoleRequest(string? Role);
@@ -554,11 +554,11 @@ internal static class SharedFiles
                     return Issue(user);
                 }
 
-                public async Task<IReadOnlyList<AccountDto>> ListAccountsAsync(CancellationToken cancellationToken) =>
+                public async Task<IReadOnlyList<AppUserDto>> ListAccountsAsync(CancellationToken cancellationToken) =>
                     [.. (await users.ListAsync(cancellationToken)).Select(ToAccount)];
 
                 /// <summary>Makes an account Admin or User. The last Admin can't be made a User (409).</summary>
-                public async Task<AccountDto> SetRoleAsync(long id, RoleRequest request, CancellationToken cancellationToken)
+                public async Task<AppUserDto> SetRoleAsync(long id, RoleRequest request, CancellationToken cancellationToken)
                 {
                     ArgumentNullException.ThrowIfNull(request);
                     var role = request.Role switch
@@ -584,7 +584,7 @@ internal static class SharedFiles
                     return ToAccount(updated);
                 }
 
-                private static AccountDto ToAccount(AppUser user) => new(user.Id, user.Email, user.Role, user.CreatedAt);
+                private static AppUserDto ToAccount(AppUser user) => new(user.Id, user.Email, user.Role, user.CreatedAt);
 
                 private AuthResponse Issue(AppUser user)
                 {
@@ -1163,13 +1163,13 @@ internal static class SharedFiles
 
                 [HttpGet("users")]
                 [Authorize(Roles = "Admin")]
-                public Task<IReadOnlyList<AccountDto>> ListUsers(CancellationToken cancellationToken) =>
+                public Task<IReadOnlyList<AppUserDto>> ListUsers(CancellationToken cancellationToken) =>
                     auth.ListAccountsAsync(cancellationToken);
 
                 /// <summary>Makes an account Admin or User. A token keeps the role it was issued with: the account logs in again.</summary>
                 [HttpPut("users/{id:long}/role")]
                 [Authorize(Roles = "Admin")]
-                public Task<AccountDto> SetRole(long id, RoleRequest request, CancellationToken cancellationToken) =>
+                public Task<AppUserDto> SetRole(long id, RoleRequest request, CancellationToken cancellationToken) =>
                     auth.SetRoleAsync(id, request, cancellationToken);
             }
 
