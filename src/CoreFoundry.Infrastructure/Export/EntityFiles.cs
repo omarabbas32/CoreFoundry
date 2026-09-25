@@ -224,6 +224,12 @@ internal static class EntityFiles
             lines.Add($"builder.HasIndex(e => e.{property.Name}).IsUnique().HasDatabaseName({CSharp.String(entity.UniqueKeyName(property))});");
         }
 
+        // The index behind each foreign key gets the constraint's name, as MySQL would give it (a unique index already covers its column).
+        foreach (var property in entity.Properties.Where(property => property.Reference is not null && !property.IsUnique))
+        {
+            lines.Add($"builder.HasIndex(e => e.{property.Name}).HasDatabaseName({CSharp.String(property.Reference!.ConstraintName)});");
+        }
+
         foreach (var property in entity.Properties.Where(property => property.Reference is not null))
         {
             var reference = property.Reference!;

@@ -19,6 +19,12 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
     /// </summary>
     public string DevSigningKey { get; init; } = string.Empty;
 
+    /// <summary>When the export was made (UTC); stamps the initial migration's id.</summary>
+    public DateTime ExportedAt { get; init; } = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>E.g. <c>20260925141909_InitialCreate</c>.</summary>
+    public string MigrationId => $"{ExportedAt.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture)}_InitialCreate";
+
     /// <summary>File-name friendly form of <see cref="Solution"/>: <c>bookshop</c>.</summary>
     public string Slug => Solution.ToLowerInvariant();
 
