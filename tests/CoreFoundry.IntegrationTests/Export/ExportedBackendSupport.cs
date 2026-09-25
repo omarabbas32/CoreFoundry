@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
@@ -10,13 +11,99 @@ using Shouldly;
 namespace CoreFoundry.IntegrationTests.Export;
 
 /// <summary>
-/// Shared plumbing for tests that build and run an exported backend over HTTP: process management, waiting
-/// for it to come up, and small JSON/HTTP helpers. Shared by <see cref="ExportEndpointsTests"/>,
+/// Shared plumbing for tests that build and run an exported backend over HTTP: building and running it, process
+/// management, waiting for it to come up, and small JSON/HTTP helpers. Shared by <see cref="ExportEndpointsTests"/>,
 /// <see cref="AccessEndpointsTests"/> and <see cref="RealtimeEndpointsTests"/>.
 /// </summary>
 internal static class ExportedBackendSupport
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// Unzips an export of <paramref name="solution"/>, builds it (0 warnings), checks its migration with <c>dotnet-ef</c>
+    /// when that is on the PATH, runs it against a new MySQL database and calls <paramref name="use"/> with a client for it
+    /// and the database's name. Then stops it and drops the database. A failed assertion carries the exported API's log.
+    /// </summary>
+    /// <param name="solution">The solution's name, e.g. <c>BookStore</c> (the zip holds <c>bookstore-backend/</c>).</param>
+    public static async Task RunExportedBackendAsync(
+        byte[] zip, string solution, string engineConnectionString, Func<HttpClient, string, Task> use, bool checkMigration = true, bool swagger = true)
+    {
+        var folder = Directory.CreateTempSubdirectory("cf-export-");
+        var database = $"cf_p_{1_900_000_000L + Random.Shared.NextInt64(99_999_999)}";
+        Process? api = null;
+        try
+        {
+            await ZipFile.ExtractToDirectoryAsync(new MemoryStream(zip), folder.FullName, Ct);
+            var root = Path.Combine(folder.FullName, $"{solution.ToLowerInvariant()}-backend");
+
+            // It builds, without warnings.
+            var build = await RunAsync("dotnet", $"build {solution}.slnx -c Release -nologo", root, TimeSpan.FromMinutes(6));
+            build.ExitCode.ShouldBe(0, build.Output);
+            build.Output.ShouldContain(" 0 Warning(s)", Case.Sensitive, build.Output);
+
+            // The hand-written migration describes exactly the model the configurations build.
+            if (checkMigration && FindOnPath("dotnet-ef") is { } ef)
+            {
+                var check = await RunAsync(ef,
+                    $"migrations has-pending-model-changes --project src/{solution}.Infrastructure --startup-project src/{solution}.Api --no-build --configuration Release",
+                    root, TimeSpan.FromMinutes(3));
+                check.ExitCode.ShouldBe(0, check.Output);
+                check.Output.ShouldContain("No changes have been made to the model since the last migration.");
+            }
+
+            // It runs: the migration creates its database on startup.
+            var port = FreePort();
+            var log = new StringBuilder();
+            var environment = new Dictionary<string, string>
+            {
+                ["ASPNETCORE_ENVIRONMENT"] = "Production",
+                ["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}",
+                ["ConnectionStrings__Default"] = $"{engineConnectionString.TrimEnd(';')};Database={database}",
+                ["Jwt__SigningKey"] = "an-export-test-signing-key-of-sufficient-length",
+                ["Database__MigrateOnStartup"] = "true",
+            };
+            if (swagger)
+            {
+                environment["Swagger__Enabled"] = "true";
+            }
+
+            api = Start(log, Path.Combine(root, $"src/{solution}.Api/bin/Release/net10.0/{solution}.Api.dll"), environment);
+            using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
+            try
+            {
+                await WaitUntilHealthyAsync(http, api);
+                await use(http, database);
+            }
+            catch (ShouldAssertException ex)
+            {
+                string output;
+                lock (log)
+                {
+                    output = log.ToString();
+                }
+
+                throw new ShouldAssertException($"{ex.Message}\n--- exported API log ---\n{output}", ex);
+            }
+        }
+        finally
+        {
+            if (api is { HasExited: false })
+            {
+                api.Kill(entireProcessTree: true);
+            }
+
+            api?.Dispose();
+            await ExecuteAsync(engineConnectionString, $"DROP DATABASE IF EXISTS `{database}`");
+            try
+            {
+                folder.Delete(recursive: true);
+            }
+            catch (IOException)
+            {
+                // A build server may still hold a file; the temp folder is cleaned up by the OS.
+            }
+        }
+    }
 
     public static Task<HttpResponseMessage> PostAsync(HttpClient http, string path, object body) =>
         http.PostAsJsonAsync(new Uri(path, UriKind.Relative), body, Ct);

@@ -1,9 +1,7 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using CoreFoundry.Api.Projects;
 using CoreFoundry.Application.Projects;
@@ -86,59 +84,12 @@ public sealed class ExportEndpointsTests : IDisposable
         Assert.SkipWhen(Environment.GetEnvironmentVariable("CF_SKIP_EXPORT_BUILD") == "1", "CF_SKIP_EXPORT_BUILD=1");
         var shop = await BookStoreAsync();
         var zip = await (await _driver.SendAsync(HttpMethod.Get, $"/api/projects/{shop.Project.Id}/export", shop.Owner)).Content.ReadAsByteArrayAsync(Ct);
-        var folder = Directory.CreateTempSubdirectory("cf-export-");
-        var database = $"cf_p_{1_900_000_000L + Random.Shared.NextInt64(99_999_999)}";
-        Process? api = null;
-        try
+        await ExportedBackendSupport.RunExportedBackendAsync(zip, "BookStore", _api.EngineConnectionString, async (http, database) =>
         {
-            await ZipFile.ExtractToDirectoryAsync(new MemoryStream(zip), folder.FullName, Ct);
-            var root = Path.Combine(folder.FullName, "bookstore-backend");
+            // Auth and CRUD work over HTTP.
+            await UseTheApiAsync(http);
 
-            // 1. It builds, without warnings.
-            var build = await ExportedBackendSupport.RunAsync("dotnet", "build BookStore.slnx -c Release -nologo", root, TimeSpan.FromMinutes(6));
-            build.ExitCode.ShouldBe(0, build.Output);
-            build.Output.ShouldContain(" 0 Warning(s)", Case.Sensitive, build.Output);
-
-            // 2. The hand-written migration describes exactly the model the configurations build.
-            if (ExportedBackendSupport.FindOnPath("dotnet-ef") is { } ef)
-            {
-                var check = await ExportedBackendSupport.RunAsync(ef,
-                    "migrations has-pending-model-changes --project src/BookStore.Infrastructure --startup-project src/BookStore.Api --no-build --configuration Release",
-                    root, TimeSpan.FromMinutes(3));
-                check.ExitCode.ShouldBe(0, check.Output);
-                check.Output.ShouldContain("No changes have been made to the model since the last migration.");
-            }
-
-            // 3. It runs: the migration creates its database, then auth and CRUD work over HTTP.
-            var port = ExportedBackendSupport.FreePort();
-            var log = new StringBuilder();
-            api = ExportedBackendSupport.Start(log, Path.Combine(root, "src/BookStore.Api/bin/Release/net10.0/BookStore.Api.dll"), new Dictionary<string, string>
-            {
-                ["ASPNETCORE_ENVIRONMENT"] = "Production",
-                ["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}",
-                ["ConnectionStrings__Default"] = $"{_api.EngineConnectionString.TrimEnd(';')};Database={database}",
-                ["Jwt__SigningKey"] = "an-export-test-signing-key-of-sufficient-length",
-                ["Database__MigrateOnStartup"] = "true",
-                ["Swagger__Enabled"] = "true",
-            });
-            using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
-            try
-            {
-                await ExportedBackendSupport.WaitUntilHealthyAsync(http, api);
-                await UseTheApiAsync(http);
-            }
-            catch (ShouldAssertException ex)
-            {
-                string output;
-                lock (log)
-                {
-                    output = log.ToString();
-                }
-
-                throw new ShouldAssertException($"{ex.Message}\n--- exported API log ---\n{output}", ex);
-            }
-
-            // 4. Its tables are the ones CoreFoundry applied (plus its accounts table and EF's migrations history).
+            // Its tables are the ones CoreFoundry applied (plus its accounts table and EF's migrations history).
             var introspector = new MySqlSchemaIntrospector(_api.EngineConnectionString);
             var applied = SchemaSnapshot.From(await introspector.ReadAsync(shop.Project.DatabaseName, Ct));
             var exported = SchemaSnapshot.From(await introspector.ReadAsync(database, Ct));
@@ -149,25 +100,7 @@ public sealed class ExportEndpointsTests : IDisposable
                 !table.Name.Equals("cf_users", StringComparison.OrdinalIgnoreCase) &&
                 !table.Name.Equals("__EFMigrationsHistory", StringComparison.OrdinalIgnoreCase))]);
             applied.DifferencesTo(withoutAccounts).ShouldBeEmpty();
-        }
-        finally
-        {
-            if (api is { HasExited: false })
-            {
-                api.Kill(entireProcessTree: true);
-            }
-
-            api?.Dispose();
-            await ExportedBackendSupport.ExecuteAsync(_api.EngineConnectionString, $"DROP DATABASE IF EXISTS `{database}`");
-            try
-            {
-                folder.Delete(recursive: true);
-            }
-            catch (IOException)
-            {
-                // A build server may still hold a file; the temp folder is cleaned up by the OS.
-            }
-        }
+        });
     }
 
     /// <summary>What a client of the exported API does, with the answers the README promises.</summary>

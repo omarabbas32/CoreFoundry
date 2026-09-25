@@ -1,9 +1,6 @@
-using System.Diagnostics;
-using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using CoreFoundry.Api.Projects;
 using CoreFoundry.Application.Projects;
@@ -46,73 +43,7 @@ public sealed class AccessEndpointsTests : IDisposable
         Assert.SkipWhen(Environment.GetEnvironmentVariable("CF_SKIP_EXPORT_BUILD") == "1", "CF_SKIP_EXPORT_BUILD=1");
         var shop = await LibraryAsync();
         var zip = await (await _driver.SendAsync(HttpMethod.Get, $"/api/projects/{shop.Project.Id}/export", shop.Owner)).Content.ReadAsByteArrayAsync(Ct);
-        var folder = Directory.CreateTempSubdirectory("cf-access-");
-        var database = $"cf_p_{1_900_000_000L + Random.Shared.NextInt64(99_999_999)}";
-        Process? api = null;
-        try
-        {
-            await ZipFile.ExtractToDirectoryAsync(new MemoryStream(zip), folder.FullName, Ct);
-            var root = Path.Combine(folder.FullName, "library-backend");
-
-            // It builds, without warnings, and matches its migration.
-            var build = await ExportedBackendSupport.RunAsync("dotnet", "build Library.slnx -c Release -nologo", root, TimeSpan.FromMinutes(6));
-            build.ExitCode.ShouldBe(0, build.Output);
-            build.Output.ShouldContain(" 0 Warning(s)", Case.Sensitive, build.Output);
-            if (ExportedBackendSupport.FindOnPath("dotnet-ef") is { } ef)
-            {
-                var check = await ExportedBackendSupport.RunAsync(ef,
-                    "migrations has-pending-model-changes --project src/Library.Infrastructure --startup-project src/Library.Api --no-build --configuration Release",
-                    root, TimeSpan.FromMinutes(3));
-                check.ExitCode.ShouldBe(0, check.Output);
-                check.Output.ShouldContain("No changes have been made to the model since the last migration.");
-            }
-
-            var port = ExportedBackendSupport.FreePort();
-            var log = new StringBuilder();
-            api = ExportedBackendSupport.Start(log, Path.Combine(root, "src/Library.Api/bin/Release/net10.0/Library.Api.dll"), new Dictionary<string, string>
-            {
-                ["ASPNETCORE_ENVIRONMENT"] = "Production",
-                ["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}",
-                ["ConnectionStrings__Default"] = $"{_api.EngineConnectionString.TrimEnd(';')};Database={database}",
-                ["Jwt__SigningKey"] = "an-access-test-signing-key-of-sufficient-length",
-                ["Database__MigrateOnStartup"] = "true",
-                ["Swagger__Enabled"] = "true",
-            });
-            using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
-            try
-            {
-                await ExportedBackendSupport.WaitUntilHealthyAsync(http, api);
-                await UseAccessApiAsync(http);
-            }
-            catch (ShouldAssertException ex)
-            {
-                string output;
-                lock (log)
-                {
-                    output = log.ToString();
-                }
-
-                throw new ShouldAssertException($"{ex.Message}\n--- exported API log ---\n{output}", ex);
-            }
-        }
-        finally
-        {
-            if (api is { HasExited: false })
-            {
-                api.Kill(entireProcessTree: true);
-            }
-
-            api?.Dispose();
-            await ExportedBackendSupport.ExecuteAsync(_api.EngineConnectionString, $"DROP DATABASE IF EXISTS `{database}`");
-            try
-            {
-                folder.Delete(recursive: true);
-            }
-            catch (IOException)
-            {
-                // A build server may still hold a file; the temp folder is cleaned up by the OS.
-            }
-        }
+        await ExportedBackendSupport.RunExportedBackendAsync(zip, "Library", _api.EngineConnectionString, (http, _) => UseAccessApiAsync(http));
     }
 
     /// <summary>
