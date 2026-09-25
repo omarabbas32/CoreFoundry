@@ -60,6 +60,7 @@ public sealed record TableSummaryDto(
 
 /// <param name="Version">Send this back with the next change; a stale value gets 409.</param>
 /// <param name="Columns">Ordered by position, including columns pending drop.</param>
+/// <param name="AppliedName">The table's name in the database (from the last apply), or null if never applied.</param>
 public sealed record TableDto(
     long Id,
     string Name,
@@ -67,7 +68,8 @@ public sealed record TableDto(
     int Version,
     IReadOnlyList<ColumnDto> Columns,
     DateTime CreatedAt,
-    DateTime UpdatedAt)
+    DateTime UpdatedAt,
+    string? AppliedName = null)
 {
     public static TableDto From(ProjectTable table, SchemaContext context)
     {
@@ -80,7 +82,8 @@ public sealed record TableDto(
             table.Version,
             [.. table.Columns.Select(column => ColumnFrom(table, column, context))],
             table.CreatedAt,
-            table.UpdatedAt);
+            table.UpdatedAt,
+            table.AppliedName);
     }
 
     public static TableSummaryDto SummaryFrom(ProjectTable table, SchemaContext context)

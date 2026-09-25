@@ -115,6 +115,14 @@ function Designer({
             <StateBadge state={table.state} />
           </div>
           <div className="flex gap-2">
+            {table.appliedName && (
+              <Link
+                href={`/projects/${projectId}/data/${table.appliedName}`}
+                className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+              >
+                Browse data
+              </Link>
+            )}
             {tableDropped ? (
               <Button variant="secondary" loading={change.isPending} onClick={() => report(run({ kind: "restore" }))}>
                 Undo delete

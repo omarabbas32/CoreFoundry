@@ -66,6 +66,8 @@ export type Table = {
   columns: Column[];
   createdAt: string;
   updatedAt: string;
+  /** The table's name in the database (from the last apply), or null if never applied. */
+  appliedName: string | null;
 };
 
 export type TableSummary = {
@@ -128,3 +130,37 @@ export type Migration = MigrationSummary & { statements: string[]; failedStateme
 export type MigrationPage = { items: MigrationSummary[]; total: number; page: number; pageSize: number };
 
 export type Drift = { differences: string[]; sinceVersion: number | null };
+
+// ---- Data API -----------------------------------------------------------------------------------
+
+/** A column as the last apply left it. `isWritable` is false for a type changed outside CoreFoundry. */
+export type DataColumn = {
+  name: string;
+  /** E.g. "Varchar(200)"; MySQL's own type for a column changed outside CoreFoundry. */
+  type: string;
+  dataType: DataType | null;
+  length: number | null;
+  precision: number | null;
+  scale: number | null;
+  isNullable: boolean;
+  isUnique: boolean;
+  /** The default's canonical text, or null. */
+  default: string | null;
+  /** The referenced table's name, or null. */
+  references: string | null;
+  isWritable: boolean;
+};
+
+export type DataTable = { name: string; columns: DataColumn[]; labelColumn: string | null };
+
+export type DataSchema = { schemaVersion: number; tables: DataTable[] };
+
+/**
+ * A row: `id`, then one value per column. Decimals, dates, date-times and UUIDs are strings
+ * (decimals keep every digit), Json columns are parsed JSON, missing values are null.
+ */
+export type DataRow = { id: number } & Record<string, unknown>;
+
+export type DataPage = { items: DataRow[]; page: number; pageSize: number; total: number };
+
+export type LookupItem = { id: number; label: string | null };
