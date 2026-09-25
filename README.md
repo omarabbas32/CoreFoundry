@@ -4,7 +4,7 @@ Design a database schema in the browser, preview the exact SQL, and apply it
 to real MySQL tables safely. A portfolio project focused on dynamic schema
 management, safe SQL generation, and clean backend architecture.
 
-> Status: **M4 built: the Data API and data viewer** (rows of the applied tables, from the UI or any HTTP client); the hands-on UI and curl check is still open. Next: M5 polish. See [the phases](docs/phases/README.md).
+> Status: **M6 built: code export**. Download any project as a deployable .NET backend. M4 (Data API) is built too; the hands-on UI checks of M4 and M6 are still open. Next: M5 polish. See [the phases](docs/phases/README.md).
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -69,6 +69,7 @@ its SQL and any error, and the project page warns when the database was changed 
 **Browse data** (`/projects/<id>/data/<table>`) shows the rows of applied tables: sortable columns,
 paging, and a side panel to add or edit a row. The form is generated from the applied columns,
 reference columns get a picker that searches the other table, and deletes ask for confirmation first.
+**Export code** (project page and API page) downloads the project as a standalone backend; see below.
 The **API** page (`/projects/<id>/api`) documents the project's own endpoints: base URL, how to get a
 token, and for every applied table its routes, fields and ready-to-copy curl and JavaScript examples.
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
@@ -129,6 +130,7 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | POST | `/api/projects/{id}/data/{table}` | Developer+; JSON object of column values → 201 + the row |
 | PUT | `/api/projects/{id}/data/{table}/{rowId}` | Developer+; full replace: columns left out get their default, or NULL |
 | DELETE | `/api/projects/{id}/data/{table}/{rowId}` | Developer+; 204; 409 if other rows still reference it (`Restrict`) |
+| GET | `/api/projects/{id}/export` | Developer+; zip of a .NET backend for the applied tables; 409 if nothing is applied |
 | GET | `/api/projects/{id}/data/{table}/lookup?q=&limit=` | Developer+; `[{ id, label }]` for reference pickers (label = first Varchar column) |
 
 Every table change carries the `version` the client last saw and returns the whole table with
@@ -155,6 +157,23 @@ with a snapshot of the real schema. If a statement fails, the journal row keeps 
 statement and MySQL's error. Planning again compares the draft with the real database, so the new
 plan contains only the changes that are still missing. Tables and columns that CoreFoundry didn't
 create are reported but never dropped.
+
+### Code export
+
+`GET /api/projects/{id}/export` (the **Export code** button) returns `<project>-backend.zip`: a .NET 10 solution
+in Clean Architecture generated from the applied tables.
+
+- `Domain` (one entity per table), `Application` (DTOs, validation, services), `Infrastructure` (EF Core `DbContext`,
+  one configuration per table, a generated `InitialCreate` migration, JWT and password hashing) and `Api` (one
+  controller per table, register/login, Swagger UI at `/swagger`).
+- `Dockerfile`, `docker-compose.yml` (API + MySQL 8.4, migrations applied on start), `.env.example` and a README
+  with every table's fields.
+- The generated API follows the Data API's contract: JSON names are the column names, decimals are strings,
+  paging/sorting are the same, and so are the 400/404/409 answers.
+
+Unapplied draft changes are not exported (the export matches the running database). A test exports a Bookshop,
+builds it, checks its migration with `dotnet ef`, runs it against MySQL, uses it over HTTP and compares its tables
+with CoreFoundry's (set `CF_SKIP_EXPORT_BUILD=1` to skip that slow test).
 
 ### Data API with curl
 

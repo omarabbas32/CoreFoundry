@@ -1,5 +1,8 @@
 # M6 — Code export: a deployable backend per project
 
+> **Built** on branch `m6-code-export` (2026-09-25). The hands-on UI download and a Docker run are still open (§6).
+> Notes marked **Built:** say where the build differs from this plan; decisions D33–D35 are in the plan's log.
+
 **Goal:** from a project's schema, generate a standalone **.NET 10 Clean Architecture** backend that the user
 downloads as a **.zip**, runs with `docker compose up`, and owns from then on. It has typed entities, an **EF Core**
 model with a generated **initial migration**, CRUD endpoints per table, **JWT** auth and **Swagger UI**.
@@ -20,7 +23,7 @@ JWT auth, OpenAPI/Swagger UI · no test project · delivery as .zip download.
 ### Generated solution (project "Bookshop")
 ```
 Bookshop/
-├─ Bookshop.sln
+├─ Bookshop.slnx                **Built:** the .NET 10 XML solution format
 ├─ Directory.Build.props · Directory.Packages.props · global.json · .gitignore · .dockerignore
 ├─ src/
 │  ├─ Bookshop.Domain/           Entities/Author.cs, Book.cs (plain classes, no EF attributes)
@@ -64,6 +67,12 @@ missing referenced row → 400; row still referenced → 409.
 | default | — | `HasDefaultValueSql(...)` rendered from `ColumnDefault` (same rules as `MySqlSqlRenderer`) |
 | unique | — | `HasIndex(...).IsUnique().HasDatabaseName("uq_<table>_<column>")` |
 | reference `author_id → authors` | `long? AuthorId` + navigation `Author? Author` | `HasOne().WithMany().HasForeignKey().OnDelete(Restrict/Cascade/SetNull)`, `fk_…` name |
+
+**Built:** a column with a default is nullable in C# (null = MySQL fills in the default; otherwise EF would treat
+an explicit `0`/`false` as "not set"); `DateOnly` goes through a `DateTime` converter (the Oracle connector reads
+DATE as DateTime); decimals are returned with the column's scale (`19.90`); the index behind each foreign key is
+named like the constraint (`fk_…`), as MySQL names it; type names that would clash (`Task`, `User`'s set name
+`Users`, namespace segments, the solution name) are renamed (`Tasks`, `Users2`, `…Entity`).
 
 Names come only from the snapshot (already `[a-z][a-z0-9_]`), so the generated identifiers are safe C#.
 PascalCase can't produce a C# keyword (they're all lower-case).
@@ -110,7 +119,8 @@ as code. The integration test proves they're right (below), so exports stay fast
 
 ## 6. Definition of done
 - [ ] Bookshop (authors, books with a reference, every type somewhere) exports as a zip from the UI
-- [ ] The unzipped solution builds with no warnings, its migration creates the same tables as CoreFoundry's apply,
+      (the endpoint and the zip are tested; the button hasn't been clicked in a browser yet)
+- [x] The unzipped solution builds with no warnings, its migration creates the same tables as CoreFoundry's apply,
       and register → login → CRUD works against it
-- [ ] The README inside the zip is enough to run it locally and with Docker
-- [ ] All CoreFoundry tests pass
+- [ ] The README inside the zip is enough to run it locally and with Docker (the built API is run by the test, not by following the README; Docker not run: not installed)
+- [x] All CoreFoundry tests pass (709)
