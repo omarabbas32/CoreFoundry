@@ -1,4 +1,8 @@
-# M3 — Schema engine ⭐
+# M3 — Schema engine ⭐ ✅
+
+> **Done** on branch `m3-schema-engine` (2026-09-25). What was built, how it's verified and the known gaps are in
+> [PROGRESS.md](../PROGRESS.md#m3--schema-engine-); decisions D26–D28 are in the plan's decisions log.
+> Notes marked **Built:** below say where the build differs from this plan.
 
 **Goal:** turn the draft into real MySQL tables safely. **Plan** compares the draft
 with the real schema and shows the exact SQL. **Apply** runs it with a lock and
@@ -24,6 +28,11 @@ Diagrams: [plan pipeline and apply state machine](../corefoundry-flows.html#plan
 
 `SqlRenderer` lives in Infrastructure because it is MySQL-specific, but it
 does no I/O and is unit-tested like Domain code.
+
+> **Built:** the names are `MySqlSchemaIntrospector`, `MySqlSqlRenderer`, `SchemaPlanService` and `SchemaApplier`.
+> `DraftSchemaReader` became a pure `DraftSchema.From(tables)` in Application (the table repository already loads the
+> draft). `MySqlSchemaEngine` (Infrastructure) owns the dedicated lock session; `SchemaSnapshot` and `PlanHash` live in
+> Application.
 
 ---
 
@@ -58,11 +67,13 @@ SELECT TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION, COLUMN_TYPE, DATA_TYPE,
 SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX
   FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = @db;
 ```
-- [ ] Map `COLUMN_TYPE` back to `ColumnType` (`tinyint(1)` → Bool,
+- [x] Map `COLUMN_TYPE` back to `ColumnType` (`tinyint(1)` → Bool,
       `char(36)` → Uuid, `datetime(6)` → DateTime …). Anything that doesn't map
       becomes `ColumnType.Unknown(raw)` and shows up as drift.
-- [ ] A column counts as unique only if a single-column unique index named
-      `uq_<table>_<column>` exists
+- [x] A column counts as unique only if a single-column unique index named
+      `uq_<table>_<column>` exists.
+      **Built:** any single-column unique index counts, whatever its name (MySQL keeps index names through
+      renames); when the name differs from `uq_<table>_<column>` the plan renames it with `RENAME INDEX`
 
 ---
 
@@ -97,14 +108,18 @@ Input: desired (draft) and actual (real). Tables are matched on
 
 The UI requires an extra "I understand" checkbox when any `Destructive` flag is present.
 
+> **Built:** adding a unique or foreign key on a column created in the same plan is `Safe` (a new column has no data
+> that could conflict). Output order is by phase: drop foreign keys → drop tables → rename tables → create tables →
+> alter tables → add foreign keys.
+
 ---
 
 ## 4. SQL rendering
 
-- [ ] Identifiers go through a single `Quote(Identifier id)` that only accepts
+- [x] Identifiers go through a single `Quote(Identifier id)` that only accepts
       an `Identifier` value object (already validated). There's no overload that
       takes a raw `string`.
-- [ ] One `CREATE TABLE` per new table:
+- [x] One `CREATE TABLE` per new table:
   ```sql
   CREATE TABLE `cf_p_7`.`books` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -114,14 +129,14 @@ The UI requires an extra "I understand" checkbox when any `Destructive` flag is 
     UNIQUE KEY `uq_books_title` (`title`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
   ```
-- [ ] One `ALTER TABLE` per existing table, with every clause separated by commas:
+- [x] One `ALTER TABLE` per existing table, with every clause separated by commas:
       `RENAME COLUMN`, `ADD COLUMN`, `MODIFY COLUMN`, `DROP COLUMN`,
       `ADD UNIQUE KEY`, `DROP INDEX`
-- [ ] `RENAME TABLE` is a separate statement and runs before that table's `ALTER`
-- [ ] Defaults are written from the typed `DefaultValue`: numbers invariant-culture,
+- [x] `RENAME TABLE` is a separate statement and runs before that table's `ALTER`
+- [x] Defaults are written from the typed `DefaultValue`: numbers invariant-culture,
       strings escaped as `'` → `''` and `\` → `\\`, and the keywords
       `CURRENT_TIMESTAMP(6)` / `(UUID())` for the function defaults
-- [ ] `planHash = SHA-256(SchemaVersion + "\n" + string.Join("\n", statements))`, hex
+- [x] `planHash = SHA-256(SchemaVersion + "\n" + string.Join("\n", statements))`, hex
 
 ---
 
@@ -146,6 +161,7 @@ POST /api/projects/{projectId}/schema/apply        (Admin)
 2. `SELECT GET_LOCK('cf_apply_{projectId}', 0)`. If it returns 0 → 409 apply-in-progress.
 3. Build the plan again and compare its hash with the one the client sent. If they differ → release the lock, 409 plan-stale.
 4. Insert `SchemaMigrations { Status = Pending, Version = SchemaVersion + 1, StatementsJson }` (via `cf_meta`).
+   **Built:** `(ProjectId, Version)` is a normal index, not unique (D28), so a failed attempt and its retry share the version.
 5. For each statement `i`: execute it, then update `StatementsApplied = i`.
 6. **All succeeded** → one EF transaction:
    - set `AppliedName = Name` on every applied table and column
@@ -176,64 +192,68 @@ POST /api/projects/{projectId}/schema/apply        (Admin)
 
 ## 7. Frontend
 
-- [ ] **Review plan** page: grouped by table, each operation as a coloured row
+- [x] **Review plan** page: grouped by table, each operation as a coloured row
       (add green, rename amber, drop red), SQL in a code block with a copy button,
       and warnings at the top
-- [ ] Apply button, visible only to Admin and Owner. It needs the destructive
+- [x] Apply button, visible only to Admin and Owner. It needs the destructive
       checkbox when a destructive change is present. A progress state is shown during the request.
-- [ ] Clear 409 messages: "The draft changed since you reviewed it. Review again."
+- [x] Clear 409 messages: "The draft changed since you reviewed it. Review again."
       and "Someone else is applying changes to this project."
-- [ ] **History** page: list of migrations with status and expandable SQL. A failed
+- [x] **History** page: list of migrations with status and expandable SQL. A failed
       migration shows the statement that failed and the error.
-- [ ] Drift banner on the project page when `/schema/drift` isn't empty
+- [x] Drift banner on the project page when `/schema/drift` isn't empty
 
 ---
 
 ## 8. Tests
 
 **Unit: `SchemaDiffer` (table-driven, aim for full branch coverage)**
-- [ ] Empty → one table = one `CreateTable`
-- [ ] Rename column keeps its data (a `RenameColumn` op, not drop + add)
-- [ ] Rename table + rename column in the same plan
-- [ ] PendingDrop column → `DropColumn` flagged destructive
-- [ ] Varchar 200 → 50 flagged, 50 → 200 not flagged
-- [ ] Unmanaged table in actual → reported, no drop
-- [ ] Recovery: draft says applied but the column is missing in actual → `AddColumn`
-- [ ] No changes → empty plan, and the same hash on repeated calls
+- [x] Empty → one table = one `CreateTable`
+- [x] Rename column keeps its data (a `RenameColumn` op, not drop + add)
+- [x] Rename table + rename column in the same plan
+- [x] PendingDrop column → `DropColumn` flagged destructive
+- [x] Varchar 200 → 50 flagged, 50 → 200 not flagged
+- [x] Unmanaged table in actual → reported, no drop
+- [x] Recovery: draft says applied but the column is missing in actual → `AddColumn`
+- [x] No changes → empty plan, and the same hash on repeated calls
 
 **Unit: `SqlRenderer`**
-- [ ] Snapshot tests of the rendered SQL for every operation type
-- [ ] Default escaping: `O'Reilly`, `back\slash`
-- [ ] Several ops on one table → exactly one `ALTER TABLE`
+- [x] Snapshot tests of the rendered SQL for every operation type
+- [x] Default escaping: `O'Reilly`, `back\slash`
+- [x] Several ops on one table → exactly one `ALTER TABLE`
 
-**Integration (real MySQL via Testcontainers)**
-- [ ] Design → plan → apply → `INFORMATION_SCHEMA` matches the draft
-- [ ] Round trip: after apply, the next plan is empty
-- [ ] Rename a column that has data → the data survives
-- [ ] Failure mid-apply: add a statement that fails on purpose (e.g. make a unique key
+**Integration (real MySQL; built against the local server instead of Testcontainers, D26)**
+- [x] Design → plan → apply → `INFORMATION_SCHEMA` matches the draft
+- [x] Round trip: after apply, the next plan is empty
+- [x] Rename a column that has data → the data survives
+- [x] Failure mid-apply: add a statement that fails on purpose (e.g. make a unique key
       conflict with duplicate rows) → `Failed`, `StatementsApplied` correct, re-plan
       proposes only the rest, second apply succeeds
-- [ ] Two applies at once → one returns 409 apply-in-progress
-- [ ] Stale hash → 409 plan-stale
-- [ ] Developer calling apply → 403
-- [ ] Security: even if a crafted identifier got past validation (bypass validation in the test),
+- [x] Two applies at once → one returns 409 apply-in-progress
+- [x] Stale hash → 409 plan-stale
+- [x] Developer calling apply → 403
+- [x] Security: even if a crafted identifier got past validation (bypass validation in the test),
       `Quote` rejects it (defense in depth)
 
 ---
 
 ### Foreign keys (from M2.5, D25)
-- [ ] Constraint names `fk_<table>_<column>`, shortened with a hash when over 64 characters
-- [ ] Order: create tables → add/modify columns → add constraints; drop constraints before
+- [x] Constraint names `fk_<table>_<column>`, shortened with a hash when over 64 characters
+- [x] Order: create tables → add/modify columns → add constraints; drop constraints before
       dropping or modifying their columns and before dropping or renaming tables they block
-- [ ] Introspect `INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS` + `KEY_COLUMN_USAGE`; diff on-delete changes as drop + add constraint
-- [ ] Tests: create `authors` + `books` with a reference in one plan; drop `authors` with `books` pending drop in the same plan; change `Cascade` → `SetNull`
+- [x] Introspect `INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS` + `KEY_COLUMN_USAGE`; diff on-delete changes as drop + add constraint
+- [x] Tests: create `authors` + `books` with a reference in one plan; drop `authors` with `books` pending drop in the same plan; change `Cascade` → `SetNull`
 
 ## 9. Definition of done
-- [ ] Bookshop: design `authors` + `books`, review the plan, apply, then see the tables in
+- [x] Bookshop: design `authors` + `books`, review the plan, apply, then see the tables in
       MySQL Workbench / `SHOW CREATE TABLE`
-- [ ] Rename `price` → `price_usd` with rows present, apply, and no data is lost
-- [ ] Force a failure, see it in History, re-plan, apply successfully
-- [ ] Unit coverage of `SchemaDiffer` + `SqlRenderer` ≥ 90% (report in CI)
+- [x] Rename `price` → `price_usd` with rows present, apply, and no data is lost
+- [x] Force a failure, see it in History, re-plan, apply successfully
+- [x] Unit coverage of `SchemaDiffer` + `SqlRenderer` ≥ 90% (report in CI): 97.2% / 96.6%, gated by
+      `build/check-coverage.py` (D27)
+
+The first three were checked by the API integration tests and a headless browser run (15 of 16 checks passed;
+the one failure was a bug in the test script, and the rest of the run was skipped).
 
 ## 10. Interview talking points
 - Why EF migrations can't do this (the schema is defined at runtime by end users)
