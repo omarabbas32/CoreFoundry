@@ -56,6 +56,16 @@ public sealed class TemplateEndpointsTests : IDisposable
             ["addresses", "categories", "customers", "order_items", "orders", "payments", "products", "reviews"]);
         used.Tables.ShouldAllBe(table => table.State == SchemaObjectState.New);
 
+        // The template's access defaults (spec phase-8 §1) reach the draft tables.
+        AccessOf(used, "products").ShouldBe((AccessLevel.Public, AccessLevel.Admin));
+        AccessOf(used, "categories").ShouldBe((AccessLevel.Public, AccessLevel.Admin));
+        AccessOf(used, "reviews").ShouldBe((AccessLevel.Public, AccessLevel.SignedIn));
+        AccessOf(used, "customers").ShouldBe((AccessLevel.Admin, AccessLevel.Admin));
+        AccessOf(used, "addresses").ShouldBe((AccessLevel.Admin, AccessLevel.Admin));
+        AccessOf(used, "orders").ShouldBe((AccessLevel.Admin, AccessLevel.Admin));
+        AccessOf(used, "order_items").ShouldBe((AccessLevel.Admin, AccessLevel.Admin));
+        AccessOf(used, "payments").ShouldBe((AccessLevel.Admin, AccessLevel.Admin));
+
         var schema = await _driver.OkAsync<List<TableDto>>(HttpMethod.Get, $"/api/projects/{project.Id}/schema", owner);
         Column(schema, "categories", "parent_id").ShouldSatisfyAllConditions(
             column => column.ReferencesTableName.ShouldBe("categories"),
@@ -192,4 +202,10 @@ public sealed class TemplateEndpointsTests : IDisposable
 
     private static ColumnDto Column(List<TableDto> schema, string table, string column) =>
         schema.Single(candidate => candidate.Name == table).Columns.Single(candidate => candidate.Name == column);
+
+    private static (AccessLevel Read, AccessLevel Write) AccessOf(UsedTemplateDto used, string table)
+    {
+        var summary = used.Tables.Single(candidate => candidate.Name == table);
+        return (summary.ReadAccess, summary.WriteAccess);
+    }
 }

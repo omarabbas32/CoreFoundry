@@ -21,7 +21,8 @@ internal static class EcommerceTemplate
                 Varchar("phone", 30, nullable: true),
                 new("birth_date", DataType.Date, Nullable: true),
                 CreatedAt(),
-            ]),
+            ],
+            Read: AccessLevel.Admin, Write: AccessLevel.Admin), // personal data
             new("addresses",
             [
                 Reference("customer_id", "customers", ReferenceAction.Cascade),
@@ -31,13 +32,15 @@ internal static class EcommerceTemplate
                 Varchar("postal_code", 20, nullable: true),
                 Varchar("country_code", 2),
                 new("is_default", DataType.Bool, Default: "false"),
-            ]),
+            ],
+            Read: AccessLevel.Admin, Write: AccessLevel.Admin), // personal data
             new("categories",
             [
                 Varchar("name", 100, unique: true),
                 Varchar("slug", 120, unique: true),
                 Reference("parent_id", "categories", ReferenceAction.SetNull, nullable: true),
-            ]),
+            ],
+            Read: AccessLevel.Public, Write: AccessLevel.Admin), // the catalog is public, only staff edit it
             new("products",
             [
                 Reference("category_id", "categories", ReferenceAction.SetNull, nullable: true),
@@ -49,7 +52,8 @@ internal static class EcommerceTemplate
                 new("is_active", DataType.Bool, Default: "true"),
                 new("attributes", DataType.Json, Nullable: true),
                 CreatedAt(),
-            ]),
+            ],
+            Read: AccessLevel.Public, Write: AccessLevel.Admin), // the catalog is public, only staff edit it
             new("orders",
             [
                 new("public_id", DataType.Uuid, Unique: true, Default: "UUID()"),
@@ -58,14 +62,19 @@ internal static class EcommerceTemplate
                 Varchar("status", 20, @default: "pending"),
                 Money("total", 12, @default: "0.00"),
                 new("placed_at", DataType.DateTime, Default: "CURRENT_TIMESTAMP"),
-            ]),
+            ],
+            // Only staff; customers placing their own orders needs the Owner level (phase-8 §6 q.1) — a
+            // Signed-in write here (with Admin read) would also let any customer PUT/DELETE any order by id,
+            // which "write not wider than read" forbids.
+            Read: AccessLevel.Admin, Write: AccessLevel.Admin),
             new("order_items",
             [
                 Reference("order_id", "orders", ReferenceAction.Cascade),
                 Reference("product_id", "products", ReferenceAction.Restrict),
                 new("quantity", DataType.Int, Default: "1"),
                 Money("unit_price", 10),
-            ]),
+            ],
+            Read: AccessLevel.Admin, Write: AccessLevel.Admin), // same as orders
             new("payments",
             [
                 Reference("order_id", "orders", ReferenceAction.Cascade),
@@ -73,7 +82,8 @@ internal static class EcommerceTemplate
                 Varchar("method", 30),
                 Varchar("status", 20, @default: "authorized"),
                 new("paid_at", DataType.DateTime, Nullable: true),
-            ]),
+            ],
+            Read: AccessLevel.Admin, Write: AccessLevel.Admin), // money
             new("reviews",
             [
                 Reference("product_id", "products", ReferenceAction.Cascade),
@@ -81,7 +91,8 @@ internal static class EcommerceTemplate
                 new("rating", DataType.Int),
                 new("comment", DataType.Text, Nullable: true),
                 CreatedAt(),
-            ]),
+            ],
+            Read: AccessLevel.Public, Write: AccessLevel.SignedIn), // anyone reads, customers write
         ],
         [.. Customers(), .. Addresses(), .. Categories(), .. Products(), .. Orders(), .. Reviews()]);
 

@@ -13,7 +13,10 @@ public sealed record SchemaTemplate(
     public TemplateTable? FindTable(string name) => Tables.FirstOrDefault(table => table.Name == name);
 }
 
-public sealed record TemplateTable(string Name, IReadOnlyList<TemplateColumn> Columns);
+/// <param name="Read">Who may read this table once the template is applied. Defaults to today's behavior.</param>
+/// <param name="Write">Who may write this table. Never wider than <paramref name="Read"/>.</param>
+public sealed record TemplateTable(
+    string Name, IReadOnlyList<TemplateColumn> Columns, AccessLevel Read = AccessLevel.SignedIn, AccessLevel Write = AccessLevel.SignedIn);
 
 /// <param name="References">Another table of the same template (or this one), or null.</param>
 public sealed record TemplateColumn(

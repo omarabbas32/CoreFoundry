@@ -38,8 +38,8 @@ Admin role and the fallback policy from this phase as they are.
 | `reviews` | Public | Signed-in | anyone reads, customers write |
 | `customers` | Admin | Admin | personal data |
 | `addresses` | Admin | Admin | personal data |
-| `orders` | Admin | Signed-in | customers place orders; only staff list them (see §6) |
-| `order_items` | Admin | Signed-in | same as orders |
+| `orders` | Admin | Admin | only staff; customers placing their own orders needs the Owner level (§6 q.1) |
+| `order_items` | Admin | Admin | only staff; customers placing their own orders needs the Owner level (§6 q.1) |
 | `payments` | Admin | Admin | money |
 
 ## 2. Where the rules live (CoreFoundry)
@@ -117,6 +117,8 @@ Admin role and the fallback policy from this phase as they are.
    every customer's orders to every signed-in user, which is why the template uses Admin read for them. Real
    per-row ownership would need a fourth level, **Owner** (rows whose owner column is the signed-in user), and a
    link between the generated `cf_users` accounts and a table such as `customers`. Suggested for a later phase.
+   Until Owner exists, the E-commerce template keeps `orders` and `order_items` Admin-only for both read and write,
+   because the write-not-wider-than-read rule forbids Admin read paired with Signed-in write.
 2. **Signed-in writes can set any value.** E.g. a customer creating an order could set another customer's
    `customer_id`. Ownership (question 1) or server-set columns would fix it; until then the export README says so.
 3. **Should CoreFoundry's own Data API ever serve public tables?** The user chose export-only for now.

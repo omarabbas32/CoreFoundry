@@ -54,6 +54,7 @@ public sealed class TemplateService(IProjectRepository projects, ITableRepositor
                 deferred.AddRange(table.Columns.Except(now).Select(column => (table.Name, column)));
                 var dto = await tableService.CreateAsync(projectId, table.Name, [.. now.Select(column => Input(column, created))], cancellationToken);
                 created[table.Name] = dto.Id;
+                await tableService.SetAccessAsync(projectId, dto.Id, dto.Version, table.Read, table.Write, cancellationToken);
             }
 
             foreach (var (table, column) in deferred)
