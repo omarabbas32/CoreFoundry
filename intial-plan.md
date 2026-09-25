@@ -51,6 +51,9 @@ backend architecture.
 | D30 | The snapshot cache (`CachedSnapshotProvider`, `IMemoryCache`) lives in **Infrastructure** behind an Application port | Infrastructure already has the ASP.NET Core shared framework, so no new package reference; caching is an infrastructure concern. |
 | D31 | Foreign-key errors in the Data API: MySQL **1452** (referenced row missing) → 400 on the field; **1451** (row still referenced, `Restrict`) → 409; **1054** (unknown column) is drift like 1146 | Needed since M2.5 added references; not in the original error table. |
 | D32 | Reference columns in the row form use a **picker** backed by `GET …/data/{table}/lookup` (id + label = the first Varchar column, search by label or id) | Chosen by the user over a plain number input. |
+| D33 | **Code export (M6)** generates a .NET 10 Clean Architecture backend from the **applied** snapshot (the managed tables of D29), downloaded as a zip: EF Core + a generated `InitialCreate` migration, JWT auth, Swagger UI, Dockerfile + compose, no test project | Chosen by the user. Exporting what is applied keeps the code identical to the running database. |
+| D34 | The migration and model snapshot are **written as code** by CoreFoundry, not produced by running `dotnet ef` on the server; an integration test proves them with `dotnet ef migrations has-pending-model-changes` and a real `database update` | Exports stay instant and need no SDK at runtime. |
+| D35 | Generated code: columns with a default are nullable in C# (null = let MySQL fill it in); `DateOnly` is stored through a `DateTime` converter; decimals are returned with the column's scale; FK indexes are named like their constraints (`fk_…`); the solution is a `.slnx` | EF's sentinel values would otherwise silently replace explicit 0/false; Oracle's MySQL connector reads DATE as DateTime; parity with the Data API and with CoreFoundry's own tables. |
 
 ---
 
