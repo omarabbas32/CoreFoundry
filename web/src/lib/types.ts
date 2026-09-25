@@ -43,6 +43,13 @@ export type ReferenceAction = (typeof referenceActions)[number];
 /** Where a table or column stands relative to the real database ("Changed" arrives with the schema engine). */
 export type SchemaObjectState = "New" | "Applied" | "Changed" | "PendingDrop";
 
+/** Who may reach a table in the exported API: anyone, any signed-in user, or only the Admin role. */
+export const accessLevels = ["Public", "SignedIn", "Admin"] as const;
+export type AccessLevel = (typeof accessLevels)[number];
+
+/** Numeric order of {@link AccessLevel}, matching the API's enum: write must rank at least as high as read. */
+export const accessLevelRank: Record<AccessLevel, number> = { Public: 1, SignedIn: 2, Admin: 3 };
+
 export type Column = {
   id: number;
   name: string;
@@ -72,6 +79,9 @@ export type Table = {
   updatedAt: string;
   /** The table's name in the database (from the last apply), or null if never applied. */
   appliedName: string | null;
+  /** Who may read/write this table in the exported API; also who may subscribe to its realtime changes (read). */
+  readAccess: AccessLevel;
+  writeAccess: AccessLevel;
 };
 
 export type TableSummary = {
@@ -81,6 +91,8 @@ export type TableSummary = {
   columnCount: number;
   version: number;
   updatedAt: string;
+  readAccess: AccessLevel;
+  writeAccess: AccessLevel;
 };
 
 export type ColumnInput = Pick<

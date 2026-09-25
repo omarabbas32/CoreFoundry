@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { AccessSelects, accessLevelHint } from "@/components/access-controls";
 import { FullPageSpinner } from "@/components/full-page-spinner";
 import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Button, Card, ConfirmDialog } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useProject, useTable, useTableChange, useTables } from "@/lib/queries";
+import { useProject, useSetTableAccess, useTable, useTableChange, useTables } from "@/lib/queries";
 import { limits, rowBytes } from "@/lib/schema-rules";
 import type { Column, Table } from "@/lib/types";
 import { ColumnDialog } from "./column-dialog";
@@ -55,6 +56,7 @@ function Designer({
 }) {
   const router = useRouter();
   const change = useTableChange(projectId, table.id);
+  const access = useSetTableAccess(projectId);
   const tables = useTables(projectId);
   const [editing, setEditing] = useState<Column | "new" | null>(null);
   const [renaming, setRenaming] = useState(false);
@@ -65,7 +67,8 @@ function Designer({
   const editable = !tableDropped;
   const liveColumns = table.columns.filter((column) => column.state !== "PendingDrop");
   const bytes = rowBytes(liveColumns);
-  const conflict = change.error instanceof ApiError && change.error.status === 409;
+  const isConflict = (error: unknown) => error instanceof ApiError && error.status === 409;
+  const conflict = isConflict(change.error) || isConflict(access.error);
 
   function run(...args: Parameters<typeof change.mutateAsync>) {
     change.reset();
@@ -150,6 +153,7 @@ function Designer({
             variant="secondary"
             onClick={() => {
               change.reset();
+              access.reset();
               onReload();
             }}
           >
@@ -157,7 +161,10 @@ function Designer({
           </Button>
         </div>
       ) : (
-        change.error && !editing && <Alert>{change.error.message}</Alert>
+        <>
+          {change.error && !editing && <Alert>{change.error.message}</Alert>}
+          {access.error && !isConflict(access.error) && <Alert>{access.error.message}</Alert>}
+        </>
       )}
 
       {tableDropped && (
@@ -181,6 +188,21 @@ function Designer({
           </div>
         </div>
       )}
+
+      <Card className="grid gap-3 p-5">
+        <h2 className="font-semibold">Access in the exported API</h2>
+        <AccessSelects
+          idPrefix="table-access"
+          read={table.readAccess}
+          write={table.writeAccess}
+          disabled={!editable}
+          onChange={({ read, write }) => {
+            access.reset();
+            access.mutate({ tableId: table.id, version: table.version, read, write });
+          }}
+        />
+        <p className="text-xs text-muted">{accessLevelHint}</p>
+      </Card>
 
       <Card className="grid gap-4 p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

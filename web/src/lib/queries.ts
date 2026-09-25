@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
+  AccessLevel,
   ApplyResult,
   ColumnInput,
   DataPage,
@@ -223,6 +224,23 @@ export function useTableChange(projectId: number, tableId: number) {
     onSuccess: (table) => {
       if (table) queryClient.setQueryData(key, table);
       else queryClient.removeQueries({ queryKey: key });
+      return invalidateTableLists(queryClient, projectId);
+    },
+  });
+}
+
+/**
+ * Sets a table's read/write access in the exported API. Unlike {@link useTableChange} it doesn't need the
+ * table already loaded (the API page sets access for tables it only has summaries of), so the caller passes
+ * the version itself; a stale one gets 409, same as the other table mutations.
+ */
+export function useSetTableAccess(projectId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tableId, version, read, write }: { tableId: number; version: number; read: AccessLevel; write: AccessLevel }) =>
+      api<Table>(`/api/projects/${projectId}/tables/${tableId}/access`, { method: "PUT", body: { version, read, write } }),
+    onSuccess: (table) => {
+      queryClient.setQueryData(queryKeys.table(projectId, table.id), table);
       return invalidateTableLists(queryClient, projectId);
     },
   });
