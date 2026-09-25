@@ -15,6 +15,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(project => project.Name).HasMaxLength(Project.NameMaxLength).IsRequired();
         builder.Property(project => project.Slug).HasMaxLength(Project.SlugMaxLength).IsRequired();
         builder.HasIndex(project => project.Slug).IsUnique();
+        builder.Property(project => project.TemplateKey).HasMaxLength(Project.TemplateKeyMaxLength);
 
         // Ownership must be transferred before the owner can be deleted.
         builder.HasOne<User>()

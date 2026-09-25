@@ -11,6 +11,7 @@ public sealed partial class Project
     public const int NameMaxLength = 100;
     public const int SlugMaxLength = 64;
     public const string DatabaseNamePrefix = "cf_p_";
+    public const int TemplateKeyMaxLength = 40;
 
     private readonly List<ProjectMember> _members = [];
 
@@ -34,6 +35,12 @@ public sealed partial class Project
     public ProjectStatus Status { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
+
+    /// <summary>The schema template the project started from (M7), or null.</summary>
+    public string? TemplateKey { get; private set; }
+
+    /// <summary>The template's sample rows are still to be inserted after the next successful apply.</summary>
+    public bool SampleDataPending { get; private set; }
 
     public IReadOnlyCollection<ProjectMember> Members => _members.AsReadOnly();
 
@@ -129,6 +136,16 @@ public sealed partial class Project
             throw new DomainException("Unknown role.");
         }
     }
+
+    /// <summary>Records the template the project starts from. The caller checks the project has no tables yet.</summary>
+    public void UseTemplate(string key, bool withSampleData)
+    {
+        TemplateKey = Guard.NotBlank(key, nameof(TemplateKey), TemplateKeyMaxLength);
+        SampleDataPending = withSampleData;
+    }
+
+    /// <summary>The sample rows were inserted (or given up on): don't try again.</summary>
+    public void SampleDataDone() => SampleDataPending = false;
 
     /// <summary>Called once per successful schema apply.</summary>
     public int BumpSchemaVersion() => ++SchemaVersion;

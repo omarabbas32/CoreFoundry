@@ -4,6 +4,7 @@ using CoreFoundry.Application.Export;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Application.Schema;
 using CoreFoundry.Application.SchemaEngine;
+using CoreFoundry.Application.Templates;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CoreFoundry.Application;
@@ -20,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<SchemaApplier>();
         services.AddScoped<DataService>();
         services.AddScoped<ExportService>();
+        services.AddScoped<TemplateService>();
         return services;
     }
 }
