@@ -15,6 +15,7 @@ Finish a phase's **Definition of done** before starting the next one.
 | [M6](phase-6-code-export.md) (built) | Code export | Download a deployable .NET Clean Architecture backend (EF Core, JWT, Swagger, Docker) generated from the schema | M4 |
 | [M7](phase-7-schema-templates.md) (built) | Schema templates | Start a project from a ready schema (E-commerce) with optional sample rows | M4 |
 | [M8](phase-8-access-rules.md) (plan) | Access rules | Per-table read/write access (Public / Signed-in / Admin) set in the project and enforced by the exported backend | M6, M7 |
+| [M9](phase-9-realtime-export.md) (plan) | Realtime in the export | Subscribe to table changes (SignalR) in the generated backend; M8's read level decides who may subscribe | M8 |
 
 **If time gets tight:** M3 > M4 > M2 UI polish. M3 is the differentiator.
 

@@ -10,6 +10,8 @@ rules into the generated code.
 one **write** rule per table · levels **Public / Signed-in / Admin** · in the exported backend the **first registered
 user becomes Admin**.
 **Not changing:** CoreFoundry's own Data API stays members-only; it is the project's admin tool, not the app's public API.
+**Order:** M8 is built and merged before M9 starts. M9 (realtime in the export) uses `ExportModel`'s `Read`, the
+Admin role and the fallback policy from this phase as they are.
 
 ---
 
@@ -71,7 +73,8 @@ user becomes Admin**.
   next export without an apply).
 - **Controllers:** no class-level `[Authorize]` any more. Each action gets its level's attribute: `List`/`Get` from
   Read, `Create`/`Replace`/`Delete` from Write. A fallback authorization policy (require an authenticated user)
-  keeps anything without an attribute closed.
+  keeps anything without an attribute closed. It covers every endpoint, not only controllers: `/health` already
+  has `.AllowAnonymous()`, and M9's realtime hub will need the same (it checks each table's Read level itself).
 - **Roles in the generated auth:**
   - `AppUser.Role` (`User` / `Admin`), column `cf_users.role`, in the generated `InitialCreate` migration and
     model snapshot (`EfMigrationWriter`).
