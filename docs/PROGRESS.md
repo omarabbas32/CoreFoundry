@@ -1,6 +1,6 @@
 # CoreFoundry — Progress
 
-_Last updated: 2026-09-25 · branch `m4-data-api`_
+_Last updated: 2026-09-25 · branch `m6-code-export`_
 
 | Phase | Status | Summary |
 |---|---|---|
@@ -10,9 +10,10 @@ _Last updated: 2026-09-25 · branch `m4-data-api`_
 | [M2.5 — Relations + diagram](phases/phase-2b-relations.md) | ✅ Done (`m2-table-designer`) | Column references (foreign keys) with on-delete rules, schema diagram |
 | [M3 — Schema engine](phases/phase-3-schema-engine.md) ⭐ | ✅ Done (`m3-schema-engine`) | Plan / apply / history / drift on real MySQL tables |
 | [M4 — Data API](phases/phase-4-data-api.md) | ✅ Built (`m4-data-api`), hands-on check open | Row CRUD on applied tables: REST API + data viewer |
+| [M6 — Code export](phases/phase-6-code-export.md) | ✅ Built (`m6-code-export`), UI click and Docker run open | Download a project as a deployable .NET Clean Architecture backend |
 | [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next | One-command run, README, demo, deploy |
 
-**Tests:** 672 .NET tests pass (556 unit, 116 integration, of which 95 run against a real MySQL database; none skipped),
+**Tests:** 709 .NET tests pass (590 unit, 119 integration, of which 98 run against a real MySQL database; none skipped),
 plus headless browser runs of the dashboard (15 checks, M1), the table designer (29 checks, M2),
 relations + diagram (15 checks, M2.5) and a partial run of the schema engine (15 of 16 checks, M3).
 Coverage (gated in CI at ≥ 90%): `SchemaDiffer` 97.2%, `MySqlSqlRenderer` 96.6%.
@@ -195,6 +196,33 @@ tables and columns are those of the last successful apply.
 - **Web:** `tsc`, lint and build are clean. **Not yet run in a browser**, and the README's curl examples haven't been
   run against a live API (the Definition of done's hands-on check is still open).
 
+## M6 — Code export
+
+`GET /api/projects/{id}/export` and the **Export code** card return `<project>-backend.zip`: a .NET 10 Clean Architecture
+solution for the applied tables (D33), with EF Core and a generated `InitialCreate` migration (D34), JWT register/login,
+Swagger UI, Dockerfile, docker-compose (API + MySQL 8.4) and a README listing every table's fields.
+
+### Components
+| Component | Layer | What it does |
+|---|---|---|
+| `CodeNames` | Application | PascalCase, singular class names, a solution name from the project name, clash handling |
+| `ExportModel` | Application | Entities, properties, references, defaults and every C# name, from the applied `DataSchema`; refuses columns whose type was changed outside CoreFoundry |
+| `DotNetBackendGenerator` | Infrastructure | Pure: model → files (`SharedFiles`, `EntityFiles`, `DeployFiles`), templates as C# raw strings |
+| `EfMigrationWriter` | Infrastructure | The migration, its designer and the model snapshot, in EF's own format |
+| `ExportService`, `ExportController` | Application / Api | Zip in memory under one `<slug>-backend/` folder; a random dev signing key per export |
+| `ExportCard` | Web | Download button; warns about unapplied draft changes and when nothing is applied |
+
+### How it's verified
+- **Unit:** naming rules and clashes, the export model (Bookshop, self-references, every type and default), the
+  generator (layout, determinism, LF endings).
+- **End to end (integration, ~1 min):** design and apply a Bookshop with every type, default kind and on-delete rule →
+  export → unzip → `dotnet build` (0 warnings) → `dotnet ef migrations has-pending-model-changes` reports no changes →
+  run the API against a fresh MySQL database (the migration creates it) → register, login, 401 without a token,
+  CRUD, defaults, UTC conversion, JSON columns, unique → 409, missing parent → 400, `Restrict` delete → 409,
+  unknown field → 400, OpenAPI + Swagger UI → the tables it created are the same as CoreFoundry's (column by column,
+  keys and references). `CF_SKIP_EXPORT_BUILD=1` skips it.
+- **Not yet:** clicking the button in a browser; `docker compose up` (Docker isn't installed).
+
 ## How it's verified
 
 | Layer | What runs |
@@ -208,7 +236,7 @@ Integration tests that need MySQL skip themselves when no connection string is c
 
 ## Changes from the original plan
 
-All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D32).
+All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D35).
 
 | Change | Why |
 |---|---|
@@ -238,6 +266,7 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D32).
 | The snapshot cache is in Infrastructure (D30), not an Application `SnapshotProvider` | No new package; caching is infrastructure |
 | FK errors 1452 → 400 and 1451 → 409, unknown column 1054 → drift 409 (D31) | References came with M2.5, after the spec's error table |
 | Reference picker + `GET …/data/{table}/lookup` (D32) | The user chose a picker over a number input |
+| Code export added as M6 (D33–D35), before M5 polish | Requested by the user |
 | `GET …/data` lists applied tables with their columns | The viewer builds its grid and form from it |
 | `TableDto.appliedName` | The designer's "Browse data" link needs the table's name in the database, which differs after a rename |
 
@@ -252,6 +281,12 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D32).
 - **Editing the draft while an apply runs** can make the final metadata save hit a version conflict: MySQL is already changed but the journal row stays `Pending`. Planning again recovers (objects are matched by name), but the `Pending` row isn't cleaned up.
 - **Plan warnings run one query per risky operation** (row or NULL counts). Fine for small schemas.
 - **Drift compares with the snapshot of the last successful apply.** After a failed apply, the partial changes show as drift until the next successful one.
+- **At most 50 projects can share a name** (slugs `name`, `name-2` … `name-50`); the 51st gets a 409. Found when the test suite passed 50 "Bookshop" projects; the export tests now use their own name.
+- **Export: not run with Docker yet** (Docker isn't installed), and the download button hasn't been clicked in a browser.
+- **Export: a full replace (PUT) of a `CURRENT_TIMESTAMP` column left out uses the API server's UTC time**, while MySQL's default uses the database session's time zone.
+- **Export: nullable columns with a default** can't be set to NULL on insert (null means "use the default"); a PUT can.
+- **Export: decimals wider than 28 digits** don't fit .NET's `decimal`; the generated README flags such columns.
+- **Export is a starting point**: exporting again creates a new project, it doesn't merge into edited code.
 - **The data viewer hasn't been checked in a browser yet**, and the README's curl examples haven't been run against a live API.
 - **BIGINT values above 2^53** lose precision in JavaScript. The API is exact, but the form refuses such numbers ("use the API").
 - **The picker's label is always the first Varchar column** of the referenced table; it can't be chosen.
@@ -267,7 +302,18 @@ All are recorded in the [plan's decisions log](../intial-plan.md) (D9–D32).
 
 ## Next: M5 — Portfolio polish
 
-First the open M4 check (Bookshop from the UI and with curl), then one-command run, demo data, README and deploy.
+First the open M4 and M6 hands-on checks (Bookshop from the UI and with curl), then one-command run, demo data, README and deploy.
+
+## Commits on `m6-code-export`
+
+| Commit | Change |
+|---|---|
+| `1995e3f` | Plan M6 |
+| `1c0857d` | Naming rules and export model |
+| `208a979` | Backend generator: solution, layers, EF Core, JWT, Swagger UI, Docker |
+| `f5ea0ab`, `7e3729d` | Generated `InitialCreate` migration and model snapshot; name-clash fix |
+| `e30a314` | Export endpoint, zip, end-to-end test (DateOnly converter, decimal scale) |
+| `3c04655` | Web: Export code card |
 
 ## Commits on `m4-data-api`
 
