@@ -107,6 +107,12 @@ export default function ProjectPage() {
           >
             Browse data
           </Link>
+          <Link
+            href={`/projects/${data.id}/api`}
+            className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            API
+          </Link>
         </div>
       </Card>
 

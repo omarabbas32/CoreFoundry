@@ -69,6 +69,8 @@ its SQL and any error, and the project page warns when the database was changed 
 **Browse data** (`/projects/<id>/data/<table>`) shows the rows of applied tables: sortable columns,
 paging, and a side panel to add or edit a row. The form is generated from the applied columns,
 reference columns get a picker that searches the other table, and deletes ask for confirmation first.
+The **API** page (`/projects/<id>/api`) documents the project's own endpoints: base URL, how to get a
+token, and for every applied table its routes, fields and ready-to-copy curl and JavaScript examples.
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
 
 ### Tests
