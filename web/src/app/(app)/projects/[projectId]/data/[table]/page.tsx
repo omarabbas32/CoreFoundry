@@ -39,23 +39,31 @@ export default function DataViewerPage() {
               {schema.data && <> (schema version {schema.data.schemaVersion})</>}.
             </p>
           </div>
-          {tables.length > 0 && (
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-muted">Table</span>
-              <Select
-                value={table ? tableName : ""}
-                onChange={(event) => router.push(`/projects/${projectId}/data/${event.target.value}`)}
-                aria-label="Table"
-              >
-                {!table && <option value="">Choose a table</option>}
-                {tables.map((candidate) => (
-                  <option key={candidate.name} value={candidate.name}>
-                    {candidate.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={`/projects/${projectId}/api#table-${tableName}`}
+              className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+            >
+              Use the API
+            </Link>
+            {tables.length > 0 && (
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted">Table</span>
+                <Select
+                  value={table ? tableName : ""}
+                  onChange={(event) => router.push(`/projects/${projectId}/data/${event.target.value}`)}
+                  aria-label="Table"
+                >
+                  {!table && <option value="">Choose a table</option>}
+                  {tables.map((candidate) => (
+                    <option key={candidate.name} value={candidate.name}>
+                      {candidate.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )}
+          </div>
         </div>
       </div>
 

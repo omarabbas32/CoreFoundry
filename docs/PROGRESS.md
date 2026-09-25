@@ -175,6 +175,9 @@ tables and columns are those of the last successful apply.
 - **Reference picker:** search the referenced table by its label (first Varchar column) or id.
 - Delete asks in an in-page dialog. Empty state "No rows yet"; a table that isn't applied yet links to Review plan.
 - "Browse data" links on the project page and in the designer (for applied tables, by their applied name).
+- **API page** (`/projects/<id>/api`): base URL, sign-in example and a "copy a fresh access token" button, then per
+  applied table its endpoints, a field table (type, JSON shape, required, notes) and curl / `fetch` examples with a
+  sample body built from the columns.
 
 ### How it's verified
 - **Unit (154 new):** `ColumnType.TryParse` round trips and rejects; every coercion row of spec §4 with edge values
