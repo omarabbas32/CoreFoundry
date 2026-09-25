@@ -10,7 +10,7 @@ public sealed record UseTemplateRequest(bool WithSampleData);
 
 /// <summary>Ready schemas (e.g. E-commerce) a project can start from.</summary>
 [ApiController]
-public sealed class TemplatesController(TemplateService templates) : ControllerBase
+public sealed class TemplatesController(TemplateService templates, SampleDataService sampleData) : ControllerBase
 {
     [HttpGet("api/templates")]
     [Authorize]
@@ -21,4 +21,10 @@ public sealed class TemplatesController(TemplateService templates) : ControllerB
     [Authorize(Policy = ProjectPolicies.Developer)]
     public Task<UsedTemplateDto> Use(long projectId, string key, UseTemplateRequest request, CancellationToken cancellationToken) =>
         templates.UseAsync(projectId, key, request.WithSampleData, cancellationToken);
+
+    /// <summary>Inserts the template's sample rows now (into applied tables that are still empty). 409 without a template.</summary>
+    [HttpPost("api/projects/{projectId:long}/sample-data")]
+    [Authorize(Policy = ProjectPolicies.Developer)]
+    public Task<SampleDataResultDto> LoadSampleData(long projectId, CancellationToken cancellationToken) =>
+        sampleData.InsertAsync(projectId, cancellationToken);
 }

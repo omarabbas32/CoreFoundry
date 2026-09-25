@@ -103,6 +103,87 @@ public sealed class TemplateEndpointsTests : IDisposable
             .StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
+    [Fact]
+    public async Task Sample_rows_are_inserted_after_the_first_apply_with_real_ids()
+    {
+        var (owner, project) = await ProjectAsync();
+        await _driver.OkAsync<UsedTemplateDto>(HttpMethod.Post, $"/api/projects/{project.Id}/templates/ecommerce", owner, new UseTemplateRequest(true));
+
+        var result = await ApplyAsync(owner, project);
+
+        var expected = SchemaTemplates.Find("ecommerce")!.SampleRows.Count;
+        result.SampleData.ShouldNotBeNull().ShouldSatisfyAllConditions(
+            sample => sample.Inserted.ShouldBe(expected),
+            sample => sample.Skipped.ShouldBeEmpty());
+        (await TotalAsync(owner, project, "customers"), await TotalAsync(owner, project, "products"), await TotalAsync(owner, project, "orders"))
+            .ShouldBe((6L, 12L, 8L));
+
+        // References point at the rows inserted for their keys.
+        var categories = await RowsAsync(owner, project, "categories");
+        var electronics = categories.Single(row => row.GetProperty("slug").GetString() == "electronics").GetProperty("id").GetInt64();
+        categories.Single(row => row.GetProperty("slug").GetString() == "phones").GetProperty("parent_id").GetInt64().ShouldBe(electronics);
+        var order = (await RowsAsync(owner, project, "orders")).First();
+        order.GetProperty("total").GetString().ShouldBe("728.99"); // aurora phone + charger
+        Guid.Parse(order.GetProperty("public_id").GetString()!).ShouldNotBe(Guid.Empty);
+
+        (await _driver.OkAsync<ProjectDto>(HttpMethod.Get, $"/api/projects/{project.Id}", owner)).SampleDataPending.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Sample_rows_can_be_loaded_later_and_tables_with_rows_are_left_alone()
+    {
+        var (owner, project) = await ProjectAsync();
+        await _driver.OkAsync<UsedTemplateDto>(HttpMethod.Post, $"/api/projects/{project.Id}/templates/ecommerce", owner, new UseTemplateRequest(false));
+        (await ApplyAsync(owner, project)).SampleData.ShouldBeNull();
+        (await TotalAsync(owner, project, "customers")).ShouldBe(0);
+
+        var first = await _driver.OkAsync<SampleDataResultDto>(HttpMethod.Post, $"/api/projects/{project.Id}/sample-data", owner);
+        first.Inserted.ShouldBe(SchemaTemplates.Find("ecommerce")!.SampleRows.Count);
+
+        var second = await _driver.OkAsync<SampleDataResultDto>(HttpMethod.Post, $"/api/projects/{project.Id}/sample-data", owner);
+        second.Inserted.ShouldBe(0);
+        second.Skipped.ShouldContain("customers: already has rows");
+        (await TotalAsync(owner, project, "customers")).ShouldBe(6);
+    }
+
+    [Fact]
+    public async Task A_table_renamed_before_the_apply_is_skipped_with_the_reason()
+    {
+        var (owner, project) = await ProjectAsync();
+        var used = await _driver.OkAsync<UsedTemplateDto>(HttpMethod.Post, $"/api/projects/{project.Id}/templates/ecommerce", owner, new UseTemplateRequest(true));
+        var reviews = used.Tables.Single(table => table.Name == "reviews");
+        await _driver.OkAsync<TableDto>(HttpMethod.Put, $"/api/projects/{project.Id}/tables/{reviews.Id}", owner,
+            new RenameTableRequest(reviews.Version, "product_reviews"));
+
+        var sample = (await ApplyAsync(owner, project)).SampleData.ShouldNotBeNull();
+
+        sample.Skipped.ShouldBe(["reviews: not applied under this name"]);
+        sample.Inserted.ShouldBe(SchemaTemplates.Find("ecommerce")!.SampleRows.Count(row => row.Table != "reviews"));
+        (await TotalAsync(owner, project, "product_reviews")).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_project_without_a_template_has_no_sample_data()
+    {
+        var (owner, project) = await ProjectAsync();
+
+        (await _driver.SendAsync(HttpMethod.Post, $"/api/projects/{project.Id}/sample-data", owner)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    private async Task<ApplyResultDto> ApplyAsync(SignedIn owner, ProjectDto project)
+    {
+        var plan = await _driver.OkAsync<SchemaPlanDto>(HttpMethod.Get, $"/api/projects/{project.Id}/schema/plan", owner);
+        return await _driver.OkAsync<ApplyResultDto>(HttpMethod.Post, $"/api/projects/{project.Id}/schema/apply", owner, new ApplyRequest(plan.PlanHash, false));
+    }
+
+    private async Task<long> TotalAsync(SignedIn owner, ProjectDto project, string table) =>
+        (await _driver.OkAsync<System.Text.Json.JsonElement>(HttpMethod.Get, $"/api/projects/{project.Id}/data/{table}?pageSize=1", owner))
+            .GetProperty("total").GetInt64();
+
+    private async Task<List<System.Text.Json.JsonElement>> RowsAsync(SignedIn owner, ProjectDto project, string table) =>
+        [.. (await _driver.OkAsync<System.Text.Json.JsonElement>(HttpMethod.Get, $"/api/projects/{project.Id}/data/{table}?pageSize=100", owner))
+            .GetProperty("items").EnumerateArray()];
+
     private async Task<(SignedIn Owner, ProjectDto Project)> ProjectAsync()
     {
         var owner = await _driver.SignUpAsync();

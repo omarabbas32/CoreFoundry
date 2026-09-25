@@ -7,7 +7,11 @@ using Microsoft.Extensions.Logging;
 
 namespace CoreFoundry.Application.SchemaEngine;
 
-public sealed record ApplyResultDto(long MigrationId, int Version, MigrationStatus Status, int Statements);
+public sealed record ApplyResultDto(long MigrationId, int Version, MigrationStatus Status, int Statements)
+{
+    /// <summary>Set when this apply also inserted a template's sample rows (see <see cref="Templates.SampleDataService"/>).</summary>
+    public Templates.SampleDataResultDto? SampleData { get; init; }
+}
 
 /// <summary>
 /// Applies a reviewed plan to the project database.

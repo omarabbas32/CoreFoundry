@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<DataService>();
         services.AddScoped<ExportService>();
         services.AddScoped<TemplateService>();
+        services.AddScoped<SampleDataService>();
         return services;
     }
 }

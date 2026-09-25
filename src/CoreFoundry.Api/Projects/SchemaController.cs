@@ -1,5 +1,6 @@
 using CoreFoundry.Api.Authorization;
 using CoreFoundry.Application.SchemaEngine;
+using CoreFoundry.Application.Templates;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +13,7 @@ public sealed record ApplyRequest(string PlanHash, bool AcknowledgeDestructive);
 /// <summary>The schema engine: review the plan that turns the draft into real tables, apply it, see history and drift.</summary>
 [ApiController]
 [Route("api/projects/{projectId:long}/schema")]
-public sealed class SchemaController(SchemaPlanService plans, SchemaApplier applier) : ControllerBase
+public sealed class SchemaController(SchemaPlanService plans, SchemaApplier applier, SampleDataService sampleData) : ControllerBase
 {
     /// <summary>The operations and exact SQL that would make the database match the draft. Reads only.</summary>
     [HttpGet("plan")]
@@ -23,8 +24,12 @@ public sealed class SchemaController(SchemaPlanService plans, SchemaApplier appl
     /// <summary>Runs the reviewed plan. 409 plan-stale / apply-in-progress, 422 destructive-not-acknowledged, 500 apply-failed.</summary>
     [HttpPost("apply")]
     [Authorize(Policy = ProjectPolicies.Admin)]
-    public Task<ApplyResultDto> Apply(long projectId, ApplyRequest request, CancellationToken cancellationToken) =>
-        applier.ApplyAsync(projectId, User.GetUserId()!.Value, request.PlanHash, request.AcknowledgeDestructive, cancellationToken);
+    public async Task<ApplyResultDto> Apply(long projectId, ApplyRequest request, CancellationToken cancellationToken)
+    {
+        var result = await applier.ApplyAsync(projectId, User.GetUserId()!.Value, request.PlanHash, request.AcknowledgeDestructive, cancellationToken);
+        // A project started from a template with sample data gets its rows after its first successful apply.
+        return result with { SampleData = await sampleData.InsertPendingAsync(projectId, cancellationToken) };
+    }
 
     /// <summary>Applies, newest first.</summary>
     [HttpGet("migrations")]
