@@ -18,21 +18,22 @@ public static class CodeNames
         "Action", "Activity", "AppDbContext", "AppUser", "Array", "Assembly", "Attribute", "AuthController", "AuthService",
         "Boolean", "Buffer", "Console", "Controller", "ControllerBase", "Convert", "DateOnly", "DateTime", "DateTimeOffset",
         "Decimal", "DependencyInjection", "Dictionary", "Directory", "Encoding", "Enum", "Environment", "Exception", "File",
-        "Func", "Guid", "HttpContext", "IResult", "Index", "Int32", "Int64", "JsonDocument", "JsonElement", "JwtOptions",
-        "Lazy", "List", "Math", "Memory", "Migration", "ModelBuilder", "Monitor", "Nullable", "Object", "PageRequest",
-        "PagedResult", "Path", "ProblemDetails", "Program", "Random", "Range", "Results", "Span", "String", "Task", "Thread",
-        "Timer", "TimeSpan", "Tuple", "Type", "Uri", "ValidationException", "Version",
+        "Func", "Guid", "HttpContext", "IResult", "Index", "Int32", "Int64", "IsolationLevel", "JsonDocument", "JsonElement",
+        "JwtOptions", "Lazy", "List", "Math", "Memory", "Migration", "ModelBuilder", "Monitor", "Nullable", "Object",
+        "PageRequest", "PagedResult", "Path", "ProblemDetails", "Program", "Random", "Range", "Results", "Span", "String",
+        "Task", "Thread", "Timer", "TimeSpan", "Tuple", "Type", "Uri", "ValidationException", "Version",
 
         // Namespace segments of the generated solution: a type with one of these names would hide the namespace.
         "Api", "Application", "Auth", "Common", "Configurations", "Controllers", "Domain", "Entities", "Errors",
         "Infrastructure", "Json", "Migrations", "OpenApi", "Persistence", "Tables",
 
         // Shared types the generator writes.
-        "AccessToken", "AppUserConfiguration", "AuthResponse", "AuthenticationFailedException", "BearerSecurityRequirementTransformer",
-        "BearerSecuritySchemeTransformer", "ConflictException", "CredentialsRequest", "CrudService", "DatabaseErrors", "DateTimeConverter",
-        "DecimalDigitsAttribute", "DecimalStringConverter", "EfRepository", "ExceptionHandler", "IEntity", "IPasswordHasher", "IRepository",
-        "ITokenService", "IUserRepository", "JsonValues", "JwtTokenService", "MaxCharactersAttribute", "MaxUtf8BytesAttribute",
-        "MySqlDateAttribute", "NotFoundException", "PasswordHasher", "UserRepository", "ValidationFailedException",
+        "AccessToken", "AccountDto", "AppUserConfiguration", "AuthResponse", "AuthenticationFailedException",
+        "BearerSecurityRequirementTransformer", "BearerSecuritySchemeTransformer", "ConflictException", "CredentialsRequest",
+        "CrudService", "DatabaseErrors", "DateTimeConverter", "DecimalDigitsAttribute", "DecimalStringConverter",
+        "EfRepository", "ExceptionHandler", "IEntity", "IPasswordHasher", "IRepository", "ITokenService", "IUserRepository",
+        "JsonValues", "JwtTokenService", "MaxCharactersAttribute", "MaxUtf8BytesAttribute", "MySqlDateAttribute",
+        "NotFoundException", "PasswordHasher", "RoleRequest", "Roles", "UserRepository", "ValidationFailedException",
     };
 
     /// <summary><c>price_usd</c> → <c>PriceUsd</c>, <c>isbn13</c> → <c>Isbn13</c>.</summary>

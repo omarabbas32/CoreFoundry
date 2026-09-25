@@ -136,7 +136,17 @@ internal static class SharedFiles
 
                 public string PasswordHash { get; set; } = string.Empty;
 
+                /// <summary><see cref="Roles.User"/> or <see cref="Roles.Admin"/>; the first account registered is Admin.</summary>
+                public string Role { get; set; } = Roles.User;
+
                 public DateTime CreatedAt { get; set; }
+            }
+
+            /// <summary>The values of <see cref="AppUser.Role"/>, also the token's <c>role</c> claim.</summary>
+            public static class Roles
+            {
+                public const string User = "User";
+                public const string Admin = "Admin";
             }
 
             """);
@@ -426,13 +436,35 @@ internal static class SharedFiles
 
             public sealed record AccessToken(string Token, DateTimeOffset ExpiresAt);
 
+            /// <summary>An account as Admins see it; never the password hash.</summary>
+            public sealed record AccountDto(long Id, string Email, string Role, DateTime CreatedAt);
+
+            /// <param name="Role"><c>Admin</c> or <c>User</c>.</param>
+            public sealed record RoleRequest(string? Role);
+
             public interface IUserRepository
             {
                 Task<AppUser?> FindByEmailAsync(string email, CancellationToken cancellationToken);
 
+                Task<AppUser?> FindAsync(long id, CancellationToken cancellationToken);
+
+                /// <summary>Every account, oldest first.</summary>
+                Task<IReadOnlyList<AppUser>> ListAsync(CancellationToken cancellationToken);
+
+                Task<bool> AnyAsync(CancellationToken cancellationToken);
+
+                /// <summary>Whether an account other than <paramref name="id"/> is Admin.</summary>
+                Task<bool> AnyOtherAdminAsync(long id, CancellationToken cancellationToken);
+
                 void Add(AppUser user);
 
                 Task SaveChangesAsync(CancellationToken cancellationToken);
+
+                /// <summary>
+                /// Runs <paramref name="work"/> in one serializable transaction, so what it read still holds when it writes.
+                /// When two such transactions collide, the database cancels one of them; that one is run again from the start.
+                /// </summary>
+                Task<T> InSerializableTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken);
             }
 
             public interface IPasswordHasher
@@ -481,8 +513,15 @@ internal static class SharedFiles
 
                     var user = new AppUser { Email = email, CreatedAt = time.GetUtcNow().UtcDateTime };
                     user.PasswordHash = passwords.Hash(user, request.Password!);
-                    users.Add(user);
-                    await users.SaveChangesAsync(cancellationToken);
+                    // The first account is Admin. Checked and added in one transaction, so two simultaneous first
+                    // sign-ups can't both be Admin: the one that loses the race runs again and becomes a User.
+                    await users.InSerializableTransactionAsync(async ct =>
+                    {
+                        user.Role = await users.AnyAsync(ct) ? Roles.User : Roles.Admin;
+                        users.Add(user);
+                        await users.SaveChangesAsync(ct);
+                        return user;
+                    }, cancellationToken);
                     return Issue(user);
                 }
 
@@ -497,6 +536,38 @@ internal static class SharedFiles
 
                     return Issue(user);
                 }
+
+                public async Task<IReadOnlyList<AccountDto>> ListAccountsAsync(CancellationToken cancellationToken) =>
+                    [.. (await users.ListAsync(cancellationToken)).Select(ToAccount)];
+
+                /// <summary>Makes an account Admin or User. The last Admin can't be made a User (409).</summary>
+                public async Task<AccountDto> SetRoleAsync(long id, RoleRequest request, CancellationToken cancellationToken)
+                {
+                    ArgumentNullException.ThrowIfNull(request);
+                    var role = request.Role switch
+                    {
+                        Roles.User => Roles.User,
+                        Roles.Admin => Roles.Admin,
+                        _ => throw new ValidationFailedException("role", $"Must be {Roles.User} or {Roles.Admin}."),
+                    };
+
+                    // Checked and changed in one transaction, so two Admins demoting each other at once can't leave none.
+                    var updated = await users.InSerializableTransactionAsync(async ct =>
+                    {
+                        var user = await users.FindAsync(id, ct) ?? throw new NotFoundException($"No account with id {id}.");
+                        if (user.Role == Roles.Admin && role == Roles.User && !await users.AnyOtherAdminAsync(id, ct))
+                        {
+                            throw new ConflictException("This is the last Admin. Make another account Admin first.");
+                        }
+
+                        user.Role = role;
+                        await users.SaveChangesAsync(ct);
+                        return user;
+                    }, cancellationToken);
+                    return ToAccount(updated);
+                }
+
+                private static AccountDto ToAccount(AppUser user) => new(user.Id, user.Email, user.Role, user.CreatedAt);
 
                 private AuthResponse Issue(AppUser user)
                 {
@@ -611,6 +682,7 @@ internal static class SharedFiles
                     builder.Property(e => e.Id).HasColumnName("id");
                     builder.Property(e => e.Email).HasColumnName("email").HasMaxLength(254).IsRequired();
                     builder.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255).IsRequired();
+                    builder.Property(e => e.Role).HasColumnName("role").HasMaxLength(16).IsRequired();
                     builder.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("datetime(6)").IsRequired();
                     builder.HasIndex(e => e.Email).IsUnique().HasDatabaseName("uq_cf_users_email");
                 }
@@ -663,6 +735,7 @@ internal static class SharedFiles
             """);
 
         yield return new($"src/{n}.Infrastructure/Persistence/UserRepository.cs", $$"""
+            using System.Data;
             using Microsoft.EntityFrameworkCore;
             using {{n}}.Application.Auth;
             using {{n}}.Domain.Entities;
@@ -671,8 +744,22 @@ internal static class SharedFiles
 
             internal sealed class UserRepository(AppDbContext db) : IUserRepository
             {
+                /// <summary>Runs of a serializable transaction before a deadlock is given up on (a 500).</summary>
+                private const int MaxAttempts = 3;
+
                 public Task<AppUser?> FindByEmailAsync(string email, CancellationToken cancellationToken) =>
                     db.Users.FirstOrDefaultAsync(user => user.Email == email, cancellationToken);
+
+                public Task<AppUser?> FindAsync(long id, CancellationToken cancellationToken) =>
+                    db.Users.FirstOrDefaultAsync(user => user.Id == id, cancellationToken);
+
+                public async Task<IReadOnlyList<AppUser>> ListAsync(CancellationToken cancellationToken) =>
+                    await db.Users.AsNoTracking().OrderBy(user => user.Id).ToListAsync(cancellationToken);
+
+                public Task<bool> AnyAsync(CancellationToken cancellationToken) => db.Users.AnyAsync(cancellationToken);
+
+                public Task<bool> AnyOtherAdminAsync(long id, CancellationToken cancellationToken) =>
+                    db.Users.AnyAsync(user => user.Role == Roles.Admin && user.Id != id, cancellationToken);
 
                 public void Add(AppUser user) => db.Users.Add(user);
 
@@ -685,6 +772,27 @@ internal static class SharedFiles
                     catch (DbUpdateException ex) when (DatabaseErrors.Translate(ex) is { } translated)
                     {
                         throw translated;
+                    }
+                }
+
+                public async Task<T> InSerializableTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken)
+                {
+                    ArgumentNullException.ThrowIfNull(work);
+                    for (var attempt = 1; ; attempt++)
+                    {
+                        // MySQL takes shared locks on what a serializable transaction reads. Two of them that read the
+                        // same rows and then write end in a deadlock: MySQL rolls one back, and it runs again here.
+                        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+                        try
+                        {
+                            var result = await work(cancellationToken);
+                            await transaction.CommitAsync(cancellationToken);
+                            return result;
+                        }
+                        catch (Exception ex) when (attempt < MaxAttempts && DatabaseErrors.IsDeadlock(ex))
+                        {
+                            db.ChangeTracker.Clear();
+                        }
                     }
                 }
             }
@@ -754,6 +862,20 @@ internal static class SharedFiles
                     };
                 }
 
+                /// <summary>Whether MySQL picked this transaction as a deadlock's victim and rolled it back (error 1213).</summary>
+                public static bool IsDeadlock(Exception exception)
+                {
+                    for (var current = exception; current is not null; current = current.InnerException)
+                    {
+                        if (current is MySqlException { Number: (int)MySqlErrorCode.LockDeadlock })
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
                 [GeneratedRegex(@"^Duplicate entry '(?<value>.*)' for key '(?:[^'.]+\.)?(?<key>[^'.]+)'$", RegexOptions.Singleline)]
                 private static partial Regex Duplicate();
 
@@ -819,6 +941,7 @@ internal static class SharedFiles
                         [
                             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString(CultureInfo.InvariantCulture)),
                             new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                            new Claim("role", user.Role),
                         ]),
                         SigningCredentials = new SigningCredentials(
                             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.SigningKey)), SecurityAlgorithms.HmacSha256),
@@ -921,6 +1044,7 @@ internal static class SharedFiles
                         ValidAudience = jwt.Audience,
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
                         ClockSkew = TimeSpan.FromSeconds(30),
+                        RoleClaimType = "role", // [Authorize(Roles = "Admin")] reads the token's role claim
                     };
                 });
             // Anything without its own [AllowAnonymous]/[Authorize] needs a signed-in user; the entity controllers
@@ -965,19 +1089,34 @@ internal static class SharedFiles
 
             namespace {{n}}.Api.Controllers;
 
-            /// <summary>Accounts and access tokens: register or log in, then send <c>Authorization: Bearer &lt;accessToken&gt;</c>.</summary>
+            /// <summary>
+            /// Accounts and access tokens: register or log in, then send <c>Authorization: Bearer &lt;accessToken&gt;</c>.
+            /// The first account registered is Admin; Admins list the accounts and change their roles.
+            /// </summary>
             [ApiController]
             [Route("api/auth")]
-            [AllowAnonymous]
             public sealed class AuthController(AuthService auth) : ControllerBase
             {
                 [HttpPost("register")]
+                [AllowAnonymous]
                 public async Task<ActionResult<AuthResponse>> Register(CredentialsRequest request, CancellationToken cancellationToken) =>
                     StatusCode(StatusCodes.Status201Created, await auth.RegisterAsync(request, cancellationToken));
 
                 [HttpPost("login")]
+                [AllowAnonymous]
                 public Task<AuthResponse> Login(CredentialsRequest request, CancellationToken cancellationToken) =>
                     auth.LoginAsync(request, cancellationToken);
+
+                [HttpGet("users")]
+                [Authorize(Roles = "Admin")]
+                public Task<IReadOnlyList<AccountDto>> ListUsers(CancellationToken cancellationToken) =>
+                    auth.ListAccountsAsync(cancellationToken);
+
+                /// <summary>Makes an account Admin or User. A token keeps the role it was issued with: the account logs in again.</summary>
+                [HttpPut("users/{id:long}/role")]
+                [Authorize(Roles = "Admin")]
+                public Task<AccountDto> SetRole(long id, RoleRequest request, CancellationToken cancellationToken) =>
+                    auth.SetRoleAsync(id, request, cancellationToken);
             }
 
             """);

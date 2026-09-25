@@ -96,6 +96,7 @@ internal static class EfMigrationWriter
                 new("CreatedAt", "created_at", "DateTime", true, "datetime(6)", null, null, null, false, null),
                 new("Email", "email", "string", false, "varchar(254)", 254, null, null, false, null),
                 new("PasswordHash", "password_hash", "string", false, "varchar(255)", 255, null, null, false, null),
+                new("Role", "role", "string", false, "varchar(16)", 16, null, null, false, null),
             ],
             [("Email", "email", "uq_cf_users_email", true)],
             []),

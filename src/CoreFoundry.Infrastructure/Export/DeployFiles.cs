@@ -205,6 +205,14 @@ internal static class DeployFiles
             `List`/`Get` need Read; `Create`/`Replace`/`Delete` need Write.
 
             {{access}}
+            **Becoming Admin:** The first account registered becomes `Admin`; every later one is a `User`. An Admin
+            lists the accounts with `GET /api/auth/users` and promotes or demotes one with
+            `PUT /api/auth/users/{id}/role` and `{ "role": "Admin" }` or `{ "role": "User" }` (the last Admin can't be
+            demoted: 409). The role travels in the token, so a changed role counts from the account's next login.
+
+            **No ownership yet:** whoever may write a table can set any column value. On a Signed-in table, a customer
+            creating an order could set another customer's id. Keep such tables Admin, or add your own checks.
+
             ## Tables
             {{tables}}
             ## Changing the schema
