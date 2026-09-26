@@ -39,6 +39,10 @@ public interface IDataRepository
     Task<IReadOnlyList<LookupItem>> LookupAsync(
         string databaseName, DataTable table, string? search, int take, CancellationToken cancellationToken);
 
+    /// <summary>Id and label of exactly these rows; missing ids are left out.</summary>
+    Task<IReadOnlyList<LookupItem>> LabelsAsync(
+        string databaseName, DataTable table, IReadOnlyList<long> ids, CancellationToken cancellationToken);
+
     /// <returns>False if no row has that id.</returns>
     Task<bool> DeleteAsync(string databaseName, DataTable table, long id, CancellationToken cancellationToken);
 }

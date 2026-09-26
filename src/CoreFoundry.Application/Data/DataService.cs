@@ -128,6 +128,21 @@ public sealed class DataService(IProjectRepository projects, ISnapshotProvider s
         return await rows.LookupAsync(project.DatabaseName, table, search?.Trim(), limit, cancellationToken);
     }
 
+    /// <summary>Labels of exactly these rows, so references can be shown by name. At most <see cref="MaxLookupSize"/> ids.</summary>
+    public async Task<IReadOnlyList<LookupItem>> LabelsAsync(
+        long projectId, string tableName, IReadOnlyList<long> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var distinct = ids.Distinct().ToList();
+        if (distinct.Count > MaxLookupSize)
+        {
+            throw new ValidationFailedException("ids", $"Ask for at most {MaxLookupSize} ids at a time.");
+        }
+
+        var (project, table) = await TableAsync(projectId, tableName, cancellationToken);
+        return await rows.LabelsAsync(project.DatabaseName, table, distinct, cancellationToken);
+    }
+
     private async Task<(Project Project, DataSchema Schema)> SchemaAsync(long projectId, CancellationToken cancellationToken)
     {
         var project = await SchemaPlanService.ReadyProjectAsync(projects, projectId, cancellationToken);

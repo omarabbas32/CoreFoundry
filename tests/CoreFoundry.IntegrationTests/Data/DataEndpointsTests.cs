@@ -218,6 +218,12 @@ public sealed class DataEndpointsTests : IDisposable
         (await OkAsync<List<LookupItem>>(shop, HttpMethod.Get, $"authors/lookup?q={ids[0]}")).Select(item => item.Id).ShouldBe([ids[0]]);
         (await OkAsync<List<LookupItem>>(shop, HttpMethod.Get, "authors/lookup?limit=1")).Count.ShouldBe(1);
         (await ValidationAsync(await SendAsync(shop, HttpMethod.Get, "authors/lookup?limit=0"))).Errors.Keys.ShouldBe(["limit"]);
+
+        // Labels of exactly the given rows, to show references by name; unknown ids are left out.
+        var labels = await OkAsync<List<LookupItem>>(shop, HttpMethod.Get, $"authors/lookup?ids={ids[0]}&ids={ids[2]}&ids=999999");
+        labels.Select(item => (item.Id, item.Label)).ShouldBe([(ids[0], "Ursula"), (ids[2], "%_real")], ignoreOrder: true);
+        var tooMany = string.Join("&", Enumerable.Range(1, 101).Select(id => $"ids={id}"));
+        (await ValidationAsync(await SendAsync(shop, HttpMethod.Get, $"authors/lookup?{tooMany}"))).Errors.Keys.ShouldBe(["ids"]);
     }
 
     [Fact]

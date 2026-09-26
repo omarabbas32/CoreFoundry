@@ -71,6 +71,16 @@ public class DataSqlTests
     }
 
     [Fact]
+    public void Labels_select_exactly_the_given_ids_one_parameter_each()
+    {
+        var command = DataSql.Labels(Db, Books, Books.LabelColumn, [3, 7]);
+
+        command.Sql.ShouldBe("SELECT `id`, `title` FROM `cf_p_7`.`books` WHERE `id` IN (@id_0, @id_1)");
+        command.Parameters.ShouldBe(new Dictionary<string, object?> { ["id_0"] = 3L, ["id_1"] = 7L });
+        DataSql.Labels(Db, Books, null, []).Sql.ShouldBe("SELECT `id`, NULL FROM `cf_p_7`.`books` WHERE FALSE");
+    }
+
+    [Fact]
     public void No_search_adds_no_filter_and_a_search_nothing_can_match_finds_nothing()
     {
         DataSql.Count(Db, Books, null).Sql.ShouldBe("SELECT COUNT(*) FROM `cf_p_7`.`books`");

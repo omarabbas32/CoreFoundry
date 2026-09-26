@@ -44,8 +44,9 @@ export const queryKeys = {
   assistantSession: (projectId: number, id: number) => ["projects", projectId, "assistant", id] as const,
   aiKey: ["me", "ai-key"] as const,
   data: (projectId: number) => ["projects", projectId, "data"] as const,
-  rows: (projectId: number, table: string, page: number, pageSize: number, sort: string) =>
-    ["projects", projectId, "data", table, "rows", page, pageSize, sort] as const,
+  rows: (projectId: number, table: string, page: number, pageSize: number, sort: string, search: string) =>
+    ["projects", projectId, "data", table, "rows", page, pageSize, sort, search] as const,
+  labels: (projectId: number, table: string, ids: number[]) => ["projects", projectId, "data", table, "labels", ids] as const,
   lookup: (projectId: number, table: string, search: string) => ["projects", projectId, "data", table, "lookup", search] as const,
 };
 
@@ -337,13 +338,32 @@ export function useDataSchema(projectId: number) {
 const dataPath = (projectId: number, table: string) => `/api/projects/${projectId}/data/${encodeURIComponent(table)}`;
 
 /** One page of rows. `sort` is a column name, "-" first for descending ("" = by id). */
-export function useRows(projectId: number, table: string, page: number, pageSize: number, sort: string, enabled: boolean) {
+/** A page of rows; `search` keeps rows whose text columns contain it, or whose id it is. */
+export function useRows(projectId: number, table: string, page: number, pageSize: number, sort: string, enabled: boolean, search = "") {
   return useQuery({
-    queryKey: queryKeys.rows(projectId, table, page, pageSize, sort),
+    queryKey: queryKeys.rows(projectId, table, page, pageSize, sort, search),
     queryFn: () =>
-      api<DataPage>(`${dataPath(projectId, table)}?page=${page}&pageSize=${pageSize}${sort ? `&sort=${encodeURIComponent(sort)}` : ""}`),
+      api<DataPage>(
+        `${dataPath(projectId, table)}?page=${page}&pageSize=${pageSize}` +
+          (sort ? `&sort=${encodeURIComponent(sort)}` : "") +
+          (search ? `&q=${encodeURIComponent(search)}` : ""),
+      ),
     enabled,
     placeholderData: (previous) => previous, // keep the grid while the next page loads
+  });
+}
+
+/** Labels of exactly these rows of `table` (id → label), to show a page's references by name; one request. */
+export function useReferenceLabels(projectId: number, table: string | null, ids: number[]) {
+  const sorted = [...new Set(ids)].sort((a, b) => a - b);
+  return useQuery({
+    queryKey: queryKeys.labels(projectId, table ?? "", sorted),
+    queryFn: async () => {
+      const items = await api<LookupItem[]>(`${dataPath(projectId, table!)}/lookup?${sorted.map((id) => `ids=${id}`).join("&")}`);
+      return new Map(items.map((item) => [item.id, item.label]));
+    },
+    enabled: table !== null && sorted.length > 0,
+    staleTime: 30_000,
   });
 }
 

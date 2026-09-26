@@ -133,6 +133,24 @@ public static class DataSql
         return new($"SELECT `id`, {labelSql} FROM {Table(database, table)}{where} ORDER BY {order} LIMIT @take", parameters);
     }
 
+    /// <summary>
+    /// The labels of exactly these rows (for showing references by name in the data browser): <c>id</c> and the label
+    /// column, one parameter per id. Ids that don't exist are simply absent.
+    /// </summary>
+    public static DataCommand Labels(string database, DataTable table, DataColumn? label, IReadOnlyList<long> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var parameters = new Dictionary<string, object?>();
+        var placeholders = ids.Select((id, index) =>
+        {
+            parameters[$"id_{index}"] = id;
+            return $"@id_{index}";
+        }).ToList();
+        var labelSql = label is null ? "NULL" : Name(label.Name);
+        var where = placeholders.Count == 0 ? "FALSE" : $"`id` IN ({string.Join(", ", placeholders)})";
+        return new($"SELECT `id`, {labelSql} FROM {Table(database, table)} WHERE {where}", parameters);
+    }
+
     private static string Placeholder(ColumnValue value, int index, Dictionary<string, object?> parameters)
     {
         if (value.UseDefault)

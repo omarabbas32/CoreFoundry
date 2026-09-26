@@ -54,14 +54,27 @@ public sealed partial class MySqlDataRepository(string engineConnectionString) :
             await connection.ExecuteAsync(Command(DataSql.Update(databaseName, table, id, values), cancellationToken)) > 0);
     }
 
-    public async Task<IReadOnlyList<LookupItem>> LookupAsync(
+    public Task<IReadOnlyList<LookupItem>> LookupAsync(
         string databaseName, DataTable table, string? search, int take, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(table);
+        return ReadLookupAsync(table, DataSql.Lookup(databaseName, table, table.LabelColumn, search, take), cancellationToken);
+    }
+
+    public Task<IReadOnlyList<LookupItem>> LabelsAsync(
+        string databaseName, DataTable table, IReadOnlyList<long> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return ReadLookupAsync(table, DataSql.Labels(databaseName, table, table.LabelColumn, ids), cancellationToken);
+    }
+
+    /// <summary>Reads <c>id</c>, label pairs (the lookup and labels queries share this shape).</summary>
+    private async Task<IReadOnlyList<LookupItem>> ReadLookupAsync(DataTable table, DataCommand sql, CancellationToken cancellationToken)
+    {
         await using var connection = await OpenAsync(cancellationToken);
         return await Guard(table, [], async () =>
         {
-            var command = Command(DataSql.Lookup(databaseName, table, table.LabelColumn, search, take), cancellationToken);
+            var command = Command(sql, cancellationToken);
             await using var reader = await connection.ExecuteReaderAsync(command);
             var items = new List<LookupItem>();
             while (await reader.ReadAsync(cancellationToken))
