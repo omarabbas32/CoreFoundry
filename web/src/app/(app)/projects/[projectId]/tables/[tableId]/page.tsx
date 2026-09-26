@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { AccessSelects, RealtimeToggle, accessLevelHint, realtimeHint } from "@/components/access-controls";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Button, Card, ConfirmDialog } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -24,7 +24,7 @@ export default function TableDesignerPage() {
   const tableId = Number(params.tableId);
   const table = useTable(projectId, tableId);
 
-  if (table.isPending) return <FullPageSpinner label="Loading table…" />;
+  if (table.isPending) return <PageSkeleton label="Loading table…" variant="table" />;
 
   if (table.error) {
     const notFound = table.error instanceof ApiError && table.error.status === 404;

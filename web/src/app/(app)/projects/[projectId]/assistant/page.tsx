@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { Alert, Badge, Card } from "@/components/ui";
 import { useAssistantSession, useAssistantSessions, useAssistantStep, useTables } from "@/lib/queries";
 import type { AssistantSessionStatus } from "@/lib/types";
@@ -17,7 +17,7 @@ import { Conversation } from "./conversation";
 export default function AssistantPage() {
   // useSearchParams (the ?session= of an earlier conversation) needs a Suspense boundary.
   return (
-    <Suspense fallback={<FullPageSpinner label="Loading the assistant…" />}>
+    <Suspense fallback={<PageSkeleton label="Loading the assistant…" variant="detail" />}>
       <Assistant />
     </Suspense>
   );
@@ -32,7 +32,7 @@ function Assistant() {
   const sessionId = chosen ? Number(chosen) : (open?.id ?? null);
   const session = useAssistantSession(projectId, sessionId);
 
-  if (sessions.isPending || (sessionId !== null && session.isPending)) return <FullPageSpinner label="Loading the assistant…" />;
+  if (sessions.isPending || (sessionId !== null && session.isPending)) return <PageSkeleton label="Loading the assistant…" variant="detail" />;
 
   const extending = (tables.data?.length ?? 0) > 0;
   const past = (sessions.data ?? []).filter((summary) => summary.id !== sessionId);

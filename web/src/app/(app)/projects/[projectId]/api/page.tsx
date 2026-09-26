@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { AccessSelects, RealtimeToggle, accessLevelHint, realtimeHint } from "@/components/access-controls";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { ApiError, refreshSession } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -62,7 +62,7 @@ export default function ApiPage() {
     window.history.replaceState(null, "", `${window.location.pathname}${hash}`);
   }
 
-  if (schema.isPending || project.isPending) return <FullPageSpinner label="Loading the API…" />;
+  if (schema.isPending || project.isPending) return <PageSkeleton label="Loading the API…" variant="cards" />;
 
   const tables = schema.data?.tables ?? [];
   const selected = tables.find((table) => table.name === chosen) ?? tables[0];

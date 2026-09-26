@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useApply, usePlan, useProject } from "@/lib/queries";
@@ -38,7 +38,7 @@ export default function ReviewPlanPage() {
     setApplied(await apply.mutateAsync({ planHash, acknowledgeDestructive }));
   }
 
-  if (plan.isPending || project.isPending) return <FullPageSpinner label="Comparing the draft with the database…" />;
+  if (plan.isPending || project.isPending) return <PageSkeleton label="Comparing the draft with the database…" variant="detail" />;
 
   return (
     <div className="grid gap-6">

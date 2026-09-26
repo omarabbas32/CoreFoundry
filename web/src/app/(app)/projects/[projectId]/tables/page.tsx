@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { accessLevelLabels } from "@/components/access-controls";
 import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Badge, Button, Card, Input } from "@/components/ui";
@@ -19,7 +19,7 @@ export default function TablesPage() {
   const [choosingTemplate, setChoosingTemplate] = useState(false);
   const [search, setSearch] = useState("");
 
-  if (tables.isPending) return <FullPageSpinner label="Loading tables…" />;
+  if (tables.isPending) return <PageSkeleton label="Loading tables…" variant="list" />;
 
   return (
     <div className="grid gap-6">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { Alert, Card } from "@/components/ui";
 import { useDrift, useProject, useTables } from "@/lib/queries";
 import { ExportCard } from "./export-card";
@@ -13,7 +13,7 @@ export default function ProjectPage() {
   const project = useProject(projectId);
 
   // The layout loads the project and reports errors; this only waits for the shared query.
-  if (!project.data) return <FullPageSpinner label="Loading project…" />;
+  if (!project.data) return <PageSkeleton label="Loading project…" variant="detail" />;
 
   const { data } = project;
   const created = new Date(data.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" });

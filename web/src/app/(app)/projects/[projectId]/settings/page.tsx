@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { useProject } from "@/lib/queries";
 import { atLeast } from "@/lib/types";
 import { DeleteProjectSection } from "../delete-project-section";
@@ -14,7 +14,7 @@ export default function ProjectSettingsPage() {
   const project = useProject(projectId);
 
   // The layout loads the project and reports errors; this only waits for the shared query.
-  if (!project.data) return <FullPageSpinner label="Loading project…" />;
+  if (!project.data) return <PageSkeleton label="Loading project…" variant="detail" />;
 
   const { data } = project;
   return (

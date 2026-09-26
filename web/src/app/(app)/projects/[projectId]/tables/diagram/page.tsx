@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { DraftBanner } from "@/components/schema-badges";
 import { Alert, Card } from "@/components/ui";
 import { useSchema } from "@/lib/queries";
@@ -11,7 +11,7 @@ export default function DiagramPage() {
   const projectId = Number(useParams<{ projectId: string }>().projectId);
   const schema = useSchema(projectId);
 
-  if (schema.isPending) return <FullPageSpinner label="Loading schema…" />;
+  if (schema.isPending) return <PageSkeleton label="Loading schema…" variant="diagram" />;
 
   const references = schema.data?.flatMap((table) => table.columns).filter((column) => column.referencesTableId !== null).length ?? 0;
 

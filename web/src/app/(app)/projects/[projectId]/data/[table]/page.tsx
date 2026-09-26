@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { Alert, Button, Card, ConfirmDialog, Input, Select } from "@/components/ui";
 import { formatCell } from "@/lib/data-form";
 import { useDataSchema, useDeleteRow, useLoadSampleData, useProject, useReferenceLabels, useRows } from "@/lib/queries";
@@ -20,7 +20,7 @@ export default function DataViewerPage() {
   const project = useProject(projectId);
   const schema = useDataSchema(projectId);
 
-  if (schema.isPending) return <FullPageSpinner label="Loading tables…" />;
+  if (schema.isPending) return <PageSkeleton label="Loading tables…" variant="table" />;
 
   const tables = schema.data?.tables ?? [];
   const table = tables.find((candidate) => candidate.name === tableName);

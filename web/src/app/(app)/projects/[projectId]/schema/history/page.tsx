@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { useMigration, useMigrations, useProject } from "@/lib/queries";
 import type { MigrationStatus, MigrationSummary } from "@/lib/types";
@@ -15,7 +15,7 @@ export default function HistoryPage() {
   const [page, setPage] = useState(1);
   const migrations = useMigrations(projectId, page);
 
-  if (migrations.isPending) return <FullPageSpinner label="Loading history…" />;
+  if (migrations.isPending) return <PageSkeleton label="Loading history…" variant="list" />;
 
   const totalPages = Math.max(1, Math.ceil((migrations.data?.total ?? 0) / (migrations.data?.pageSize ?? 1)));
 

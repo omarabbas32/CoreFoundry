@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { FullPageSpinner } from "@/components/full-page-spinner";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { Alert, Card } from "@/components/ui";
 import { useDataSchema } from "@/lib/queries";
 
@@ -18,7 +18,7 @@ export default function DataIndexPage() {
     if (first) router.replace(`/projects/${projectId}/data/${first}`);
   }, [first, projectId, router]);
 
-  if (schema.isPending || first) return <FullPageSpinner label="Loading tables…" />;
+  if (schema.isPending || first) return <PageSkeleton label="Loading tables…" variant="list" />;
   if (schema.error) return <Alert>{schema.error.message}</Alert>;
 
   return (
