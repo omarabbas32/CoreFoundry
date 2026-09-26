@@ -62,22 +62,22 @@ public static class DependencyInjection
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton<IPasswordHasher, PasswordHasherAdapter>();
 
-        // M10 AI assistant: Grok over HTTP, users' own keys encrypted with Data Protection (keys in the metadata database).
+        // M10 AI assistant: an OpenAI-compatible API (Groq) over HTTP, users' own keys encrypted with Data Protection (keys in the metadata database).
         services.AddScoped<IAssistantSessionRepository, AssistantSessionRepository>();
         services.AddScoped<IAssistantUsageRepository, AssistantUsageRepository>();
         services.AddDataProtection().SetApplicationName("CoreFoundry").PersistKeysToDbContext<MetadataDbContext>();
         services.AddSingleton<IAiKeyProtector, DataProtectionAiKeyProtector>();
-        services.AddOptions<GrokOptions>()
-            .Bind(configuration.GetSection(GrokOptions.SectionName))
+        services.AddOptions<AiOptions>()
+            .Bind(configuration.GetSection(AiOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
         services.AddSingleton(provider =>
         {
-            var grok = provider.GetRequiredService<IOptions<GrokOptions>>().Value;
-            return new AssistantSettings(!string.IsNullOrWhiteSpace(grok.ApiKey), grok.DailyCallsPerUser);
+            var ai = provider.GetRequiredService<IOptions<AiOptions>>().Value;
+            return new AssistantSettings(!string.IsNullOrWhiteSpace(ai.ApiKey), ai.DailyCallsPerUser);
         });
-        services.AddHttpClient<IAiChatClient, GrokChatClient>((provider, client) =>
-            client.Timeout = TimeSpan.FromSeconds(provider.GetRequiredService<IOptions<GrokOptions>>().Value.TimeoutSeconds));
+        services.AddHttpClient<IAiChatClient, OpenAiCompatibleChatClient>((provider, client) =>
+            client.Timeout = TimeSpan.FromSeconds(provider.GetRequiredService<IOptions<AiOptions>>().Value.TimeoutSeconds));
 
         services.AddHealthChecks()
             .AddCheck("mysql-metadata", new MySqlConnectionHealthCheck(metadata), tags: [ReadyTag])

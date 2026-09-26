@@ -5,7 +5,7 @@ import { useAiKey, useSetAiKey } from "@/lib/queries";
 import { Alert, Button, Dialog, Field, Input } from "./ui";
 
 /**
- * The user's own xAI key for the AI assistant. Without one, CoreFoundry's key is used (with a daily limit). The
+ * The user's own Groq key for the AI assistant. Without one, CoreFoundry's key is used (with a daily limit). The
  * key is write-only: the server encrypts it and only ever shows its last characters.
  */
 export function AiKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -36,21 +36,21 @@ export function AiKeyDialog({ open, onClose }: { open: boolean; onClose: () => v
             </>
           ) : current.hasDefaultKey ? (
             <>
-              The assistant uses CoreFoundry&apos;s key, up to {current.dailyCallsOnDefaultKey} calls a day. Add your own xAI
+              The assistant uses CoreFoundry&apos;s key, up to {current.dailyCallsOnDefaultKey} calls a day. Add your own Groq
               key for more.
             </>
           ) : (
-            <>CoreFoundry has no key of its own: add your xAI key to use the assistant.</>
+            <>CoreFoundry has no key of its own: add your Groq key to use the assistant.</>
           )}
         </p>
       )}
       <form onSubmit={submit} className="grid gap-3">
-        <Field label={current?.hasOwnKey ? "Replace your xAI key" : "Your xAI key"} htmlFor="ai-key" error={save.error?.message}>
+        <Field label={current?.hasOwnKey ? "Replace your Groq key" : "Your Groq key"} htmlFor="ai-key" error={save.error?.message}>
           <Input
             id="ai-key"
             type="password"
             autoComplete="off"
-            placeholder="xai-…"
+            placeholder="gsk_…"
             value={key}
             onChange={(event) => setKey(event.target.value)}
           />

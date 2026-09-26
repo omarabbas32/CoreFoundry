@@ -22,7 +22,7 @@ public sealed class User
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
-    /// <summary>The user's own xAI key, encrypted by the Infrastructure layer; null: the server's default key is used.</summary>
+    /// <summary>The user's own AI (Groq) key, encrypted by the Infrastructure layer; null: the server's default key is used.</summary>
     public string? AiKeyCiphertext { get; private set; }
 
     /// <summary>The key's last characters, so the user can tell which key is set. Never enough to use it.</summary>

@@ -19,7 +19,7 @@ public sealed class DataProtectionAiKeyProtector(IDataProtectionProvider provide
         }
         catch (CryptographicException ex)
         {
-            throw new AiProviderException(AiFailure.KeyRejected, "Your saved xAI key can't be read any more. Add it again.", ex);
+            throw new AiProviderException(AiFailure.KeyRejected, "Your saved AI key can't be read any more. Add it again.", ex);
         }
     }
 }

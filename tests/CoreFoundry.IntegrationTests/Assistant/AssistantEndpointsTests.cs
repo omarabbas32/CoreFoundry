@@ -11,7 +11,7 @@ using Shouldly;
 
 namespace CoreFoundry.IntegrationTests.Assistant;
 
-/// <summary>The AI schema assistant (M10) end to end, with a scripted model in place of Grok.</summary>
+/// <summary>The AI schema assistant (M10) end to end, with a scripted model in place of the AI provider.</summary>
 [Collection(TestDatabaseGroup.Name)]
 public sealed class AssistantEndpointsTests : IDisposable
 {
@@ -126,14 +126,14 @@ public sealed class AssistantEndpointsTests : IDisposable
     public async Task Provider_failures_become_readable_problems_and_keep_the_users_answer()
     {
         var (owner, project) = await ProjectAsync("Down");
-        _api.Ai.Question("Anything else?", "No").Fail(AiFailure.Unavailable, "Grok is unavailable right now. Try again.");
+        _api.Ai.Question("Anything else?", "No").Fail(AiFailure.Unavailable, "The AI service is unavailable right now. Try again.");
         var session = await StartAsync(project, owner, "Notes app");
 
         var response = await _driver.SendAsync(HttpMethod.Post, $"{Sessions(project)}/{session.Id}/answers", owner,
             new AssistantAnswerRequest(session.Version, "No"));
 
         response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
-        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("Grok is unavailable right now.");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("The AI service is unavailable right now.");
         var saved = await _driver.OkAsync<AssistantSessionDto>(HttpMethod.Get, $"{Sessions(project)}/{session.Id}", owner);
         saved.Messages[^1].Text.ShouldBe("No");
         saved.AwaitingAssistant.ShouldBeTrue();
@@ -229,7 +229,7 @@ public sealed class AssistantEndpointsTests : IDisposable
 
         (await _driver.SendAsync(HttpMethod.Post, Sessions(project), stranger, new StartAssistantRequest("x"))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await _driver.SendAsync(HttpMethod.Get, Sessions(project), stranger)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await _driver.SendAsync(HttpMethod.Put, "/api/me/ai-key", null, new AiKeyRequest("xai-anonymous-0123456789"))).StatusCode
+        (await _driver.SendAsync(HttpMethod.Put, "/api/me/ai-key", null, new AiKeyRequest("gsk_anonymous-0123456789"))).StatusCode
             .ShouldBe(HttpStatusCode.Unauthorized);
         _api.Ai.Requests.ShouldBeEmpty();
 
@@ -246,10 +246,10 @@ public sealed class AssistantEndpointsTests : IDisposable
 
         var capped = await _driver.SendAsync(HttpMethod.Post, Sessions(project), owner, new StartAssistantRequest("Shop"));
         capped.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
-        (await capped.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("Add your own xAI key");
+        (await capped.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("Add your own Groq key");
         _api.Ai.Requests.ShouldBeEmpty();
 
-        const string ownKey = "xai-own-test-key-0123456789abcd";
+        const string ownKey = "gsk_own-test-key-0123456789abcd";
         (await _driver.SendAsync(HttpMethod.Put, "/api/me/ai-key", owner, new AiKeyRequest("too short"))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var status = await _driver.OkAsync<AiKeyStatusDto>(HttpMethod.Put, "/api/me/ai-key", owner, new AiKeyRequest(ownKey));
         (status.HasOwnKey, status.Hint, status.HasDefaultKey).ShouldBe((true, "abcd", true));

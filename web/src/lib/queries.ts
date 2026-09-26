@@ -480,7 +480,7 @@ export function useAiKey() {
   return useQuery({ queryKey: queryKeys.aiKey, queryFn: () => api<AiKeyStatus>("/api/me/ai-key") });
 }
 
-/** Saves (a string) or removes (null) the user's own xAI key. The response never contains the key. */
+/** Saves (a string) or removes (null) the user's own Groq key. The response never contains the key. */
 export function useSetAiKey() {
   const queryClient = useQueryClient();
   return useMutation({

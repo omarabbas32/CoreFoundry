@@ -5,7 +5,7 @@ using CoreFoundry.Application.Assistant;
 namespace CoreFoundry.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Stands in for Grok in integration tests: each call takes the next scripted reply (JSON, or an exception to
+/// Stands in for the AI provider in integration tests: each call takes the next scripted reply (JSON, or an exception to
 /// throw) and records the request. Tests in the database collection run one at a time, so each one calls
 /// <see cref="Reset"/> first.
 /// </summary>

@@ -39,11 +39,13 @@ export default function TablesPage() {
             >
               Diagram
             </Link>
-            {tables.data && tables.data.length > 0 && (
-              <Link href={`/projects/${projectId}/assistant`} className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted">
-                Extend with AI
-              </Link>
-            )}
+            {/* Always shown (even if the list failed to load); the assistant page says "Extend" once there are tables. */}
+            <Link
+              href={`/projects/${projectId}/assistant`}
+              className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+            >
+              {tables.data && tables.data.length > 0 ? "Extend with AI" : "Design with AI"}
+            </Link>
             <Button onClick={() => setCreating(true)} disabled={!tables.data}>
               New table
             </Button>

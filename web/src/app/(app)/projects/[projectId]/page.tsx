@@ -91,6 +91,12 @@ export default function ProjectPage() {
             Open table designer
           </Link>
           <Link
+            href={`/projects/${data.id}/assistant`}
+            className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            Design with AI
+          </Link>
+          <Link
             href={`/projects/${data.id}/schema`}
             className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
           >

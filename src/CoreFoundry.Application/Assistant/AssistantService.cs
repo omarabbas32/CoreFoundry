@@ -168,7 +168,7 @@ public sealed class AssistantService(
             {
                 throw new AiProviderException(
                     AiFailure.RateLimited,
-                    $"You've used today's {settings.DailyCallsPerUser} assistant calls on CoreFoundry's key. Add your own xAI key to continue, or try again tomorrow.");
+                    $"You've used today's {settings.DailyCallsPerUser} assistant calls on CoreFoundry's key. Add your own Groq key to continue, or try again tomorrow.");
             }
 
             var json = await ai.CompleteAsync(
@@ -189,7 +189,7 @@ public sealed class AssistantService(
 
         throw new AiProviderException(
             AiFailure.BadResponse,
-            $"Grok's answer still had problems after {MaxAttempts} tries: {string.Join(" ", problems)} Try again, or rephrase your last message.");
+            $"The AI's answer still had problems after {MaxAttempts} tries: {string.Join(" ", problems)} Try again, or rephrase your last message.");
     }
 
     /// <summary>The key for this user's calls: their own if they added one, else null for the server's default.</summary>
@@ -203,7 +203,7 @@ public sealed class AssistantService(
 
         return settings.HasDefaultKey
             ? null
-            : throw new AiProviderException(AiFailure.NotConfigured, "The AI assistant isn't set up: add your own xAI key in the account menu.");
+            : throw new AiProviderException(AiFailure.NotConfigured, "The AI assistant isn't set up: add your own Groq key under AI key in the header.");
     }
 
     private static List<AiChatMessage> Conversation(AssistantSession session, string projectName, IReadOnlyList<Domain.Schema.ProjectTable> existing)

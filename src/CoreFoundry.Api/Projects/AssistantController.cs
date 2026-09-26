@@ -71,7 +71,7 @@ public sealed class AssistantController(AssistantService assistant) : Controller
     private long UserId => User.GetUserId() ?? throw new InvalidOperationException("The signed-in user has no id.");
 }
 
-/// <summary>The signed-in user's own xAI key for the assistant. The key is write-only: responses show its last characters.</summary>
+/// <summary>The signed-in user's own AI (Groq) key for the assistant. The key is write-only: responses show its last characters.</summary>
 [ApiController]
 [Route("api/me/ai-key")]
 [Authorize]

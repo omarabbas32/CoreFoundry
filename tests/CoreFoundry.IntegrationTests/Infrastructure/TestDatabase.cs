@@ -111,9 +111,9 @@ public sealed partial class TestDatabaseApi : WebApplicationFactory<Program>, IA
         builder.UseSetting("Jwt:SigningKey", "integration-test-signing-key-at-least-32-bytes!");
         builder.UseSetting("RateLimiting:AuthPermitLimit", "10000");
         builder.UseSetting("RateLimiting:AssistantPermitLimit", "10000");
-        // A default key so the assistant runs; the scripted client below answers instead of Grok.
-        builder.UseSetting("Grok:ApiKey", "integration-test-default-key");
-        builder.UseSetting("Grok:DailyCallsPerUser", "10000");
+        // A default key so the assistant runs; the scripted client below answers instead of the AI provider.
+        builder.UseSetting("Ai:ApiKey", "integration-test-default-key");
+        builder.UseSetting("Ai:DailyCallsPerUser", "10000");
         builder.ConfigureTestServices(services => services.AddSingleton<IAiChatClient>(Ai));
     }
 

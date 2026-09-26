@@ -9,7 +9,7 @@ using Shouldly;
 
 namespace CoreFoundry.UnitTests.Assistant;
 
-public class GrokChatClientTests
+public class OpenAiCompatibleChatClientTests
 {
     private static readonly AiChatRequest Request = new(
         null,
@@ -28,10 +28,10 @@ public class GrokChatClientTests
         var content = await client.CompleteAsync(Request, Ct);
 
         content.ShouldBe("{\"kind\":\"question\"}");
-        handler.Uri.ShouldBe(new Uri("https://api.x.ai/v1/chat/completions"));
+        handler.Uri.ShouldBe(new Uri("https://api.groq.com/openai/v1/chat/completions"));
         handler.Authorization.ShouldBe("Bearer server-key");
         using var body = JsonDocument.Parse(handler.Body!);
-        body.RootElement.GetProperty("model").GetString().ShouldBe("grok-4");
+        body.RootElement.GetProperty("model").GetString().ShouldBe("openai/gpt-oss-120b");
         body.RootElement.GetProperty("messages")[0].GetProperty("role").GetString().ShouldBe("system");
         body.RootElement.GetProperty("messages")[1].GetProperty("content").GetString().ShouldBe("hi");
         var format = body.RootElement.GetProperty("response_format");
@@ -96,10 +96,39 @@ public class GrokChatClientTests
     }
 
     [Fact]
+    public async Task A_model_that_refuses_the_schema_format_is_asked_again_in_json_mode_with_the_schema_in_the_prompt()
+    {
+        var handler = new FakeHandler(
+            (HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"This model does not support response format `json_schema`\"}}"),
+            (HttpStatusCode.OK, Completion("{\"kind\":\"question\"}")));
+
+        var content = await Client(handler, "k").CompleteAsync(Request, Ct);
+
+        content.ShouldBe("{\"kind\":\"question\"}");
+        handler.Bodies.Count.ShouldBe(2);
+        using var retry = JsonDocument.Parse(handler.Bodies[1]);
+        retry.RootElement.GetProperty("response_format").GetProperty("type").GetString().ShouldBe("json_object");
+        var system = retry.RootElement.GetProperty("messages")[0].GetProperty("content").GetString()!;
+        system.ShouldStartWith("rules");
+        system.ShouldContain(AssistantPrompt.ReplySchema);
+    }
+
+    [Fact]
+    public async Task Other_bad_requests_are_not_retried()
+    {
+        var handler = new FakeHandler(HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"The model `nope` does not exist\"}}");
+
+        var failure = await Should.ThrowAsync<AiProviderException>(() => Client(handler, "k").CompleteAsync(Request, Ct));
+
+        failure.Message.ShouldContain("The model `nope` does not exist");
+        handler.Bodies.Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task A_timeout_is_unavailable()
     {
         var handler = new FakeHandler(HttpStatusCode.OK, Completion("{}")) { Delay = TimeSpan.FromSeconds(5) };
-        var client = new GrokChatClient(new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(50) }, Options.Create(new GrokOptions { ApiKey = "k" }));
+        var client = new OpenAiCompatibleChatClient(new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(50) }, Options.Create(new AiOptions { ApiKey = "k" }));
 
         (await Should.ThrowAsync<AiProviderException>(() => client.CompleteAsync(Request, Ct))).Failure.ShouldBe(AiFailure.Unavailable);
     }
@@ -117,29 +146,37 @@ public class GrokChatClientTests
         schema.RootElement.GetProperty("additionalProperties").GetBoolean().ShouldBeFalse();
     }
 
-    private static GrokChatClient Client(FakeHandler handler, string? defaultKey) =>
-        new(new HttpClient(handler), Options.Create(new GrokOptions { ApiKey = defaultKey }));
+    private static OpenAiCompatibleChatClient Client(FakeHandler handler, string? defaultKey) =>
+        new(new HttpClient(handler), Options.Create(new AiOptions { ApiKey = defaultKey }));
 
     private static string Completion(string content) =>
         JsonSerializer.Serialize(new { choices = new[] { new { message = new { role = "assistant", content } } } });
 
-    private sealed class FakeHandler(HttpStatusCode status, string body) : HttpMessageHandler
+    /// <summary>Answers each call with the next response; the last one repeats. Records every request body.</summary>
+    private sealed class FakeHandler(params (HttpStatusCode Status, string Body)[] responses) : HttpMessageHandler
     {
+        public FakeHandler(HttpStatusCode status, string body)
+            : this((status, body))
+        {
+        }
+
         public TimeSpan Delay { get; init; }
         public Uri? Uri { get; private set; }
         public string? Authorization { get; private set; }
-        public string? Body { get; private set; }
+        public string? Body => Bodies.LastOrDefault();
+        public List<string> Bodies { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Uri = request.RequestUri;
             Authorization = request.Headers.Authorization?.ToString();
-            Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+            Bodies.Add(request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken));
             if (Delay > TimeSpan.Zero)
             {
                 await Task.Delay(Delay, cancellationToken);
             }
 
+            var (status, body) = responses[Math.Min(Bodies.Count, responses.Length) - 1];
             return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
         }
     }

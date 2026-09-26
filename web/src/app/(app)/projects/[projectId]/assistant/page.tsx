@@ -49,7 +49,7 @@ function Assistant() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{extending ? "Extend with AI" : "Design with AI"}</h1>
           <p className="text-sm text-muted">
-            Grok asks a few questions, one at a time, then proposes tables. Nothing is created until you confirm, and then
+            The AI asks a few questions, one at a time, then proposes tables. Nothing is created until you confirm, and then
             only as drafts you review and apply.
           </p>
         </div>
@@ -179,7 +179,7 @@ function Conversation({ projectId, session }: { projectId: number; session: Assi
 
       {session.awaitingAssistant && open && !busy && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
-          <span>Grok hasn&apos;t answered your last message yet.</span>
+          <span>The AI hasn&apos;t answered your last message yet.</span>
           <Button variant="secondary" onClick={() => step.mutate({ kind: "continue", session })}>
             Try again
           </Button>
@@ -336,7 +336,7 @@ function describe(column: ProposedColumn) {
 function Thinking() {
   return (
     <p className="flex items-center gap-2 text-sm text-muted" role="status">
-      <Spinner /> Grok is thinking…
+      <Spinner /> The AI is thinking…
     </p>
   );
 }

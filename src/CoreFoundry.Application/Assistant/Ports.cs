@@ -40,7 +40,7 @@ public sealed record AiChatMessage(AiChatRole Role, string Content);
 /// <param name="JsonSchema">The JSON Schema the reply must follow (a JSON document).</param>
 public sealed record AiChatRequest(string? ApiKey, IReadOnlyList<AiChatMessage> Messages, string SchemaName, string JsonSchema);
 
-/// <summary>A chat model that answers with JSON following a schema. Implemented for xAI Grok in Infrastructure.</summary>
+/// <summary>A chat model that answers with JSON following a schema. Implemented for OpenAI-compatible APIs (Groq) in Infrastructure.</summary>
 public interface IAiChatClient
 {
     /// <returns>The reply's JSON text (not yet validated against the proposal rules).</returns>
