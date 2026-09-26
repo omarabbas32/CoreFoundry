@@ -109,7 +109,7 @@ export function ExportCard({ projectId, onReviewAccess }: { projectId: number; o
         </p>
       )}
       {casts > 0 && !error && (
-        <FoundryScene key={casts} once names={castNames(schema.data?.tables[0]?.name)} className="mt-1" />
+        <FoundryScene key={casts} once names={castNames(schema.data?.tables[0]?.name)} className="mt-1 hidden sm:block" />
       )}
       {done && (
         <p role="status" className="text-sm text-ok">

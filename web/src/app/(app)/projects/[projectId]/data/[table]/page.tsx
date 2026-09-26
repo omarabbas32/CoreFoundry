@@ -138,7 +138,7 @@ function TableData({ projectId, table, fromTemplate }: { projectId: number; tabl
             id="row-search"
             type="search"
             placeholder="Search text or id…"
-            className="w-64"
+            className="w-full sm:w-64"
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
           />
