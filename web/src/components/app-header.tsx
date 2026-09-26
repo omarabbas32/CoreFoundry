@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { AiKeyDialog } from "./ai-key-dialog";
+import { Logo } from "./logo";
 import { Button } from "./ui";
 
 export function AppHeader() {
@@ -25,8 +26,8 @@ export function AppHeader() {
   return (
     <header className="border-b border-border bg-surface">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
-        <Link href="/projects" className="font-semibold tracking-tight">
-          Core<span className="text-accent">Foundry</span>
+        <Link href="/projects" aria-label="CoreFoundry, all projects" className="rounded-md focus-visible:outline-2 focus-visible:outline-accent">
+          <Logo />
         </Link>
         <div className="flex min-w-0 items-center gap-3">
           <span className="truncate text-sm text-muted">{user?.email}</span>

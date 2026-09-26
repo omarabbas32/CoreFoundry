@@ -26,14 +26,14 @@ export function Bubble({
       <span
         aria-hidden
         className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${
-          you ? "bg-accent text-on-accent" : "bg-surface-muted text-muted ring-1 ring-border"
+          you ? "bg-accent-solid text-on-accent" : "bg-surface-muted text-muted ring-1 ring-border"
         }`}
       >
         {you ? "You" : "AI"}
       </span>
       <div
         className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap ${
-          you ? "rounded-br-sm bg-accent text-on-accent" : "rounded-bl-sm border border-border bg-surface-muted"
+          you ? "rounded-br-sm bg-accent-solid text-on-accent" : "rounded-bl-sm border border-border bg-surface-muted"
         } ${pending ? "opacity-70" : ""}`}
       >
         <span className="sr-only">{you ? "You: " : "AI: "}</span>

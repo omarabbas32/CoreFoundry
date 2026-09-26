@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 import { FullPageSpinner } from "@/components/full-page-spinner";
+import { Logo } from "@/components/logo";
 import { useAuth } from "@/lib/auth";
 import { safeNext } from "@/lib/navigation";
 
@@ -21,9 +22,10 @@ function RedirectIfSignedIn({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex flex-1 items-center justify-center px-4 py-16">
       <div className="grid w-full max-w-sm gap-6">
-        <p className="text-center text-lg font-semibold tracking-tight">
-          Core<span className="text-accent">Foundry</span>
-        </p>
+        <div className="grid justify-items-center gap-2 text-center">
+          <Logo size={44} className="flex-col gap-3 text-xl" />
+          <p className="text-sm text-muted">Design a database, apply it safely, export the backend.</p>
+        </div>
         {children}
       </div>
     </main>

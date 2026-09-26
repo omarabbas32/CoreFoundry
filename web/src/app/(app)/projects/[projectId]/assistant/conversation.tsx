@@ -178,7 +178,7 @@ export function Conversation({ projectId, session }: { projectId: number; sessio
             </Link>
             <Link
               href={`/projects/${projectId}/schema`}
-              className="inline-flex h-9 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
+              className="inline-flex h-9 items-center rounded-md bg-accent-solid px-3.5 text-sm font-medium text-on-accent hover:bg-accent-solid-hover"
             >
               Review plan &amp; apply
             </Link>
