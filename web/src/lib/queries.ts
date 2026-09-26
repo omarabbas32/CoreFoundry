@@ -4,6 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
   AccessLevel,
+  AiKeyStatus,
+  AssistantSession,
+  AssistantSessionSummary,
+  ConfirmedProposal,
   ApplyResult,
   ColumnInput,
   DataPage,
@@ -36,6 +40,9 @@ export const queryKeys = {
   drift: (projectId: number) => ["projects", projectId, "drift"] as const,
   // Under the project, so an apply (which invalidates the project) refreshes them too.
   templates: ["templates"] as const,
+  assistantSessions: (projectId: number) => ["projects", projectId, "assistant"] as const,
+  assistantSession: (projectId: number, id: number) => ["projects", projectId, "assistant", id] as const,
+  aiKey: ["me", "ai-key"] as const,
   data: (projectId: number) => ["projects", projectId, "data"] as const,
   rows: (projectId: number, table: string, page: number, pageSize: number, sort: string) =>
     ["projects", projectId, "data", table, "rows", page, pageSize, sort] as const,
@@ -391,5 +398,96 @@ export function useLoadSampleData(projectId: number) {
   return useMutation({
     mutationFn: () => api<SampleDataResult>(`/api/projects/${projectId}/sample-data`, { method: "POST" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) }),
+  });
+}
+
+// ---- AI schema assistant (M10) ------------------------------------------------------------------
+
+const assistantPath = (projectId: number) => `/api/projects/${projectId}/assistant/sessions`;
+
+export function useAssistantSessions(projectId: number) {
+  return useQuery({
+    queryKey: queryKeys.assistantSessions(projectId),
+    queryFn: () => api<AssistantSessionSummary[]>(assistantPath(projectId)),
+  });
+}
+
+export function useAssistantSession(projectId: number, sessionId: number | null) {
+  return useQuery({
+    queryKey: queryKeys.assistantSession(projectId, sessionId ?? 0),
+    queryFn: () => api<AssistantSession>(`${assistantPath(projectId)}/${sessionId}`),
+    enabled: sessionId !== null,
+  });
+}
+
+/** One step of a conversation. Everything but confirm and cancel waits for the model, which can take a while. */
+export type AssistantAction =
+  | { kind: "start"; goal: string }
+  | { kind: "answer"; session: AssistantSession; text: string }
+  | { kind: "revise"; session: AssistantSession; feedback: string }
+  | { kind: "continue"; session: AssistantSession }
+  | { kind: "cancel"; session: AssistantSession };
+
+/**
+ * Runs a conversation step and stores the returned session. On failure the session is refetched too: the user's
+ * message is saved before the model is called, so it's there (with "awaitingAssistant") even when the call failed.
+ */
+export function useAssistantStep(projectId: number) {
+  const queryClient = useQueryClient();
+  const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.assistantSessions(projectId) });
+  return useMutation({
+    mutationFn: (action: AssistantAction) => {
+      if (action.kind === "start") {
+        return api<AssistantSession>(assistantPath(projectId), { method: "POST", body: { goal: action.goal } });
+      }
+
+      const path = `${assistantPath(projectId)}/${action.session.id}`;
+      const version = action.session.version;
+      switch (action.kind) {
+        case "answer":
+          return api<AssistantSession>(`${path}/answers`, { method: "POST", body: { version, text: action.text } });
+        case "revise":
+          return api<AssistantSession>(`${path}/revise`, { method: "POST", body: { version, feedback: action.feedback } });
+        case "continue":
+          return api<AssistantSession>(`${path}/continue`, { method: "POST", body: { version } });
+        case "cancel":
+          return api<AssistantSession>(`${path}/cancel`, { method: "POST", body: { version } });
+      }
+    },
+    onSuccess: (session) => {
+      queryClient.setQueryData(queryKeys.assistantSession(projectId, session.id), session);
+      return refresh();
+    },
+    onError: refresh,
+  });
+}
+
+/** Writes the proposal as draft tables; the project's tables and plan are refetched. */
+export function useConfirmProposal(projectId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (session: AssistantSession) =>
+      api<ConfirmedProposal>(`${assistantPath(projectId)}/${session.id}/confirm`, { method: "POST", body: { version: session.version } }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKeys.assistantSession(projectId, result.session.id), result.session);
+      return queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+    },
+    onError: () => queryClient.invalidateQueries({ queryKey: queryKeys.assistantSessions(projectId) }),
+  });
+}
+
+export function useAiKey() {
+  return useQuery({ queryKey: queryKeys.aiKey, queryFn: () => api<AiKeyStatus>("/api/me/ai-key") });
+}
+
+/** Saves (a string) or removes (null) the user's own xAI key. The response never contains the key. */
+export function useSetAiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (apiKey: string | null) =>
+      apiKey === null
+        ? api<AiKeyStatus>("/api/me/ai-key", { method: "DELETE" })
+        : api<AiKeyStatus>("/api/me/ai-key", { method: "PUT", body: { apiKey } }),
+    onSuccess: (status) => queryClient.setQueryData(queryKeys.aiKey, status),
   });
 }

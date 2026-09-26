@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { AiKeyDialog } from "./ai-key-dialog";
 import { Button } from "./ui";
 
 export function AppHeader() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [editingKey, setEditingKey] = useState(false);
 
   async function signOut() {
     setSigningOut(true);
@@ -28,11 +30,15 @@ export function AppHeader() {
         </Link>
         <div className="flex min-w-0 items-center gap-3">
           <span className="truncate text-sm text-muted">{user?.email}</span>
+          <Button variant="ghost" onClick={() => setEditingKey(true)}>
+            AI key
+          </Button>
           <Button variant="ghost" onClick={signOut} loading={signingOut}>
             Sign out
           </Button>
         </div>
       </div>
+      <AiKeyDialog open={editingKey} onClose={() => setEditingKey(false)} />
     </header>
   );
 }

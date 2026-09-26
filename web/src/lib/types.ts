@@ -200,3 +200,68 @@ export type TemplateTable = { name: string; columnCount: number; references: str
 
 /** A ready schema a project can start from. */
 export type SchemaTemplate = { key: string; name: string; description: string; tables: TemplateTable[]; sampleRowCount: number };
+
+// ---- AI schema assistant (M10) ------------------------------------------------------------------
+
+export type AssistantSessionStatus = "Asking" | "Proposed" | "Confirmed" | "Cancelled";
+export type AssistantMessageKind = "Question" | "Answer" | "Proposal" | "Feedback";
+
+export type AssistantMessage = {
+  id: number;
+  sequence: number;
+  kind: AssistantMessageKind;
+  text: string;
+  /** Suggested answers of a question. */
+  options: string[];
+  createdAt: string;
+};
+
+export type ProposedColumn = {
+  name: string;
+  type: DataType;
+  length: number | null;
+  precision: number | null;
+  scale: number | null;
+  nullable: boolean;
+  unique: boolean;
+  default: string | null;
+  /** The referenced table's name (existing or proposed), or null. */
+  references: string | null;
+  onDelete: ReferenceAction | null;
+};
+
+export type ProposedTable = {
+  name: string;
+  description: string | null;
+  read: AccessLevel;
+  write: AccessLevel;
+  realtime: boolean;
+  columns: ProposedColumn[];
+};
+
+export type SchemaProposal = {
+  summary: string;
+  newTables: ProposedTable[];
+  newColumns: { table: string; column: ProposedColumn }[];
+};
+
+export type AssistantSession = {
+  id: number;
+  goal: string;
+  status: AssistantSessionStatus;
+  version: number;
+  questionCount: number;
+  maxQuestions: number;
+  /** The user spoke last and the assistant's answer failed: "continue" retries it. */
+  awaitingAssistant: boolean;
+  messages: AssistantMessage[];
+  proposal: SchemaProposal | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AssistantSessionSummary = Pick<AssistantSession, "id" | "goal" | "status" | "createdAt" | "updatedAt">;
+
+export type ConfirmedProposal = { session: AssistantSession; tables: TableSummary[] };
+
+export type AiKeyStatus = { hasOwnKey: boolean; hint: string | null; hasDefaultKey: boolean; dailyCallsOnDefaultKey: number };
