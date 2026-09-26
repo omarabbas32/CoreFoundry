@@ -77,8 +77,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(WebCorsPolicy);
-app.UseRateLimiter();
 app.UseAuthentication();
+// After authentication, so the assistant policy can partition by user (the auth policy partitions by IP either way).
+app.UseRateLimiter();
 app.UseAuthorization();
 
 // Liveness: the process is up. No dependencies, so it works without a database.

@@ -1,3 +1,4 @@
+using CoreFoundry.Application.Assistant;
 using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Common;
 using CoreFoundry.Application.Data;
@@ -5,15 +6,18 @@ using CoreFoundry.Application.Export;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Application.Schema;
 using CoreFoundry.Application.SchemaEngine;
+using CoreFoundry.Infrastructure.Ai;
 using CoreFoundry.Infrastructure.Auth;
 using CoreFoundry.Infrastructure.Data;
 using CoreFoundry.Infrastructure.Engine;
 using CoreFoundry.Infrastructure.Export;
 using CoreFoundry.Infrastructure.HealthChecks;
 using CoreFoundry.Infrastructure.Persistence;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace CoreFoundry.Infrastructure;
 
@@ -57,6 +61,23 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton<IPasswordHasher, PasswordHasherAdapter>();
+
+        // M10 AI assistant: Grok over HTTP, users' own keys encrypted with Data Protection (keys in the metadata database).
+        services.AddScoped<IAssistantSessionRepository, AssistantSessionRepository>();
+        services.AddScoped<IAssistantUsageRepository, AssistantUsageRepository>();
+        services.AddDataProtection().SetApplicationName("CoreFoundry").PersistKeysToDbContext<MetadataDbContext>();
+        services.AddSingleton<IAiKeyProtector, DataProtectionAiKeyProtector>();
+        services.AddOptions<GrokOptions>()
+            .Bind(configuration.GetSection(GrokOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton(provider =>
+        {
+            var grok = provider.GetRequiredService<IOptions<GrokOptions>>().Value;
+            return new AssistantSettings(!string.IsNullOrWhiteSpace(grok.ApiKey), grok.DailyCallsPerUser);
+        });
+        services.AddHttpClient<IAiChatClient, GrokChatClient>((provider, client) =>
+            client.Timeout = TimeSpan.FromSeconds(provider.GetRequiredService<IOptions<GrokOptions>>().Value.TimeoutSeconds));
 
         services.AddHealthChecks()
             .AddCheck("mysql-metadata", new MySqlConnectionHealthCheck(metadata), tags: [ReadyTag])

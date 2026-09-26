@@ -1,3 +1,4 @@
+using CoreFoundry.Application.Assistant;
 using CoreFoundry.Application.Common;
 using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Domain.Common;
@@ -99,6 +100,19 @@ internal sealed class ApiExceptionHandler(IProblemDetailsService problemDetails)
                 Status = StatusCodes.Status503ServiceUnavailable,
                 Title = "The project database is temporarily unavailable.",
                 Detail = provisioning.Message,
+            },
+            AiProviderException ai => new ProblemDetails
+            {
+                Status = ai.Failure switch
+                {
+                    AiFailure.NotConfigured or AiFailure.Unavailable => StatusCodes.Status503ServiceUnavailable,
+                    AiFailure.KeyRejected => StatusCodes.Status400BadRequest,
+                    AiFailure.RateLimited => StatusCodes.Status429TooManyRequests,
+                    _ => StatusCodes.Status502BadGateway,
+                },
+                Type = ProblemTypeBase + "ai-" + ai.Failure.ToString().ToLowerInvariant(),
+                Title = "The AI assistant couldn't answer.",
+                Detail = ai.Message,
             },
             _ => null,
         };
