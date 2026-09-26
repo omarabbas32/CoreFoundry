@@ -6,6 +6,7 @@ public sealed class User
 {
     public const int EmailMaxLength = 254;
     public const int PasswordHashMaxLength = 255;
+    public const int AiKeyHintLength = 4;
 
     private User() { } // EF Core
 
@@ -20,6 +21,24 @@ public sealed class User
     public string PasswordHash { get; private set; } = null!;
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
+
+    /// <summary>The user's own xAI key, encrypted by the Infrastructure layer; null: the server's default key is used.</summary>
+    public string? AiKeyCiphertext { get; private set; }
+
+    /// <summary>The key's last characters, so the user can tell which key is set. Never enough to use it.</summary>
+    public string? AiKeyHint { get; private set; }
+
+    public void SetAiKey(string ciphertext, string hint)
+    {
+        AiKeyCiphertext = string.IsNullOrWhiteSpace(ciphertext) ? throw new DomainException("The encrypted key is required.") : ciphertext;
+        AiKeyHint = hint.Length == AiKeyHintLength ? hint : throw new DomainException($"The key hint must be {AiKeyHintLength} characters.");
+    }
+
+    public void RemoveAiKey()
+    {
+        AiKeyCiphertext = null;
+        AiKeyHint = null;
+    }
 
     public void ChangePasswordHash(string passwordHash) =>
         PasswordHash = Guard.NotBlank(passwordHash, nameof(PasswordHash), PasswordHashMaxLength);

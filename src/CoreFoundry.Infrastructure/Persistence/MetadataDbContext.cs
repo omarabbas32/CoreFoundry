@@ -1,6 +1,8 @@
+using CoreFoundry.Domain.Assistant;
 using CoreFoundry.Domain.Projects;
 using CoreFoundry.Domain.Schema;
 using CoreFoundry.Domain.Users;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -10,7 +12,7 @@ namespace CoreFoundry.Infrastructure.Persistence;
 /// CoreFoundry's own metadata in the <c>corefoundry</c> database, connected as <c>cf_meta</c>.
 /// Project databases (<c>cf_p_*</c>) are never accessed through EF Core.
 /// </summary>
-public sealed class MetadataDbContext(DbContextOptions<MetadataDbContext> options) : DbContext(options)
+public sealed class MetadataDbContext(DbContextOptions<MetadataDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -19,6 +21,12 @@ public sealed class MetadataDbContext(DbContextOptions<MetadataDbContext> option
     public DbSet<ProjectTable> ProjectTables => Set<ProjectTable>();
     public DbSet<ProjectColumn> ProjectColumns => Set<ProjectColumn>();
     public DbSet<SchemaMigration> SchemaMigrations => Set<SchemaMigration>();
+    public DbSet<AssistantSession> AssistantSessions => Set<AssistantSession>();
+    public DbSet<AssistantMessage> AssistantMessages => Set<AssistantMessage>();
+    public DbSet<AssistantUsage> AssistantUsage => Set<AssistantUsage>();
+
+    /// <summary>ASP.NET Core Data Protection keys, which encrypt users' own AI keys; kept here so they survive restarts and rebuilds.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MetadataDbContext).Assembly);

@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<SchemaApplier>();
         services.AddScoped<DataService>();
         services.AddScoped<ExportService>();
+        services.AddScoped<DraftSchemaWriter>();
         services.AddScoped<TemplateService>();
         services.AddScoped<SampleDataService>();
         return services;

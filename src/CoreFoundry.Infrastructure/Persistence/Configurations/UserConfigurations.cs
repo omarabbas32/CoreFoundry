@@ -15,6 +15,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(user => user.Email).IsUnique();
 
         builder.Property(user => user.PasswordHash).HasMaxLength(User.PasswordHashMaxLength).IsRequired();
+
+        // The user's own AI key, encrypted with ASP.NET Core Data Protection; never stored in clear.
+        builder.Property(user => user.AiKeyCiphertext).HasColumnType("text");
+        builder.Property(user => user.AiKeyHint).HasMaxLength(User.AiKeyHintLength);
     }
 }
 
