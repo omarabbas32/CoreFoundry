@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
+import { AccessSelects, accessLevelHint } from "@/components/access-controls";
 import { FullPageSpinner } from "@/components/full-page-spinner";
 import { Alert, Badge, Button, Card } from "@/components/ui";
-import { refreshSession } from "@/lib/api";
+import { ApiError, refreshSession } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { isRequired } from "@/lib/data-form";
-import { useDataSchema, useProject } from "@/lib/queries";
+import { useDataSchema, useProject, useSetTableAccess, useTables } from "@/lib/queries";
 import type { DataColumn, DataTable } from "@/lib/types";
 import { ExportCard } from "../export-card";
 
@@ -64,6 +65,8 @@ export default function ApiPage() {
 
       <ExportCard projectId={projectId} />
 
+      <AccessSection projectId={projectId} />
+
       {tables.length === 0 ? (
         <Card className="grid justify-items-center gap-2 px-6 py-12 text-center">
           <p className="font-medium">No endpoints yet</p>
@@ -97,6 +100,74 @@ export default function ApiPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** One row per table: who may read and write it in the exported API, reviewed and set in one place. */
+function AccessSection({ projectId }: { projectId: number }) {
+  const tables = useTables(projectId);
+  const access = useSetTableAccess(projectId);
+  const conflict = access.error instanceof ApiError && access.error.status === 409;
+
+  return (
+    <Card id="access" className="grid gap-4 p-5">
+      <div>
+        <h2 className="font-semibold">Access</h2>
+        <p className="text-sm text-muted">
+          Who may read and write each table in the exported API. Read also decides who may subscribe to the table&apos;s
+          changes over the realtime hub in the exported backend.
+        </p>
+      </div>
+
+      {access.error &&
+        (conflict ? (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
+            <span>{access.error.message}</span>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                access.reset();
+                void tables.refetch();
+              }}
+            >
+              Reload
+            </Button>
+          </div>
+        ) : (
+          <Alert>{access.error.message}</Alert>
+        ))}
+
+      {tables.error && <Alert>{tables.error.message}</Alert>}
+
+      {tables.isPending ? (
+        <p className="text-sm text-muted">Loading tables…</p>
+      ) : tables.data && tables.data.length === 0 ? (
+        <p className="text-sm text-muted">No tables yet.</p>
+      ) : (
+        <div className="grid gap-3">
+          {tables.data?.map((table) => (
+            <div
+              key={table.id}
+              className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0"
+            >
+              <span className="font-mono text-sm">{table.name}</span>
+              <AccessSelects
+                idPrefix={`access-${table.id}`}
+                read={table.readAccess}
+                write={table.writeAccess}
+                disabled={access.isPending || table.state === "PendingDrop"}
+                onChange={({ read, write }) => {
+                  access.reset();
+                  access.mutate({ tableId: table.id, version: table.version, read, write });
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-muted">{accessLevelHint}</p>
+    </Card>
   );
 }
 

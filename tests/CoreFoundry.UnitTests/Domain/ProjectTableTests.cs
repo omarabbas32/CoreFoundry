@@ -1,4 +1,6 @@
 using System.Reflection;
+using CoreFoundry.Application.Schema;
+using CoreFoundry.Application.SchemaEngine;
 using CoreFoundry.Domain.Common;
 using CoreFoundry.Domain.Schema;
 using Shouldly;
@@ -293,6 +295,67 @@ public class ProjectTableTests
 
         price.DefaultValue.ShouldBe("7.50");
         price.Default.ShouldBe(new ColumnDefault.DecimalValue("7.50"));
+    }
+
+    // ---- Access (M8) --------------------------------------------------------------------------
+
+    [Fact]
+    public void A_new_table_defaults_to_signed_in_read_and_write()
+    {
+        var table = new ProjectTable(1, "books");
+
+        table.ReadAccess.ShouldBe(AccessLevel.SignedIn);
+        table.WriteAccess.ShouldBe(AccessLevel.SignedIn);
+    }
+
+    [Theory]
+    [InlineData(AccessLevel.Public, AccessLevel.Public)]
+    [InlineData(AccessLevel.Public, AccessLevel.SignedIn)]
+    [InlineData(AccessLevel.Public, AccessLevel.Admin)]
+    [InlineData(AccessLevel.SignedIn, AccessLevel.SignedIn)]
+    [InlineData(AccessLevel.SignedIn, AccessLevel.Admin)]
+    [InlineData(AccessLevel.Admin, AccessLevel.Admin)]
+    public void Access_combinations_where_write_is_at_least_as_strict_as_read_are_accepted(AccessLevel read, AccessLevel write)
+    {
+        var table = new ProjectTable(1, "books");
+
+        table.SetAccess(read, write);
+
+        (table.ReadAccess, table.WriteAccess).ShouldBe((read, write));
+    }
+
+    [Theory]
+    [InlineData(AccessLevel.Admin, AccessLevel.Public)]
+    [InlineData(AccessLevel.SignedIn, AccessLevel.Public)]
+    [InlineData(AccessLevel.Admin, AccessLevel.SignedIn)]
+    public void Write_wider_than_read_is_rejected_on_the_write_field(AccessLevel read, AccessLevel write)
+    {
+        var table = new ProjectTable(1, "books");
+
+        Should.Throw<DomainException>(() => table.SetAccess(read, write)).Field.ShouldBe("write");
+        (table.ReadAccess, table.WriteAccess).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+    }
+
+    [Fact]
+    public void An_undefined_access_level_is_rejected()
+    {
+        var table = new ProjectTable(1, "books");
+
+        Should.Throw<DomainException>(() => table.SetAccess((AccessLevel)0, AccessLevel.SignedIn)).Field.ShouldBe("read");
+        Should.Throw<DomainException>(() => table.SetAccess(AccessLevel.SignedIn, (AccessLevel)99)).Field.ShouldBe("write");
+    }
+
+    [Fact]
+    public void Setting_access_bumps_the_version_but_does_not_change_the_schema_state()
+    {
+        var table = Applied(new ProjectTable(1, "books"));
+        var context = new SchemaContext(new Dictionary<long, TableName>(), SchemaSnapshot.FromJson(null));
+        var versionBefore = table.Version;
+
+        table.SetAccess(AccessLevel.Public, AccessLevel.Admin);
+
+        table.Version.ShouldBe(versionBefore + 1);
+        context.StateOf(table).ShouldBe(SchemaObjectState.Applied);
     }
 
     private static ColumnDefinition Varchar(int length) =>

@@ -30,11 +30,22 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
 
     public ExportEntity Entity(string table) => Entities.Single(entity => entity.Table == table);
 
+    /// <param name="tables">
+    /// The project's draft tables, for <see cref="ExportEntity.Read"/>/<see cref="ExportEntity.Write"/> (matched to
+    /// <paramref name="schema"/> by <see cref="ProjectTable.AppliedName"/>). Null, or a table with no match, defaults
+    /// to <see cref="AccessLevel.SignedIn"/> for both.
+    /// </param>
     /// <exception cref="ConflictException">A column's type was changed outside CoreFoundry, or a reference points outside the export.</exception>
-    public static ExportModel From(string projectName, DataSchema schema)
+    public static ExportModel From(string projectName, DataSchema schema, IReadOnlyList<ProjectTable>? tables = null)
     {
         ArgumentNullException.ThrowIfNull(schema);
         var solution = CodeNames.Solution(projectName);
+        // TryAdd, not ToDictionary: two drafts claiming one applied name must not fail the export (the first one wins).
+        var access = new Dictionary<string, (AccessLevel Read, AccessLevel Write)>(StringComparer.Ordinal);
+        foreach (var table in (tables ?? []).Where(table => table.AppliedName is not null))
+        {
+            access.TryAdd(table.AppliedName!, (table.ReadAccess, table.WriteAccess));
+        }
 
         var unknown = schema.Tables.SelectMany(table => table.Columns.Where(column => column.Type is null).Select(column => $"{table.Name}.{column.Name} ({column.RawType})")).ToList();
         if (unknown.Count > 0)
@@ -73,6 +84,7 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
                 return (Column: column, Name: CodeNames.Unique(name == className ? name + "Value" : name, members));
             }).ToList();
 
+            var (read, write) = access.TryGetValue(table.Name, out var levels) ? levels : (AccessLevel.SignedIn, AccessLevel.SignedIn);
             return new ExportEntity(
                 table.Name,
                 className,
@@ -84,7 +96,9 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
                     property.Column.IsNullable,
                     property.Column.IsUnique,
                     ParseDefault(property.Column),
-                    Reference(table, property.Column, property.Name, classes, members)))]);
+                    Reference(table, property.Column, property.Name, classes, members)))],
+                read,
+                write);
         }).ToList();
 
         return new ExportModel(solution, projectName, schema.SchemaVersion, entities);
@@ -126,7 +140,10 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
 /// <param name="Table">The table's name in the database (also the route: <c>/api/books</c>).</param>
 /// <param name="ClassName">The entity class, e.g. <c>Book</c>.</param>
 /// <param name="SetName">The <c>DbSet</c> property, e.g. <c>Books</c>.</param>
-public sealed record ExportEntity(string Table, string ClassName, string SetName, IReadOnlyList<ExportProperty> Properties)
+/// <param name="Read">Who may <c>GET</c> rows: <c>List</c> and <c>Get</c>.</param>
+/// <param name="Write">Who may <c>POST</c>, <c>PUT</c> or <c>DELETE</c> rows: <c>Create</c>, <c>Replace</c>, <c>Delete</c>.</param>
+public sealed record ExportEntity(
+    string Table, string ClassName, string SetName, IReadOnlyList<ExportProperty> Properties, AccessLevel Read, AccessLevel Write)
 {
     public string UniqueKeyName(ExportProperty property) => ConstraintNames.UniqueKey(Table, property.Column);
 }

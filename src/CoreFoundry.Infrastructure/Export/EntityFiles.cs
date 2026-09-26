@@ -119,6 +119,7 @@ internal static class EntityFiles
         return $$"""
             using System.Globalization;
             using {{n}}.Application.Common;
+            using {{n}}.Application.Realtime;
             using {{n}}.Domain.Entities;
 
             namespace {{n}}.Application.Tables;
@@ -127,9 +128,11 @@ internal static class EntityFiles
             /// Rows of <c>{{entity.Table}}</c>. Adding a row: fields left out get NULL or the column's default.
             /// Replacing a row: fields left out are set to the column's default, or NULL.
             /// </summary>
-            public sealed class {{entity.ClassName}}Service(IRepository<{{entity.ClassName}}> repository)
-                : CrudService<{{entity.ClassName}}, {{entity.ClassName}}Dto, {{entity.ClassName}}Input>(repository)
+            public sealed class {{entity.ClassName}}Service(IRepository<{{entity.ClassName}}> repository, IChangePublisher changes)
+                : CrudService<{{entity.ClassName}}, {{entity.ClassName}}Dto, {{entity.ClassName}}Input>(repository, changes)
             {
+                protected override string TableName => {{CSharp.String(entity.Table)}};
+
                 protected override IReadOnlyDictionary<string, string> SortableColumns { get; } = new Dictionary<string, string>
                 {
             {{CSharp.Lines(sortable, 8)}}
@@ -277,11 +280,11 @@ internal static class EntityFiles
         /// <summary>Rows of the <c>{{entity.Table}}</c> table.</summary>
         [ApiController]
         [Route("api/{{entity.Table}}")]
-        [Authorize]
         public sealed class {{entity.ClassName}}Controller({{entity.ClassName}}Service service) : ControllerBase
         {
             /// <summary>A page of rows. <c>sort</c> is a column name, <c>-</c> first for descending; ties are ordered by id.</summary>
             [HttpGet]
+            {{AccessAttribute(entity.Read)}}
             public Task<PagedResult<{{entity.ClassName}}Dto>> List(
                 CancellationToken cancellationToken,
                 [FromQuery] int page = 1,
@@ -290,10 +293,12 @@ internal static class EntityFiles
                 service.ListAsync(new PageRequest(page, pageSize, sort), cancellationToken);
 
             [HttpGet("{id:long}")]
+            {{AccessAttribute(entity.Read)}}
             public Task<{{entity.ClassName}}Dto> Get(long id, CancellationToken cancellationToken) =>
                 service.GetAsync(id, cancellationToken);
 
             [HttpPost]
+            {{AccessAttribute(entity.Write)}}
             public async Task<ActionResult<{{entity.ClassName}}Dto>> Create({{entity.ClassName}}Input input, CancellationToken cancellationToken)
             {
                 var row = await service.CreateAsync(input, cancellationToken);
@@ -302,10 +307,12 @@ internal static class EntityFiles
 
             /// <summary>Replaces the whole row: fields left out get the column's default, or NULL.</summary>
             [HttpPut("{id:long}")]
+            {{AccessAttribute(entity.Write)}}
             public Task<{{entity.ClassName}}Dto> Replace(long id, {{entity.ClassName}}Input input, CancellationToken cancellationToken) =>
                 service.ReplaceAsync(id, input, cancellationToken);
 
             [HttpDelete("{id:long}")]
+            {{AccessAttribute(entity.Write)}}
             public async Task<IActionResult> Delete(long id, CancellationToken cancellationToken)
             {
                 await service.DeleteAsync(id, cancellationToken);
@@ -314,6 +321,15 @@ internal static class EntityFiles
         }
 
         """;
+
+    /// <summary>The generated attribute for an access level (phase-8-access-rules.md §1).</summary>
+    private static string AccessAttribute(AccessLevel level) => level switch
+    {
+        AccessLevel.Public => "[AllowAnonymous]",
+        AccessLevel.SignedIn => "[Authorize]",
+        AccessLevel.Admin => "[Authorize(Roles = \"Admin\")]",
+        _ => throw new ArgumentOutOfRangeException(nameof(level), level, null),
+    };
 
     private static string Describe(ExportProperty property) =>
         property.Type +

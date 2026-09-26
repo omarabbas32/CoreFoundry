@@ -97,4 +97,166 @@ public class BackendGeneratorTests
             System.IO.File.WriteAllText(path, file.Content);
         }
     }
+
+    [Fact]
+    public void No_class_level_Authorize_and_each_action_gets_its_level_s_attribute()
+    {
+        var model = Bookshop() with
+        {
+            Entities = [.. Bookshop().Entities.Select(entity => entity.Table switch
+            {
+                "books" => entity with { Read = AccessLevel.Public, Write = AccessLevel.Admin },
+                "authors" => entity with { Read = AccessLevel.Admin, Write = AccessLevel.Admin },
+                _ => entity, // categories: left at the SignedIn/SignedIn default
+            })],
+        };
+        var files = new DotNetBackendGenerator().Generate(model);
+        string Controller(string name) => files.Single(file => file.Path == $"src/Bookshop.Api/Controllers/{name}Controller.cs").Content;
+
+        var books = Controller("Book");
+        books.ShouldNotContain("[Authorize]\npublic sealed class");
+        books.ShouldContain("    [HttpGet]\n    [AllowAnonymous]\n    public Task<PagedResult<BookDto>> List(");
+        books.ShouldContain("    [HttpGet(\"{id:long}\")]\n    [AllowAnonymous]\n    public Task<BookDto> Get(");
+        books.ShouldContain("    [HttpPost]\n    [Authorize(Roles = \"Admin\")]\n    public async Task<ActionResult<BookDto>> Create(");
+        books.ShouldContain("    [HttpPut(\"{id:long}\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<BookDto> Replace(");
+        books.ShouldContain("    [HttpDelete(\"{id:long}\")]\n    [Authorize(Roles = \"Admin\")]\n    public async Task<IActionResult> Delete(");
+
+        var authors = Controller("Author");
+        authors.ShouldNotContain("[Authorize]\npublic sealed class");
+        authors.ShouldContain("    [HttpGet]\n    [Authorize(Roles = \"Admin\")]\n    public Task<PagedResult<AuthorDto>> List(");
+        authors.ShouldContain("    [HttpPost]\n    [Authorize(Roles = \"Admin\")]\n    public async Task<ActionResult<AuthorDto>> Create(");
+
+        var categories = Controller("Category");
+        categories.ShouldNotContain("[Authorize]\npublic sealed class");
+        categories.ShouldContain("    [HttpGet]\n    [Authorize]\n    public Task<PagedResult<CategoryDto>> List(");
+        categories.ShouldContain("    [HttpPost]\n    [Authorize]\n    public async Task<ActionResult<CategoryDto>> Create(");
+    }
+
+    [Fact]
+    public void Program_has_a_fallback_policy_registers_the_transformer_and_allows_anonymous_OpenApi()
+    {
+        var program = File("src/Bookshop.Api/Program.cs");
+        program.ShouldContain("options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build()");
+        program.ShouldContain("app.MapOpenApi().AllowAnonymous()");
+        program.ShouldContain("options.AddOperationTransformer<BearerSecurityRequirementTransformer>()");
+        program.ShouldContain("app.MapGet(\"/health\", () => Results.Ok(new { status = \"ok\" })).AllowAnonymous()"); // unchanged
+    }
+
+    [Fact]
+    public void The_operation_transformer_locks_only_non_anonymous_endpoints_document_wide_lock_is_gone()
+    {
+        var transformer = File("src/Bookshop.Api/OpenApi/BearerSecuritySchemeTransformer.cs");
+        transformer.ShouldNotContain("document.Security"); // no more document-wide requirement
+        transformer.ShouldContain("internal sealed class BearerSecurityRequirementTransformer : IOpenApiOperationTransformer");
+        transformer.ShouldContain("IAllowAnonymous");
+        transformer.ShouldContain("document.Components.SecuritySchemes[\"Bearer\"]"); // the scheme itself stays
+    }
+
+    [Fact]
+    public void The_README_has_the_access_table()
+    {
+        var readme = File("README.md");
+        readme.ShouldContain("## Access");
+        readme.ShouldContain("| Table | Read | Write |");
+        readme.ShouldContain("| `books` | Signed-in | Signed-in |");
+        readme.ShouldContain("| `authors` | Signed-in | Signed-in |");
+        readme.ShouldContain("| `categories` | Signed-in | Signed-in |");
+    }
+
+    [Fact]
+    public void AppUser_has_a_role_stored_in_cf_users_role()
+    {
+        var user = File("src/Bookshop.Domain/Entities/AppUser.cs");
+        user.ShouldContain("public string Role { get; set; } = Roles.User;");
+        user.ShouldContain("public const string User = \"User\";");
+        user.ShouldContain("public const string Admin = \"Admin\";");
+
+        File("src/Bookshop.Infrastructure/Persistence/Configurations/AppUserConfiguration.cs")
+            .ShouldContain("builder.Property(e => e.Role).HasColumnName(\"role\").HasMaxLength(16).IsRequired();");
+    }
+
+    [Fact]
+    public void The_migration_designer_and_snapshot_have_the_role_column()
+    {
+        const string folder = "src/Bookshop.Infrastructure/Persistence/Migrations";
+        var migration = File($"{folder}/20260101000000_InitialCreate.cs");
+        migration.ShouldContain(
+            "password_hash = table.Column<string>(type: \"varchar(255)\", maxLength: 255, nullable: false),\n" +
+            "                    role = table.Column<string>(type: \"varchar(16)\", maxLength: 16, nullable: false)\n");
+
+        const string role =
+            "                    b.Property<string>(\"Role\")\n" +
+            "                        .IsRequired()\n" +
+            "                        .HasMaxLength(16)\n" +
+            "                        .HasColumnType(\"varchar(16)\")\n" +
+            "                        .HasColumnName(\"role\");\n";
+        File($"{folder}/20260101000000_InitialCreate.Designer.cs").ShouldContain(role);
+        File($"{folder}/AppDbContextModelSnapshot.cs").ShouldContain(role);
+    }
+
+    [Fact]
+    public void Register_makes_the_first_account_Admin_in_a_serializable_transaction_retried_on_deadlock()
+    {
+        var auth = File("src/Bookshop.Application/Auth/AuthService.cs");
+        auth.ShouldContain("await users.InSerializableTransactionAsync(async ct =>");
+        auth.ShouldContain("user.Role = await users.AnyAsync(ct) ? Roles.User : Roles.Admin;");
+        auth.ShouldContain("Task<T> InSerializableTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken);");
+
+        var repository = File("src/Bookshop.Infrastructure/Persistence/UserRepository.cs");
+        repository.ShouldContain("await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);");
+        repository.ShouldContain("private const int MaxAttempts = 6;");
+        repository.ShouldContain("catch (Exception ex) when (attempt < MaxAttempts && DatabaseErrors.IsRetryableLockError(ex))");
+        repository.ShouldContain("db.ChangeTracker.Clear();");
+
+        // Retries back off with a short randomized delay instead of retrying straight into the same contention.
+        repository.ShouldContain("await Task.Delay(Random.Shared.Next(10, 50) * attempt, cancellationToken);");
+
+        // Both a deadlock (1213) and a lock wait timeout (1205) are retried.
+        File("src/Bookshop.Infrastructure/Persistence/DatabaseErrors.cs")
+            .ShouldContain("MySqlException { Number: (int)MySqlErrorCode.LockDeadlock or (int)MySqlErrorCode.LockWaitTimeout }");
+    }
+
+    [Fact]
+    public void Setting_a_role_validates_it_and_never_demotes_the_last_Admin()
+    {
+        var auth = File("src/Bookshop.Application/Auth/AuthService.cs");
+        auth.ShouldContain("_ => throw new ValidationFailedException(\"role\", $\"Must be {Roles.User} or {Roles.Admin}.\"),");
+        auth.ShouldContain("?? throw new NotFoundException($\"No account with id {id}.\");");
+        auth.ShouldContain("if (user.Role == Roles.Admin && role == Roles.User && !await users.AnyOtherAdminAsync(id, ct))");
+        auth.ShouldContain("throw new ConflictException(");
+
+        // The listing never exposes the password hash.
+        auth.ShouldContain("public sealed record AppUserDto(long Id, string Email, string Role, DateTime CreatedAt);");
+        auth.ShouldNotContain("PasswordHash)");
+    }
+
+    [Fact]
+    public void The_token_carries_the_role_claim_and_the_JWT_setup_reads_it()
+    {
+        File("src/Bookshop.Infrastructure/Auth/JwtTokenService.cs").ShouldContain("new Claim(\"role\", user.Role),");
+        var program = File("src/Bookshop.Api/Program.cs");
+        program.ShouldContain("options.MapInboundClaims = false;");
+        program.ShouldContain("RoleClaimType = \"role\",");
+    }
+
+    [Fact]
+    public void AuthController_opens_register_and_login_and_keeps_the_account_endpoints_Admin_only()
+    {
+        var controller = File("src/Bookshop.Api/Controllers/AuthController.cs");
+        controller.ShouldNotContain("[AllowAnonymous]\npublic sealed class"); // a class-level AllowAnonymous would win over the actions' [Authorize]
+        controller.ShouldContain("    [HttpPost(\"register\")]\n    [AllowAnonymous]\n");
+        controller.ShouldContain("    [HttpPost(\"login\")]\n    [AllowAnonymous]\n");
+        controller.ShouldContain("    [HttpGet(\"users\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<IReadOnlyList<AppUserDto>> ListUsers(");
+        controller.ShouldContain("    [HttpPut(\"users/{id:long}/role\")]\n    [Authorize(Roles = \"Admin\")]\n    public Task<AppUserDto> SetRole(long id, RoleRequest request,");
+    }
+
+    [Fact]
+    public void The_README_says_how_to_become_Admin_and_that_writers_can_set_any_value()
+    {
+        var readme = File("README.md");
+        readme.ShouldContain("The first account registered becomes `Admin`");
+        readme.ShouldContain("`PUT /api/auth/users/{id}/role`");
+        readme.ShouldContain("`GET /api/auth/users`");
+        readme.ShouldContain("can set any column value");
+    }
 }

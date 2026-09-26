@@ -49,6 +49,9 @@ public sealed record SaveColumnRequest(
 
 public sealed record ReorderColumnsRequest(int Version, IReadOnlyList<long> ColumnIds);
 
+/// <summary>The table's access levels in the exported API; <see cref="Version"/> is the table's version the caller last saw.</summary>
+public sealed record TableAccessRequest(int Version, AccessLevel Read, AccessLevel Write);
+
 /// <summary>
 /// The table designer. Edits only draft metadata; nothing is sent to the project's database until
 /// the schema engine applies it. Changes return the whole table with its new <c>version</c>.
@@ -121,4 +124,9 @@ public sealed class TablesController(TableService tables) : ControllerBase
     public Task<TableDto> RestoreColumn(
         long projectId, long tableId, long columnId, VersionRequest request, CancellationToken cancellationToken) =>
         tables.RestoreColumnAsync(projectId, tableId, columnId, request.Version, cancellationToken);
+
+    /// <summary>Sets who may read and write this table in the exported API. Metadata only; never appears in the schema plan.</summary>
+    [HttpPut("{tableId:long}/access")]
+    public Task<TableDto> SetAccess(long projectId, long tableId, TableAccessRequest request, CancellationToken cancellationToken) =>
+        tables.SetAccessAsync(projectId, tableId, request.Version, request.Read, request.Write, cancellationToken);
 }

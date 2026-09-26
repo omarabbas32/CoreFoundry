@@ -136,7 +136,17 @@ internal static class SharedFiles
 
                 public string PasswordHash { get; set; } = string.Empty;
 
+                /// <summary><see cref="Roles.User"/> or <see cref="Roles.Admin"/>; the first account registered is Admin.</summary>
+                public string Role { get; set; } = Roles.User;
+
                 public DateTime CreatedAt { get; set; }
+            }
+
+            /// <summary>The values of <see cref="AppUser.Role"/>, also the token's <c>role</c> claim.</summary>
+            public static class Roles
+            {
+                public const string User = "User";
+                public const string Admin = "Admin";
             }
 
             """);
@@ -254,14 +264,21 @@ internal static class SharedFiles
             """);
 
         yield return new($"src/{n}.Application/Common/CrudService.cs", $$"""
+            using {{n}}.Application.Realtime;
             using {{n}}.Domain.Common;
 
             namespace {{n}}.Application.Common;
 
-            /// <summary>List, get, add, replace and delete for one table; each table's service supplies the mapping.</summary>
-            public abstract class CrudService<TEntity, TDto, TInput>(IRepository<TEntity> repository)
+            /// <summary>
+            /// List, get, add, replace and delete for one table; each table's service supplies the mapping.
+            /// Each saved add, replace and delete is published to the table's realtime subscribers.
+            /// </summary>
+            public abstract class CrudService<TEntity, TDto, TInput>(IRepository<TEntity> repository, IChangePublisher changes)
                 where TEntity : class, IEntity, new()
             {
+                /// <summary>The table's name in the database, as realtime subscribers know it.</summary>
+                protected abstract string TableName { get; }
+
                 /// <summary>Column name (as in the API) → entity property, for <c>sort</c>.</summary>
                 protected abstract IReadOnlyDictionary<string, string> SortableColumns { get; }
 
@@ -307,6 +324,7 @@ internal static class SharedFiles
                     Apply(input, entity, replace: false);
                     repository.Add(entity);
                     await repository.SaveChangesAsync(cancellationToken);
+                    await PublishAsync(ChangeOperation.Insert, entity.Id);
                     return ToDto(entity);
                 }
 
@@ -315,6 +333,7 @@ internal static class SharedFiles
                     var entity = await FindAsync(id, cancellationToken);
                     Apply(input, entity, replace: true);
                     await repository.SaveChangesAsync(cancellationToken);
+                    await PublishAsync(ChangeOperation.Update, entity.Id);
                     return ToDto(entity);
                 }
 
@@ -322,10 +341,18 @@ internal static class SharedFiles
                 {
                     repository.Remove(await FindAsync(id, cancellationToken));
                     await repository.SaveChangesAsync(cancellationToken);
+                    await PublishAsync(ChangeOperation.Delete, id);
                 }
 
                 private async Task<TEntity> FindAsync(long id, CancellationToken cancellationToken) =>
                     await repository.FindAsync(id, cancellationToken) ?? throw new NotFoundException($"No row with id {id}.");
+
+                /// <summary>
+                /// Called after a save succeeded only (a save that throws never gets here, so nothing is published). Not
+                /// cancelled with the request: the row is saved, so subscribers hear about it even if the caller has gone.
+                /// </summary>
+                private Task PublishAsync(ChangeOperation operation, long id) =>
+                    changes.PublishAsync(new ChangeEvent(TableName, operation, id), CancellationToken.None);
             }
 
             """);
@@ -426,13 +453,35 @@ internal static class SharedFiles
 
             public sealed record AccessToken(string Token, DateTimeOffset ExpiresAt);
 
+            /// <summary>An account as Admins see it; never the password hash.</summary>
+            public sealed record AppUserDto(long Id, string Email, string Role, DateTime CreatedAt);
+
+            /// <param name="Role"><c>Admin</c> or <c>User</c>.</param>
+            public sealed record RoleRequest(string? Role);
+
             public interface IUserRepository
             {
                 Task<AppUser?> FindByEmailAsync(string email, CancellationToken cancellationToken);
 
+                Task<AppUser?> FindAsync(long id, CancellationToken cancellationToken);
+
+                /// <summary>Every account, oldest first.</summary>
+                Task<IReadOnlyList<AppUser>> ListAsync(CancellationToken cancellationToken);
+
+                Task<bool> AnyAsync(CancellationToken cancellationToken);
+
+                /// <summary>Whether an account other than <paramref name="id"/> is Admin.</summary>
+                Task<bool> AnyOtherAdminAsync(long id, CancellationToken cancellationToken);
+
                 void Add(AppUser user);
 
                 Task SaveChangesAsync(CancellationToken cancellationToken);
+
+                /// <summary>
+                /// Runs <paramref name="work"/> in one serializable transaction, so what it read still holds when it writes.
+                /// When two such transactions collide, the database cancels one of them; that one is run again from the start.
+                /// </summary>
+                Task<T> InSerializableTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken);
             }
 
             public interface IPasswordHasher
@@ -481,8 +530,15 @@ internal static class SharedFiles
 
                     var user = new AppUser { Email = email, CreatedAt = time.GetUtcNow().UtcDateTime };
                     user.PasswordHash = passwords.Hash(user, request.Password!);
-                    users.Add(user);
-                    await users.SaveChangesAsync(cancellationToken);
+                    // The first account is Admin. Checked and added in one transaction, so two simultaneous first
+                    // sign-ups can't both be Admin: the one that loses the race runs again and becomes a User.
+                    await users.InSerializableTransactionAsync(async ct =>
+                    {
+                        user.Role = await users.AnyAsync(ct) ? Roles.User : Roles.Admin;
+                        users.Add(user);
+                        await users.SaveChangesAsync(ct);
+                        return user;
+                    }, cancellationToken);
                     return Issue(user);
                 }
 
@@ -497,6 +553,38 @@ internal static class SharedFiles
 
                     return Issue(user);
                 }
+
+                public async Task<IReadOnlyList<AppUserDto>> ListAccountsAsync(CancellationToken cancellationToken) =>
+                    [.. (await users.ListAsync(cancellationToken)).Select(ToAccount)];
+
+                /// <summary>Makes an account Admin or User. The last Admin can't be made a User (409).</summary>
+                public async Task<AppUserDto> SetRoleAsync(long id, RoleRequest request, CancellationToken cancellationToken)
+                {
+                    ArgumentNullException.ThrowIfNull(request);
+                    var role = request.Role switch
+                    {
+                        Roles.User => Roles.User,
+                        Roles.Admin => Roles.Admin,
+                        _ => throw new ValidationFailedException("role", $"Must be {Roles.User} or {Roles.Admin}."),
+                    };
+
+                    // Checked and changed in one transaction, so two Admins demoting each other at once can't leave none.
+                    var updated = await users.InSerializableTransactionAsync(async ct =>
+                    {
+                        var user = await users.FindAsync(id, ct) ?? throw new NotFoundException($"No account with id {id}.");
+                        if (user.Role == Roles.Admin && role == Roles.User && !await users.AnyOtherAdminAsync(id, ct))
+                        {
+                            throw new ConflictException("This is the last Admin. Make another account Admin first.");
+                        }
+
+                        user.Role = role;
+                        await users.SaveChangesAsync(ct);
+                        return user;
+                    }, cancellationToken);
+                    return ToAccount(updated);
+                }
+
+                private static AppUserDto ToAccount(AppUser user) => new(user.Id, user.Email, user.Role, user.CreatedAt);
 
                 private AuthResponse Issue(AppUser user)
                 {
@@ -536,8 +624,10 @@ internal static class SharedFiles
             using Microsoft.Extensions.DependencyInjection;
             using {{n}}.Application.Auth;
             using {{n}}.Application.Common;
+            using {{n}}.Application.Realtime;
             using {{n}}.Infrastructure.Auth;
             using {{n}}.Infrastructure.Persistence;
+            using {{n}}.Infrastructure.Realtime;
 
             namespace {{n}}.Infrastructure;
 
@@ -562,6 +652,9 @@ internal static class SharedFiles
                         .ValidateOnStart();
                     services.AddSingleton<ITokenService, JwtTokenService>();
                     services.AddSingleton<IPasswordHasher, PasswordHasher>();
+
+                    services.AddSignalR();
+                    services.AddSingleton<IChangePublisher, SignalRChangePublisher>();
                     return services;
                 }
             }
@@ -611,6 +704,7 @@ internal static class SharedFiles
                     builder.Property(e => e.Id).HasColumnName("id");
                     builder.Property(e => e.Email).HasColumnName("email").HasMaxLength(254).IsRequired();
                     builder.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255).IsRequired();
+                    builder.Property(e => e.Role).HasColumnName("role").HasMaxLength(16).IsRequired();
                     builder.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("datetime(6)").IsRequired();
                     builder.HasIndex(e => e.Email).IsUnique().HasDatabaseName("uq_cf_users_email");
                 }
@@ -663,6 +757,7 @@ internal static class SharedFiles
             """);
 
         yield return new($"src/{n}.Infrastructure/Persistence/UserRepository.cs", $$"""
+            using System.Data;
             using Microsoft.EntityFrameworkCore;
             using {{n}}.Application.Auth;
             using {{n}}.Domain.Entities;
@@ -671,8 +766,22 @@ internal static class SharedFiles
 
             internal sealed class UserRepository(AppDbContext db) : IUserRepository
             {
+                /// <summary>Runs of a serializable transaction before a deadlock or lock wait timeout is given up on (a 500).</summary>
+                private const int MaxAttempts = 6;
+
                 public Task<AppUser?> FindByEmailAsync(string email, CancellationToken cancellationToken) =>
                     db.Users.FirstOrDefaultAsync(user => user.Email == email, cancellationToken);
+
+                public Task<AppUser?> FindAsync(long id, CancellationToken cancellationToken) =>
+                    db.Users.FirstOrDefaultAsync(user => user.Id == id, cancellationToken);
+
+                public async Task<IReadOnlyList<AppUser>> ListAsync(CancellationToken cancellationToken) =>
+                    await db.Users.AsNoTracking().OrderBy(user => user.Id).ToListAsync(cancellationToken);
+
+                public Task<bool> AnyAsync(CancellationToken cancellationToken) => db.Users.AnyAsync(cancellationToken);
+
+                public Task<bool> AnyOtherAdminAsync(long id, CancellationToken cancellationToken) =>
+                    db.Users.AnyAsync(user => user.Role == Roles.Admin && user.Id != id, cancellationToken);
 
                 public void Add(AppUser user) => db.Users.Add(user);
 
@@ -685,6 +794,33 @@ internal static class SharedFiles
                     catch (DbUpdateException ex) when (DatabaseErrors.Translate(ex) is { } translated)
                     {
                         throw translated;
+                    }
+                }
+
+                public async Task<T> InSerializableTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken)
+                {
+                    ArgumentNullException.ThrowIfNull(work);
+                    for (var attempt = 1; ; attempt++)
+                    {
+                        // MySQL takes shared locks on what a serializable transaction reads. Two of them that read the
+                        // same rows and then write end in a deadlock, or one waits out the other's lock: MySQL rolls
+                        // one back (or times it out), and it runs again here. MySql.Data sets the isolation level per
+                        // session, so the pooled connection may keep SERIALIZABLE until EF's next transaction on it
+                        // resets the level (accepted: the effect is negligible).
+                        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+                        try
+                        {
+                            var result = await work(cancellationToken);
+                            await transaction.CommitAsync(cancellationToken);
+                            return result;
+                        }
+                        catch (Exception ex) when (attempt < MaxAttempts && DatabaseErrors.IsRetryableLockError(ex))
+                        {
+                            db.ChangeTracker.Clear();
+                            // A burst of first sign-ups all S-lock the same empty range, so retrying immediately just
+                            // rejoins the same contention. Spread contenders out with a short randomized backoff.
+                            await Task.Delay(Random.Shared.Next(10, 50) * attempt, cancellationToken);
+                        }
                     }
                 }
             }
@@ -754,6 +890,21 @@ internal static class SharedFiles
                     };
                 }
 
+                /// <summary>Whether a serializable transaction can just be run again: MySQL picked it as a deadlock's
+                /// victim (1213) or gave up waiting for another transaction's lock (1205).</summary>
+                public static bool IsRetryableLockError(Exception exception)
+                {
+                    for (var current = exception; current is not null; current = current.InnerException)
+                    {
+                        if (current is MySqlException { Number: (int)MySqlErrorCode.LockDeadlock or (int)MySqlErrorCode.LockWaitTimeout })
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
                 [GeneratedRegex(@"^Duplicate entry '(?<value>.*)' for key '(?:[^'.]+\.)?(?<key>[^'.]+)'$", RegexOptions.Singleline)]
                 private static partial Regex Duplicate();
 
@@ -819,6 +970,7 @@ internal static class SharedFiles
                         [
                             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString(CultureInfo.InvariantCulture)),
                             new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                            new Claim("role", user.Role),
                         ]),
                         SigningCredentials = new SigningCredentials(
                             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.SigningKey)), SecurityAlgorithms.HmacSha256),
@@ -875,6 +1027,7 @@ internal static class SharedFiles
             using System.Text;
             using System.Text.Json.Serialization;
             using Microsoft.AspNetCore.Authentication.JwtBearer;
+            using Microsoft.AspNetCore.Authorization;
             using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
             using Microsoft.EntityFrameworkCore;
             using Microsoft.IdentityModel.Tokens;
@@ -885,6 +1038,7 @@ internal static class SharedFiles
             using {{n}}.Infrastructure;
             using {{n}}.Infrastructure.Auth;
             using {{n}}.Infrastructure.Persistence;
+            using {{n}}.Infrastructure.Realtime;
 
             var builder = WebApplication.CreateBuilder(args);
 
@@ -902,7 +1056,11 @@ internal static class SharedFiles
                 });
             builder.Services.AddProblemDetails();
             builder.Services.AddExceptionHandler<ExceptionHandler>();
-            builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
+            builder.Services.AddOpenApi(options =>
+            {
+                options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+                options.AddOperationTransformer<BearerSecurityRequirementTransformer>();
+            });
 
             var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
             builder.Services
@@ -916,9 +1074,37 @@ internal static class SharedFiles
                         ValidAudience = jwt.Audience,
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
                         ClockSkew = TimeSpan.FromSeconds(30),
+                        RoleClaimType = "role", // [Authorize(Roles = "Admin")] reads the token's role claim
+                    };
+                    // Browsers can't set headers on a WebSocket, so the SignalR client sends the token as ?access_token=.
+                    // It is read there for the hubs only; anywhere else a token in the URL is ignored.
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var token = context.Request.Query["access_token"];
+                            if (!string.IsNullOrEmpty(token) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                            {
+                                context.Token = token;
+                            }
+
+                            return Task.CompletedTask;
+                        },
                     };
                 });
-            builder.Services.AddAuthorization();
+            // Anything without its own [AllowAnonymous]/[Authorize] needs a signed-in user; the entity controllers
+            // set their own level per table, and every other endpoint gets an explicit AllowAnonymous instead.
+            builder.Services.AddAuthorization(options =>
+                options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+
+            // Browser frontends on other origins (Cors:AllowedOrigins). None listed: no CORS at all. Credentials are
+            // allowed because the SignalR client sends them, so the origins must be listed (no AllowAnyOrigin).
+            var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+            if (corsOrigins.Length > 0)
+            {
+                builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+                    policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+            }
 
             var app = builder.Build();
 
@@ -933,7 +1119,7 @@ internal static class SharedFiles
 
             if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
             {
-                app.MapOpenApi();
+                app.MapOpenApi().AllowAnonymous();
                 app.UseSwaggerUI(options =>
                 {
                     options.SwaggerEndpoint("/openapi/v1.json", "{{n}} API");
@@ -941,10 +1127,17 @@ internal static class SharedFiles
                 });
             }
 
+            if (corsOrigins.Length > 0)
+            {
+                app.UseCors();
+            }
+
             app.UseAuthentication();
             app.UseAuthorization();
             app.MapControllers();
             app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+            // Anyone may connect; RealtimeHub checks each Subscribe against the table's read level.
+            app.MapHub<RealtimeHub>("/hubs/realtime", options => options.CloseOnAuthenticationExpiration = true).AllowAnonymous();
 
             await app.RunAsync();
 
@@ -957,19 +1150,34 @@ internal static class SharedFiles
 
             namespace {{n}}.Api.Controllers;
 
-            /// <summary>Accounts and access tokens: register or log in, then send <c>Authorization: Bearer &lt;accessToken&gt;</c>.</summary>
+            /// <summary>
+            /// Accounts and access tokens: register or log in, then send <c>Authorization: Bearer &lt;accessToken&gt;</c>.
+            /// The first account registered is Admin; Admins list the accounts and change their roles.
+            /// </summary>
             [ApiController]
             [Route("api/auth")]
-            [AllowAnonymous]
             public sealed class AuthController(AuthService auth) : ControllerBase
             {
                 [HttpPost("register")]
+                [AllowAnonymous]
                 public async Task<ActionResult<AuthResponse>> Register(CredentialsRequest request, CancellationToken cancellationToken) =>
                     StatusCode(StatusCodes.Status201Created, await auth.RegisterAsync(request, cancellationToken));
 
                 [HttpPost("login")]
+                [AllowAnonymous]
                 public Task<AuthResponse> Login(CredentialsRequest request, CancellationToken cancellationToken) =>
                     auth.LoginAsync(request, cancellationToken);
+
+                [HttpGet("users")]
+                [Authorize(Roles = "Admin")]
+                public Task<IReadOnlyList<AppUserDto>> ListUsers(CancellationToken cancellationToken) =>
+                    auth.ListAccountsAsync(cancellationToken);
+
+                /// <summary>Makes an account Admin or User. A token keeps the role it was issued with: the account logs in again.</summary>
+                [HttpPut("users/{id:long}/role")]
+                [Authorize(Roles = "Admin")]
+                public Task<AppUserDto> SetRole(long id, RoleRequest request, CancellationToken cancellationToken) =>
+                    auth.SetRoleAsync(id, request, cancellationToken);
             }
 
             """);
@@ -1069,6 +1277,7 @@ internal static class SharedFiles
             """);
 
         yield return new($"src/{n}.Api/OpenApi/BearerSecuritySchemeTransformer.cs", $$"""
+            using Microsoft.AspNetCore.Authorization;
             using Microsoft.AspNetCore.OpenApi;
             using Microsoft.OpenApi;
 
@@ -1088,8 +1297,26 @@ internal static class SharedFiles
                         BearerFormat = "JWT",
                         Description = "An accessToken from POST /api/auth/login.",
                     };
-                    document.Security ??= [];
-                    document.Security.Add(new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference("Bearer", document)] = [] });
+                    return Task.CompletedTask;
+                }
+            }
+
+            /// <summary>
+            /// Locks only the operations whose endpoint needs a token, instead of the whole document: an endpoint
+            /// marked <see cref="IAllowAnonymous"/> (directly or through <c>[AllowAnonymous]</c>) is left open;
+            /// everything else needs the fallback policy's token anyway.
+            /// </summary>
+            internal sealed class BearerSecurityRequirementTransformer : IOpenApiOperationTransformer
+            {
+                public Task TransformAsync(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
+                {
+                    var anonymous = context.Description.ActionDescriptor.EndpointMetadata.OfType<IAllowAnonymous>().Any();
+                    if (!anonymous)
+                    {
+                        operation.Security ??= [];
+                        operation.Security.Add(new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference("Bearer", context.Document)] = [] });
+                    }
+
                     return Task.CompletedTask;
                 }
             }
@@ -1119,6 +1346,9 @@ internal static class SharedFiles
               },
               "Swagger": {
                 "Enabled": false
+              },
+              "Cors": {
+                "AllowedOrigins": []
               }
             }
 

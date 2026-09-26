@@ -1,15 +1,17 @@
-# M8 — Access rules for the exported backend (plan)
+# M8 — Access rules for the exported backend (built)
 
 **Goal:** today every endpoint of an exported backend requires a signed-in user, which doesn't fit most apps: a
 shop's products and reviews must be readable by anyone, while payments are for admins only. In M8 the user decides,
 **in CoreFoundry before exporting**, who may read and who may write each table, and the export writes exactly those
 rules into the generated code.
 
-**Status:** plan only, nothing built yet.
+**Status:** built.
 **Decided by the user (2026-09-25):** rules are edited in the project and used by the export · one **read** rule and
 one **write** rule per table · levels **Public / Signed-in / Admin** · in the exported backend the **first registered
 user becomes Admin**.
 **Not changing:** CoreFoundry's own Data API stays members-only; it is the project's admin tool, not the app's public API.
+**Order:** M8 is built and merged before M9 starts. M9 (realtime in the export) uses `ExportModel`'s `Read`, the
+Admin role and the fallback policy from this phase as they are.
 
 ---
 
@@ -36,8 +38,8 @@ user becomes Admin**.
 | `reviews` | Public | Signed-in | anyone reads, customers write |
 | `customers` | Admin | Admin | personal data |
 | `addresses` | Admin | Admin | personal data |
-| `orders` | Admin | Signed-in | customers place orders; only staff list them (see §6) |
-| `order_items` | Admin | Signed-in | same as orders |
+| `orders` | Admin | Admin | only staff; customers placing their own orders needs the Owner level (§6 q.1) |
+| `order_items` | Admin | Admin | only staff; customers placing their own orders needs the Owner level (§6 q.1) |
 | `payments` | Admin | Admin | money |
 
 ## 2. Where the rules live (CoreFoundry)
@@ -71,7 +73,8 @@ user becomes Admin**.
   next export without an apply).
 - **Controllers:** no class-level `[Authorize]` any more. Each action gets its level's attribute: `List`/`Get` from
   Read, `Create`/`Replace`/`Delete` from Write. A fallback authorization policy (require an authenticated user)
-  keeps anything without an attribute closed.
+  keeps anything without an attribute closed. It covers every endpoint, not only controllers: `/health` already
+  has `.AllowAnonymous()`, and M9's realtime hub will need the same (it checks each table's Read level itself).
 - **Roles in the generated auth:**
   - `AppUser.Role` (`User` / `Admin`), column `cf_users.role`, in the generated `InitialCreate` migration and
     model snapshot (`EfMigrationWriter`).
@@ -90,13 +93,18 @@ user becomes Admin**.
   generator writes the right attribute per action and level; migration writer includes `role`.
 - **Integration (CoreFoundry):** the access endpoint (update, stale version → 409, non-member → 404, invalid combination
   → 400); access changes don't appear in the plan; template tables get their defaults.
-- **End to end (extends the M6 export test):** export Bookshop with `books` Read Public / Write Admin and `authors`
-  Admin/Admin, then against the running generated API:
+- **End to end (`tests/CoreFoundry.IntegrationTests/Export/AccessEndpointsTests.cs`, built and run like the M6 export
+  test):** export a Library with `books` Read Public / Write Admin and `authors` Admin/Admin, then against the
+  running generated API:
   - no token: `GET /api/books` → 200, `POST /api/books` → 401, `GET /api/authors` → 401
-  - the first user (Admin): everything works
-  - the second user (User): `GET /api/books` → 200, `POST /api/books` → 403, `GET /api/authors` → 403
-  - the Admin promotes the second user → `POST /api/books` → 201
-  - EF still reports no pending model changes.
+  - five simultaneous first sign-ups: all 201, exactly one token's `role` claim is `Admin`, and the account list
+    shows exactly one Admin
+  - the Admin: everything works; as the only Admin they can't be demoted (409)
+  - a User: `GET /api/books` → 200, `POST /api/books` → 403, `GET /api/authors` → 403, `GET /api/auth/users` → 403
+  - the Admin promotes the User; after logging in again, `POST /api/books` → 201
+  - the OpenAPI document: `GET /api/books` and `POST /api/auth/register` carry no security requirement,
+    `POST /api/books` and `GET /api/authors` require `Bearer`
+  - the export builds with 0 warnings and EF reports no pending model changes.
 
 ## 5. Steps (plan-before-execute; commit after each verified step)
 
@@ -114,12 +122,14 @@ user becomes Admin**.
    every customer's orders to every signed-in user, which is why the template uses Admin read for them. Real
    per-row ownership would need a fourth level, **Owner** (rows whose owner column is the signed-in user), and a
    link between the generated `cf_users` accounts and a table such as `customers`. Suggested for a later phase.
+   Until Owner exists, the E-commerce template keeps `orders` and `order_items` Admin-only for both read and write,
+   because the write-not-wider-than-read rule forbids Admin read paired with Signed-in write.
 2. **Signed-in writes can set any value.** E.g. a customer creating an order could set another customer's
    `customer_id`. Ownership (question 1) or server-set columns would fix it; until then the export README says so.
 3. **Should CoreFoundry's own Data API ever serve public tables?** The user chose export-only for now.
 
 ## 7. Definition of done
-- [ ] Access rules can be set per table in the designer and on the API page, and saved
-- [ ] A new E-commerce project has the defaults above
-- [ ] The exported backend enforces them (end-to-end test), the first user is Admin, and Swagger shows which endpoints are public
-- [ ] All tests pass
+- [x] Access rules can be set per table in the designer and on the API page, and saved
+- [x] A new E-commerce project has the defaults above
+- [x] The exported backend enforces them (end-to-end test), the first user is Admin, and Swagger shows which endpoints are public
+- [x] All tests pass

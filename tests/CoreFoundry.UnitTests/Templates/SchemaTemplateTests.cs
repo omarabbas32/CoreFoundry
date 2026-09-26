@@ -106,6 +106,37 @@ public class SchemaTemplateTests
         files.ShouldContain(file => file.Path.EndsWith("_InitialCreate.cs", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [MemberData(nameof(Keys))]
+    public void Every_tables_access_levels_pass_the_write_not_wider_than_read_rule(string key)
+    {
+        var template = SchemaTemplates.Find(key)!;
+
+        foreach (var table in template.Tables)
+        {
+            var projectTable = new ProjectTable(projectId: 1, table.Name);
+            Should.NotThrow(() => projectTable.SetAccess(table.Read, table.Write));
+        }
+    }
+
+    [Fact]
+    public void Ecommerce_access_levels_match_the_defaults_table()
+    {
+        var levels = SchemaTemplates.Find("ecommerce")!.Tables.ToDictionary(table => table.Name, table => (table.Read, table.Write));
+
+        levels.ShouldBe(new Dictionary<string, (AccessLevel Read, AccessLevel Write)>
+        {
+            ["customers"] = (AccessLevel.Admin, AccessLevel.Admin),
+            ["addresses"] = (AccessLevel.Admin, AccessLevel.Admin),
+            ["categories"] = (AccessLevel.Public, AccessLevel.Admin),
+            ["products"] = (AccessLevel.Public, AccessLevel.Admin),
+            ["orders"] = (AccessLevel.Admin, AccessLevel.Admin),
+            ["order_items"] = (AccessLevel.Admin, AccessLevel.Admin),
+            ["payments"] = (AccessLevel.Admin, AccessLevel.Admin),
+            ["reviews"] = (AccessLevel.Public, AccessLevel.SignedIn),
+        });
+    }
+
     [Fact]
     public void Keys_are_unique_and_unknown_keys_are_not_found()
     {

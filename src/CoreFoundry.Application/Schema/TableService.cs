@@ -161,6 +161,18 @@ public sealed class TableService(
             return Task.CompletedTask;
         }, cancellationToken);
 
+    /// <summary>
+    /// Sets who may read and write this table in the exported API. Metadata only: it never appears in
+    /// the schema plan and never marks the table Changed, but it still uses the table's <c>version</c>.
+    /// </summary>
+    public Task<TableDto> SetAccessAsync(
+        long projectId, long tableId, int version, AccessLevel read, AccessLevel write, CancellationToken cancellationToken) =>
+        ChangeAsync(projectId, tableId, version, table =>
+        {
+            Validated(() => table.SetAccess(read, write));
+            return Task.CompletedTask;
+        }, cancellationToken);
+
     private async Task<TableDto> ChangeAsync(
         long projectId, long tableId, int version, Func<ProjectTable, Task> change, CancellationToken cancellationToken)
     {

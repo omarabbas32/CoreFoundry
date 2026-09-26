@@ -134,6 +134,33 @@ public class ExportModelTests
     }
 
     [Fact]
+    public void A_table_named_accounts_keeps_its_singular_name()
+    {
+        var model = ExportModel.From("Shop", new DataSchema(1, [new DataTable("accounts", [])]));
+
+        model.Entity("accounts").ClassName.ShouldBe("Account"); // the generated auth's record is AppUserDto, not AccountDto
+    }
+
+    [Fact]
+    public void Tables_named_like_the_realtime_types_get_non_clashing_names()
+    {
+        var schema = new DataSchema(1,
+        [
+            new DataTable("change_events", []), // ChangeEvent is the realtime event record
+            new DataTable("realtime_hubs", []), // RealtimeHub is the hub
+            new DataTable("realtime", []), // Realtime is a namespace segment
+        ]);
+
+        var model = ExportModel.From("Shop", schema);
+
+        model.Entities.Select(entity => entity.ClassName).ShouldBe(["ChangeEvents", "RealtimeHubs", "RealtimeEntity"]);
+        foreach (var name in new[] { "RealtimeHub", "ChangeEvent", "ChangeOperation", "IChangePublisher", "SignalRChangePublisher", "Realtime" })
+        {
+            CodeNames.Reserved.ShouldContain(name);
+        }
+    }
+
+    [Fact]
     public void Columns_with_unknown_types_stop_the_export()
     {
         var schema = new DataSchema(1, [new DataTable("books", [new DataColumn("legacy", null, "mediumint(9)", true, false, null, null)])]);
@@ -165,5 +192,49 @@ public class ExportModelTests
             "IntegerValue", "IntegerValue", "DecimalValue", "BooleanValue", "StringValue", null, "DateTimeValue", "DateValue", null, "GeneratedUuid",
         ]);
         properties.Select(property => property.Type).ShouldBe(columns.Select(column => column.Type!));
+    }
+
+    [Fact]
+    public void Entities_get_access_from_the_draft_table_with_the_matching_AppliedName()
+    {
+        var schema = new DataSchema(1, [new DataTable("books", []), new DataTable("authors", [])]);
+        var books = new ProjectTable(1, "books");
+        books.SetAccess(AccessLevel.Public, AccessLevel.Admin);
+        books.MarkApplied();
+        var authors = new ProjectTable(1, "authors"); // never touched: stays at the SignedIn/SignedIn default
+        authors.MarkApplied();
+
+        var model = ExportModel.From("Shop", schema, [books, authors]);
+
+        (model.Entity("books").Read, model.Entity("books").Write).ShouldBe((AccessLevel.Public, AccessLevel.Admin));
+        (model.Entity("authors").Read, model.Entity("authors").Write).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+    }
+
+    [Fact]
+    public void Two_drafts_with_the_same_AppliedName_do_not_fail_the_export()
+    {
+        var schema = new DataSchema(1, [new DataTable("books", [])]);
+        var first = new ProjectTable(1, "books");
+        first.SetAccess(AccessLevel.Public, AccessLevel.Admin);
+        first.MarkApplied();
+        var second = new ProjectTable(1, "books");
+        second.MarkApplied();
+
+        var model = ExportModel.From("Shop", schema, [first, second]);
+
+        (model.Entity("books").Read, model.Entity("books").Write).ShouldBe((AccessLevel.Public, AccessLevel.Admin)); // the first wins
+    }
+
+    [Fact]
+    public void No_tables_or_no_match_defaults_every_entity_to_SignedIn()
+    {
+        var schema = new DataSchema(1, [new DataTable("books", [])]);
+        var unrelated = new ProjectTable(1, "other");
+        unrelated.MarkApplied();
+
+        (ExportModel.From("Shop", schema).Entity("books").Read, ExportModel.From("Shop", schema).Entity("books").Write)
+            .ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
+        var model = ExportModel.From("Shop", schema, [unrelated]);
+        (model.Entity("books").Read, model.Entity("books").Write).ShouldBe((AccessLevel.SignedIn, AccessLevel.SignedIn));
     }
 }

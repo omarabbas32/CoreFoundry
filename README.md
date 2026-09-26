@@ -58,6 +58,7 @@ Secrets are kept in .NET user-secrets, outside the repo:
 cd src/CoreFoundry.Api
 dotnet user-secrets set "ConnectionStrings:Metadata" "Server=127.0.0.1;Port=3306;Database=corefoundry;User=cf_meta;Password=<meta-password>"
 dotnet user-secrets set "ConnectionStrings:Engine"   "Server=127.0.0.1;Port=3306;User=cf_engine;Password=<engine-password>"
+dotnet user-secrets set "Jwt:SigningKey" "$(openssl rand -base64 48)"   # at least 32 characters; the API refuses to start without it
 dotnet run --launch-profile http
 ```
 
@@ -91,7 +92,8 @@ reference columns get a picker that searches the other table, and deletes ask fo
 **E-commerce** (customers, addresses, categories, products, orders, order items, payments, reviews). The tables
 are created as drafts to edit, review and apply like any other; optional sample rows are added right after the
 first apply (or later with "Load sample data" on an empty table).
-**Export code** (project page and API page) downloads the project as a standalone backend; see below.
+**Export code** (project page and API page) downloads the project as a standalone backend, enforcing each
+table's read/write access level and generating a realtime hub for the tables it can read; see below.
 The **API** page (`/projects/<id>/api`) documents the project's own endpoints: base URL, how to get a
 token, and for every applied table its routes, fields and ready-to-copy curl and JavaScript examples.
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
@@ -195,10 +197,17 @@ in Clean Architecture generated from the applied tables.
   with every table's fields.
 - The generated API follows the Data API's contract: JSON names are the column names, decimals are strings,
   paging/sorting are the same, and so are the 400/404/409 answers.
+- **Access rules:** each table's Read and Write level (Public / Signed-in / Admin, set in the designer or the
+  API page) becomes `[AllowAnonymous]` / `[Authorize]` / `[Authorize(Roles = "Admin")]` on its endpoints; the
+  first account to register the exported API becomes Admin.
+- **Realtime:** the export also generates a SignalR hub at `/hubs/realtime` that pushes `insert` / `update` /
+  `delete` notifications per table; a table's Read level decides who may subscribe to it.
 
 Unapplied draft changes are not exported (the export matches the running database). A test exports a Bookshop,
 builds it, checks its migration with `dotnet ef`, runs it against MySQL, uses it over HTTP and compares its tables
-with CoreFoundry's (set `CF_SKIP_EXPORT_BUILD=1` to skip that slow test).
+with CoreFoundry's. Two more exports are built and run the same way: one checks the access levels and roles
+(`AccessEndpointsTests`), the other the realtime hub with SignalR clients (`RealtimeEndpointsTests`). Set
+`CF_SKIP_EXPORT_BUILD=1` to skip these three slow tests.
 
 ### Data API with curl
 

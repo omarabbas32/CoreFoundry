@@ -38,6 +38,12 @@ public sealed class ProjectTable
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
+    /// <summary>Who may read this table in the exported API. Metadata only: no DDL, never marks the table Changed.</summary>
+    public AccessLevel ReadAccess { get; private set; } = AccessLevel.SignedIn;
+
+    /// <summary>Who may write this table in the exported API. Never wider than <see cref="ReadAccess"/>.</summary>
+    public AccessLevel WriteAccess { get; private set; } = AccessLevel.SignedIn;
+
     /// <summary>All columns, including ones pending drop, in <see cref="ProjectColumn.OrdinalPosition"/> order.</summary>
     public IReadOnlyList<ProjectColumn> Columns => [.. _columns.OrderBy(column => column.OrdinalPosition).ThenBy(column => column.Id)];
 
@@ -205,6 +211,34 @@ public sealed class ProjectTable
         }
 
         PendingDrop = false;
+        Touch();
+    }
+
+    /// <summary>
+    /// Sets who may read and write this table in the exported API. Write can never be wider (more open)
+    /// than read. This is metadata only: no DDL, and it never marks the table's schema state Changed —
+    /// it only bumps <see cref="Version"/>.
+    /// </summary>
+    /// <exception cref="DomainException">An undefined level, or write wider than read.</exception>
+    public void SetAccess(AccessLevel read, AccessLevel write)
+    {
+        if (!Enum.IsDefined(read))
+        {
+            throw new DomainException("Read access is not a valid level.") { Field = "read" };
+        }
+
+        if (!Enum.IsDefined(write))
+        {
+            throw new DomainException("Write access is not a valid level.") { Field = "write" };
+        }
+
+        if (write < read)
+        {
+            throw new DomainException("Write access can't be wider than read access.") { Field = "write" };
+        }
+
+        ReadAccess = read;
+        WriteAccess = write;
         Touch();
     }
 

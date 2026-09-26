@@ -20,6 +20,11 @@ internal sealed class ProjectTableConfiguration : IEntityTypeConfiguration<Proje
         // Bumped by every change to the table or its columns; a stale Version makes the save fail (409).
         builder.Property(table => table.Version).IsConcurrencyToken();
 
+        // Metadata for the exported API, not part of the schema: no DDL, ignored by plan/apply.
+        // The sentinel is the default itself, so an insert at SignedIn gets the same value from the database.
+        builder.Property(table => table.ReadAccess).HasDefaultValue(AccessLevel.SignedIn).HasSentinel(AccessLevel.SignedIn);
+        builder.Property(table => table.WriteAccess).HasDefaultValue(AccessLevel.SignedIn).HasSentinel(AccessLevel.SignedIn);
+
         builder.HasOne<Project>()
             .WithMany()
             .HasForeignKey(table => table.ProjectId)

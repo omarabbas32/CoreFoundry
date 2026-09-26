@@ -19,6 +19,12 @@ export function ExportCard({ projectId }: { projectId: number }) {
 
   const applied = schema.data?.tables.length ?? 0;
   const unapplied = (tables.data ?? []).filter((table) => table.state !== "Applied").length;
+  // What the next export contains: every table that isn't only a draft (its access rules take effect without an apply).
+  const exported = (tables.data ?? []).filter((table) => table.state !== "New");
+  const publicRead = exported.filter((table) => table.readAccess === "Public").length;
+  const adminRead = exported.filter((table) => table.readAccess === "Admin").length;
+  const allDefaultAccess =
+    exported.length > 0 && exported.every((table) => table.readAccess === "SignedIn" && table.writeAccess === "SignedIn");
 
   async function exportCode() {
     setDownloading(true);
@@ -72,6 +78,21 @@ export function ExportCard({ projectId }: { projectId: number }) {
             apply the plan
           </Link>{" "}
           to include them.
+        </p>
+      )}
+      {exported.length > 0 && (
+        <p className="text-sm text-muted">
+          {publicRead === 1 ? "1 public table" : `${publicRead} public tables`}, {adminRead} admin-only. Realtime:{" "}
+          {exported.length === 1 ? "1 table" : `${exported.length} tables`} — {publicRead} public.
+        </p>
+      )}
+      {allDefaultAccess && (
+        <p className="rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+          Every table still uses the default access (signed-in read and write).{" "}
+          <Link href={`/projects/${projectId}/api#access`} className="font-medium underline">
+            Review access
+          </Link>{" "}
+          before exporting.
         </p>
       )}
       {done && (

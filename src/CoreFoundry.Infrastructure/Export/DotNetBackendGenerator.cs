@@ -15,6 +15,7 @@ public sealed partial class DotNetBackendGenerator : IBackendGenerator
         ArgumentNullException.ThrowIfNull(model);
         var files = SharedFiles.For(model)
             .Concat(model.Entities.SelectMany(entity => EntityFiles.For(model, entity)))
+            .Concat(RealtimeFiles.For(model))
             .Concat(DeployFiles.For(model))
             .Concat(EfMigrationWriter.For(model));
         return [.. files.Select(Tidy).OrderBy(file => file.Path, StringComparer.Ordinal)];

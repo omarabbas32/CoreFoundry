@@ -126,6 +126,12 @@ internal static class DeployFiles
             }
         }
 
+        var access = new StringBuilder("| Table | Read | Write |\n|---|---|---|\n");
+        foreach (var entity in model.Entities)
+        {
+            access.Append($"| `{entity.Table}` | {AccessName(entity.Read)} | {AccessName(entity.Write)} |\n");
+        }
+
         var wideDecimals = model.Entities
             .SelectMany(entity => entity.Properties.Where(property => property.Type.Precision > 28).Select(property => $"`{entity.Table}.{property.Column}`"))
             .ToList();
@@ -193,6 +199,23 @@ internal static class DeployFiles
             - Errors are ProblemDetails. Invalid fields: 400 with `errors` per field. Duplicate unique value or a row
               that other rows still reference: 409. A reference to a missing row: 400 on that field.
             {{decimalNote}}
+            ## Access
+
+            **Public**: anyone, no token. **Signed-in**: any registered user. **Admin**: the `Admin` role only.
+            `List`/`Get` need Read; `Create`/`Replace`/`Delete` need Write.
+
+            {{access}}
+            **Becoming Admin:** The first account registered becomes `Admin`; every later one is a `User`. Whoever registers
+            first gets Admin, so register your own account right after the first deploy, before the API is public. An Admin
+            lists the accounts with `GET /api/auth/users` and promotes or demotes one with
+            `PUT /api/auth/users/{id}/role` and `{ "role": "Admin" }` or `{ "role": "User" }` (the last Admin can't be
+            demoted: 409). The role travels in the token, so a changed role counts from the account's next login: a
+            demoted Admin keeps Admin rights until their current token expires (`Jwt:LifetimeMinutes`).
+
+            **No ownership yet:** whoever may write a table can set any column value. On a Signed-in table, a customer
+            creating an order could set another customer's id. Keep such tables Admin, or add your own checks.
+
+            {{Realtime(model)}}
             ## Tables
             {{tables}}
             ## Changing the schema
@@ -209,4 +232,83 @@ internal static class DeployFiles
 
             """;
     }
+
+    /// <summary>The README's Realtime section (phase-9-realtime-export.md §3): subscribing, reconnecting, CORS and the limits.</summary>
+    private static string Realtime(ExportModel model)
+    {
+        var subscribers = new StringBuilder("| Table | Who may subscribe |\n|---|---|\n");
+        foreach (var entity in model.Entities)
+        {
+            subscribers.Append($"| `{entity.Table}` | {AccessName(entity.Read)} |\n");
+        }
+
+        return $$"""
+            ## Realtime
+
+            The API pushes a notification when a row is added, replaced or deleted through it. Connect with SignalR to
+            `/hubs/realtime` and subscribe per table: each change arrives as a `change` event with `{ table, operation, id }`
+            (`operation` is `insert`, `update` or `delete`). It's a hint, not the row: refetch what you show from the REST API.
+
+            ```js
+            import { HubConnectionBuilder } from "@microsoft/signalr";
+
+            const connection = new HubConnectionBuilder()
+              .withUrl("http://localhost:8080/hubs/realtime", { accessTokenFactory: () => token })
+              .withAutomaticReconnect()
+              .build();
+
+            // A reconnect gets a new connection, and the server forgets its subscriptions: remember them here.
+            const tables = new Set();
+            async function subscribe(table) {
+              tables.add(table);
+              await connection.invoke("Subscribe", table);
+            }
+
+            connection.on("change", (e) => {
+              // { table: "books", operation: "insert", id: 12 } — a hint: refetch, nothing is replayed
+              refresh(e.table);
+            });
+            connection.onreconnected(async () => {
+              for (const table of tables) await connection.invoke("Subscribe", table);
+              refreshEverything(); // events sent while disconnected are lost
+            });
+
+            await connection.start();
+            await subscribe("books");
+            ```
+
+            A table's Read level (see Access) decides who may subscribe to it. Public tables need no token; for the others
+            pass `accessTokenFactory` with a token from `/api/auth/login`. Subscribing to a table you may not read, or to a
+            name that isn't a table here, makes `invoke("Subscribe", …)` reject with the reason.
+
+            {{subscribers}}
+            - **Reconnecting:** a reconnect is a new connection, and the server forgets its subscriptions. Subscribe again in
+              `onreconnected` (as above) and refetch: events sent while disconnected are lost, nothing is replayed. A
+              connection that doesn't take an event within 5 s misses it too; refetch on reconnect.
+            - **Access is checked when subscribing.** A user demoted by an Admin keeps receiving events until the connection
+              closes; a connection made with a token closes when that token expires. Events carry only ids.
+            - **CORS:** a browser frontend on another origin must be listed in `Cors:AllowedOrigins` (`appsettings.json`, or
+              `Cors__AllowedOrigins__0=https://app.example.com` in the environment). Empty, the default: no CORS at all. The
+              list covers the REST API too, and allows credentials, so list exact origins.
+            - **The token travels in the URL:** browsers can't set headers on a WebSocket, so the client sends the token as
+              `?access_token=` (read under `/hubs/` only). It can appear in proxy access logs; keep it out of them.
+            - **Reverse proxies** in front of the API must forward WebSocket upgrades (Caddy does; nginx needs the `Upgrade`
+              and `Connection` headers).
+            - **One instance only:** events reach the clients connected to the instance that saved the row. Several
+              instances need a SignalR backplane (e.g. Redis), which isn't set up.
+            - **Only this API's writes send events.** Rows changed in the database directly, by other clients, scripts or
+              another service, send none.
+            - **Cascades send no event.** Deleting a row whose referencing rows the database deletes or sets to NULL (on
+              delete Cascade or SetNull) publishes only that row's delete.
+
+            """;
+    }
+
+    private static string AccessName(AccessLevel level) => level switch
+    {
+        AccessLevel.Public => "Public",
+        AccessLevel.SignedIn => "Signed-in",
+        AccessLevel.Admin => "Admin",
+        _ => throw new ArgumentOutOfRangeException(nameof(level), level, null),
+    };
 }
