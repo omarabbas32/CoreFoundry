@@ -45,43 +45,44 @@ export default function ReviewPlanPage() {
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Review plan</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Plan &amp; apply</h1>
             <p className="text-sm text-muted">
               What applying the draft would change in <span className="font-mono">{project.data?.databaseName}</span>
               {plan.data && <> (schema version {plan.data.schemaVersion})</>}.
             </p>
           </div>
-          <div className="flex gap-2">
-            <Link
-              href={`/projects/${projectId}/schema/history`}
-              className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
-            >
-              History
-            </Link>
-            <Button variant="secondary" loading={plan.isFetching} onClick={() => void plan.refetch()}>
-              Refresh
-            </Button>
-          </div>
+          <Button variant="secondary" loading={plan.isFetching} onClick={() => void plan.refetch()}>
+            Compare again
+          </Button>
         </div>
       </div>
 
       {applied && (
-        <p role="status" className="rounded-md border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok">
-          Applied as schema version {applied.version} ({applied.statements} statements).{" "}
-          <Link href={`/projects/${projectId}/schema/history`} className="underline">
-            See history
-          </Link>
-          {applied.sampleData && (
-            <>
-              <br />
-              Added {applied.sampleData.inserted} sample rows.{" "}
-              <Link href={`/projects/${projectId}/data`} className="underline">
-                Browse data
-              </Link>
-              {applied.sampleData.skipped.length > 0 && <> Left out: {applied.sampleData.skipped.join("; ")}.</>}
-            </>
-          )}
-        </p>
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok-soft px-4 py-3">
+          <div className="grid gap-0.5 text-sm text-ok">
+            <p className="font-medium">
+              Applied: the database is now at schema version {applied.version} ({applied.statements}{" "}
+              {applied.statements === 1 ? "statement" : "statements"}).
+            </p>
+            {applied.sampleData && (
+              <p>
+                Added {applied.sampleData.inserted} sample rows.
+                {applied.sampleData.skipped.length > 0 && <> Left out: {applied.sampleData.skipped.join("; ")}.</>}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/projects/${projectId}/schema/history`} className={secondaryLink}>
+              History
+            </Link>
+            <Link href={`/projects/${projectId}/api`} className={secondaryLink}>
+              API &amp; export
+            </Link>
+            <Link href={`/projects/${projectId}/data`} className={primaryLink}>
+              Browse data
+            </Link>
+          </div>
+        </div>
       )}
       {apply.error && <ApplyError error={apply.error} projectId={projectId} onRefresh={() => void plan.refetch()} />}
 
@@ -143,9 +144,13 @@ function PlanView({
       ) : (
         <>
           <Card className="grid gap-4 p-5">
-            <h2 className="font-semibold">
-              {plan.operations.length} {plan.operations.length === 1 ? "change" : "changes"}
-            </h2>
+            <div className="grid gap-1">
+              <h2 className="font-semibold">
+                {plan.operations.length} {plan.operations.length === 1 ? "change" : "changes"} in {byTable.size}{" "}
+                {byTable.size === 1 ? "table" : "tables"}
+              </h2>
+              <p className="text-sm text-muted">{summarize(plan.operations)}</p>
+            </div>
             {[...byTable].map(([table, operations]) => (
               <div key={table} className="grid gap-1.5">
                 <h3 className="font-mono text-sm font-semibold">{table}</h3>
@@ -153,12 +158,21 @@ function PlanView({
                   {operations.map((operation, index) => (
                     <li
                       key={`${operation.description}-${index}`}
-                      className={`flex flex-wrap items-center justify-between gap-2 rounded-md border border-border border-l-4 bg-surface px-3 py-2 text-sm ${rowTone[toneOf(operation.kind)]}`}
+                      className={`grid gap-1 rounded-md border border-border border-l-4 bg-surface px-3 py-2 text-sm ${rowTone[toneOf(operation.kind)]}`}
                       data-testid="plan-operation"
                     >
-                      <span>{operation.description}</span>
-                      {operation.risk !== "Safe" && (
-                        <Badge tone={operation.risk === "Destructive" ? "danger" : "warn"}>{operation.risk}</Badge>
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        <span>{operation.description}</span>
+                        {operation.risk !== "Safe" && (
+                          <Badge tone={operation.risk === "Destructive" ? "danger" : "warn"}>
+                            {operation.risk === "Destructive" ? "Data loss" : "Risky"}
+                          </Badge>
+                        )}
+                      </span>
+                      {operation.riskReason && (
+                        <span className={`text-xs ${operation.risk === "Destructive" ? "text-danger" : "text-warn"}`}>
+                          {operation.riskReason}
+                        </span>
                       )}
                     </li>
                   ))}
@@ -182,6 +196,7 @@ function PlanView({
 
 function SqlBlock({ statements }: { statements: string[] }) {
   const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(statements.length <= 8);
   const sql = statements.map((statement) => `${statement};`).join("\n\n");
 
   async function copy() {
@@ -192,15 +207,30 @@ function SqlBlock({ statements }: { statements: string[] }) {
 
   return (
     <Card className="grid gap-3 p-5">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="font-semibold">SQL ({statements.length} {statements.length === 1 ? "statement" : "statements"})</h2>
-        <Button variant="secondary" className="h-8" onClick={() => void copy().catch(() => undefined)}>
-          {copied ? "Copied" : "Copy"}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">
+          SQL <span className="font-normal text-muted">({statements.length} {statements.length === 1 ? "statement" : "statements"})</span>
+        </h2>
+        <div className="flex gap-2">
+          <Button variant="ghost" className="h-8" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            {open ? "Hide SQL" : "Show SQL"}
+          </Button>
+          <Button variant="secondary" className="h-8" onClick={() => void copy().catch(() => undefined)}>
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
       </div>
-      <pre className="max-h-[28rem] overflow-auto rounded-md border border-border bg-surface-muted p-3 font-mono text-xs leading-relaxed" data-testid="plan-sql">
-        {sql}
-      </pre>
+      {open ? (
+        <pre className="max-h-[28rem] overflow-auto rounded-md border border-border bg-surface-muted p-3 font-mono text-xs leading-relaxed" data-testid="plan-sql">
+          {statements.map((statement, index) => (
+            <span key={index} className="block pb-3 last:pb-0">
+              <HighlightedSql sql={`${statement};`} />
+            </span>
+          ))}
+        </pre>
+      ) : (
+        <p className="text-sm text-muted">Exactly these statements run, in this order. Show them to check before applying.</p>
+      )}
     </Card>
   );
 }
@@ -237,7 +267,8 @@ function ApplyPanel({
         </label>
       )}
 
-      <div className="flex items-center gap-3">
+      <p className="text-sm text-muted">{summarize(plan.operations)}</p>
+      <div className="flex flex-wrap items-center gap-3">
         <Button
           variant={plan.hasDestructive ? "danger" : "primary"}
           loading={applying}
@@ -293,4 +324,56 @@ function ApplyError({ error, projectId, onRefresh }: { error: Error; projectId: 
   }
 
   return <Alert>{error.message}</Alert>;
+}
+
+const primaryLink =
+  "inline-flex h-9 items-center rounded-md bg-accent-solid px-3.5 text-sm font-medium text-on-accent hover:bg-accent-solid-hover";
+const secondaryLink =
+  "inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted";
+
+/** "Adds 2 tables and 5 columns · renames 1 · drops 1 column": the plan in one line, loss first if any. */
+function summarize(operations: PlanOperation[]) {
+  const count = (test: (kind: string) => boolean) => operations.filter((operation) => test(operation.kind)).length;
+  const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+  const tables = count((kind) => kind === "CreateTable");
+  const columns = count((kind) => kind === "AddColumn");
+  const droppedTables = count((kind) => kind === "DropTable");
+  const droppedColumns = count((kind) => kind === "DropColumn");
+  const drops = droppedTables + droppedColumns;
+  const renames = count((kind) => kind.startsWith("Rename"));
+  const others = operations.length - tables - columns - drops - renames;
+
+  const parts: string[] = [];
+  if (drops > 0) {
+    const dropped = [droppedTables > 0 ? plural(droppedTables, "table") : null, droppedColumns > 0 ? plural(droppedColumns, "column") : null];
+    parts.push(`drops ${dropped.filter(Boolean).join(" and ")} (data loss)`);
+  }
+  if (tables > 0 || columns > 0) {
+    parts.push(`adds ${[tables > 0 ? plural(tables, "table") : null, columns > 0 ? plural(columns, "column") : null].filter(Boolean).join(" and ")}`);
+  }
+  if (renames > 0) parts.push(`renames ${renames}`);
+  if (others > 0) parts.push(`${plural(others, "other change")} (types, keys)`);
+  const text = parts.join(" · ");
+  return text.charAt(0).toUpperCase() + text.slice(1) + ".";
+}
+
+const sqlKeywords =
+  /\b(CREATE|ALTER|DROP|TABLE|ADD|COLUMN|CONSTRAINT|PRIMARY|FOREIGN|KEY|REFERENCES|UNIQUE|INDEX|MODIFY|RENAME|TO|NOT|NULL|DEFAULT|AUTO_INCREMENT|ON|DELETE|CASCADE|RESTRICT|SET|ENGINE|CHARSET|COLLATE|IF|EXISTS)\b/g;
+
+/** Keywords in the accent color and DROP in red, so what a statement does stands out; the text stays exact. */
+function HighlightedSql({ sql }: { sql: string }) {
+  const parts = sql.split(sqlKeywords);
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? (
+          <span key={index} className={part === "DROP" ? "font-semibold text-danger" : "text-accent"}>
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
 }
