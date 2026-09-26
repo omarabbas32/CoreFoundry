@@ -115,6 +115,8 @@ internal static class EntityFiles
             $"[{CSharp.String(property.Column)}] = nameof({entity.ClassName}.{property.Name}),");
         var toDto = entity.Properties.Select(ToDtoValue).Prepend("entity.Id");
         var apply = entity.Properties.Select(property => $"entity.{property.Name} = {ApplyValue(property)};");
+        // Realtime is on in CrudService; only a table with it off overrides it.
+        var realtimeOff = entity.Realtime ? "" : "\n\n    protected override bool Realtime => false;";
 
         return $$"""
             using System.Globalization;
@@ -131,7 +133,7 @@ internal static class EntityFiles
             public sealed class {{entity.ClassName}}Service(IRepository<{{entity.ClassName}}> repository, IChangePublisher changes)
                 : CrudService<{{entity.ClassName}}, {{entity.ClassName}}Dto, {{entity.ClassName}}Input>(repository, changes)
             {
-                protected override string TableName => {{CSharp.String(entity.Table)}};
+                protected override string TableName => {{CSharp.String(entity.Table)}};{{realtimeOff}}
 
                 protected override IReadOnlyDictionary<string, string> SortableColumns { get; } = new Dictionary<string, string>
                 {

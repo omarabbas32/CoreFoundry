@@ -13,7 +13,7 @@ _Last updated: 2026-09-26 · branch `m8-m9-access-realtime`_
 | [M6 — Code export](phases/phase-6-code-export.md) | ✅ Built (`m6-code-export`), UI click and Docker run open | Download a project as a deployable .NET Clean Architecture backend |
 | [M7 — Schema templates](phases/phase-7-schema-templates.md) | ✅ Built (`m7-schema-templates`), browser check open | Start a project from a ready E-commerce schema with sample rows |
 | [M8 — Access rules](phases/phase-8-access-rules.md) | ✅ Built (`m8-m9-access-realtime`) | Per-table read/write access (Public / Signed-in / Admin), enforced by the exported backend |
-| [M9 — Realtime in the export](phases/phase-9-realtime-export.md) | ✅ Built (`m8-m9-access-realtime`) | SignalR hub in the exported backend; M8's read level decides who may subscribe |
+| [M9 — Realtime in the export](phases/phase-9-realtime-export.md) | ✅ Built (`m8-m9-access-realtime`; per-table on/off on `realtime-per-table`) | SignalR hub in the exported backend; M8's read level decides who may subscribe; realtime can be turned off per table |
 | [M5 — Portfolio polish](phases/phase-5-polish.md) | ⏭ Next (one-command Docker run written on `m5-one-command-run`) | One-command run, README, demo, deploy |
 
 **Tests:** 775 .NET tests pass (640 unit, 135 integration, of which 114 run against a real MySQL database; none skipped),

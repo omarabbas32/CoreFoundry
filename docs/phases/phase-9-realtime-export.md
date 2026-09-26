@@ -184,6 +184,13 @@ await subscribe("books");
    user's database and `binlog_row_image=FULL`). That is a phase of its own, not a step of this one.
 5. **Always generate the hub, or an opt-in checkbox?** Recommended: always (one export shape, one code path to test);
    the cost is a little unused code in a download that doesn't want realtime.
+   **Follow-up (2026-09-26, decided by the user): realtime can be turned off per table.** `ProjectTable.Realtime`
+   (default on; migration `TableRealtime`) is set with `PUT …/tables/{id}/realtime` `{ version, enabled }` and a
+   "Realtime" checkbox next to the Read/Write selects (table page and API page). Like the access levels it is metadata
+   only: no DDL, never in the plan, but it bumps the table's `version`. In the export, a table with realtime off is
+   left out of the hub's map (`Subscribe` rejects with "There is no realtime table …"), its service overrides
+   `CrudService.Realtime => false` so its writes publish nothing, and the README names it. The hub is still always
+   generated; with every table off its map is empty.
 6. **Which client do we document?** Recommended: the `@microsoft/signalr` snippet above, in the export README only —
    we do not generate a TypeScript client in this phase.
 

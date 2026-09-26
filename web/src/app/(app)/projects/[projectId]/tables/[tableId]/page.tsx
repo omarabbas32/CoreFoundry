@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { AccessSelects, accessLevelHint } from "@/components/access-controls";
+import { AccessSelects, RealtimeToggle, accessLevelHint, realtimeHint } from "@/components/access-controls";
 import { FullPageSpinner } from "@/components/full-page-spinner";
 import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Button, Card, ConfirmDialog } from "@/components/ui";
@@ -191,17 +191,30 @@ function Designer({
 
       <Card className="grid gap-3 p-5">
         <h2 className="font-semibold">Access in the exported API</h2>
-        <AccessSelects
-          idPrefix="table-access"
-          read={table.readAccess}
-          write={table.writeAccess}
-          disabled={!editable || access.isPending || change.isPending}
-          onChange={({ read, write }) => {
-            access.reset();
-            access.mutate({ tableId: table.id, version: table.version, read, write });
-          }}
-        />
-        <p className="text-xs text-muted">{accessLevelHint}</p>
+        <div className="flex flex-wrap items-end gap-3">
+          <AccessSelects
+            idPrefix="table-access"
+            read={table.readAccess}
+            write={table.writeAccess}
+            disabled={!editable || access.isPending || change.isPending}
+            onChange={({ read, write }) => {
+              access.reset();
+              access.mutate({ tableId: table.id, version: table.version, read, write });
+            }}
+          />
+          <RealtimeToggle
+            id="table-realtime"
+            checked={table.realtime}
+            disabled={!editable || access.isPending || change.isPending}
+            onChange={(realtime) => {
+              access.reset();
+              access.mutate({ tableId: table.id, version: table.version, realtime });
+            }}
+          />
+        </div>
+        <p className="text-xs text-muted">
+          {accessLevelHint} · {realtimeHint}
+        </p>
       </Card>
 
       <Card className="grid gap-4 p-5">

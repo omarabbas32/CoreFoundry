@@ -11,6 +11,9 @@ export const accessLevelLabels: Record<AccessLevel, string> = {
   Admin: "Admin",
 };
 
+/** Explains the realtime switch; shown once next to it. */
+export const realtimeHint = "Realtime: the exported API pushes each change of the table to subscribers who may read it";
+
 /** Bumps `write` up to `read` when it would otherwise be wider than the new read level. */
 export function clampWrite(read: AccessLevel, write: AccessLevel): AccessLevel {
   return accessLevelRank[write] < accessLevelRank[read] ? read : write;
@@ -73,5 +76,32 @@ export function AccessSelects({
         </Select>
       </div>
     </div>
+  );
+}
+
+/** Turns a table's realtime events in the exported API on or off. */
+export function RealtimeToggle({
+  id,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label htmlFor={id} className="flex h-9 items-center gap-2 text-sm">
+      <input
+        id={id}
+        type="checkbox"
+        className="size-4 accent-accent"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      Realtime
+    </label>
   );
 }

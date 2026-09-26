@@ -31,9 +31,9 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
     public ExportEntity Entity(string table) => Entities.Single(entity => entity.Table == table);
 
     /// <param name="tables">
-    /// The project's draft tables, for <see cref="ExportEntity.Read"/>/<see cref="ExportEntity.Write"/> (matched to
-    /// <paramref name="schema"/> by <see cref="ProjectTable.AppliedName"/>). Null, or a table with no match, defaults
-    /// to <see cref="AccessLevel.SignedIn"/> for both.
+    /// The project's draft tables, for <see cref="ExportEntity.Read"/>/<see cref="ExportEntity.Write"/> and
+    /// <see cref="ExportEntity.Realtime"/> (matched to <paramref name="schema"/> by <see cref="ProjectTable.AppliedName"/>).
+    /// Null, or a table with no match, defaults to <see cref="AccessLevel.SignedIn"/> for both, with realtime on.
     /// </param>
     /// <exception cref="ConflictException">A column's type was changed outside CoreFoundry, or a reference points outside the export.</exception>
     public static ExportModel From(string projectName, DataSchema schema, IReadOnlyList<ProjectTable>? tables = null)
@@ -41,10 +41,10 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
         ArgumentNullException.ThrowIfNull(schema);
         var solution = CodeNames.Solution(projectName);
         // TryAdd, not ToDictionary: two drafts claiming one applied name must not fail the export (the first one wins).
-        var access = new Dictionary<string, (AccessLevel Read, AccessLevel Write)>(StringComparer.Ordinal);
+        var access = new Dictionary<string, (AccessLevel Read, AccessLevel Write, bool Realtime)>(StringComparer.Ordinal);
         foreach (var table in (tables ?? []).Where(table => table.AppliedName is not null))
         {
-            access.TryAdd(table.AppliedName!, (table.ReadAccess, table.WriteAccess));
+            access.TryAdd(table.AppliedName!, (table.ReadAccess, table.WriteAccess, table.Realtime));
         }
 
         var unknown = schema.Tables.SelectMany(table => table.Columns.Where(column => column.Type is null).Select(column => $"{table.Name}.{column.Name} ({column.RawType})")).ToList();
@@ -84,7 +84,7 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
                 return (Column: column, Name: CodeNames.Unique(name == className ? name + "Value" : name, members));
             }).ToList();
 
-            var (read, write) = access.TryGetValue(table.Name, out var levels) ? levels : (AccessLevel.SignedIn, AccessLevel.SignedIn);
+            var (read, write, realtime) = access.TryGetValue(table.Name, out var levels) ? levels : (AccessLevel.SignedIn, AccessLevel.SignedIn, true);
             return new ExportEntity(
                 table.Name,
                 className,
@@ -98,7 +98,8 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
                     ParseDefault(property.Column),
                     Reference(table, property.Column, property.Name, classes, members)))],
                 read,
-                write);
+                write,
+                realtime);
         }).ToList();
 
         return new ExportModel(solution, projectName, schema.SchemaVersion, entities);
@@ -142,8 +143,10 @@ public sealed record ExportModel(string Solution, string ProjectName, int Schema
 /// <param name="SetName">The <c>DbSet</c> property, e.g. <c>Books</c>.</param>
 /// <param name="Read">Who may <c>GET</c> rows: <c>List</c> and <c>Get</c>.</param>
 /// <param name="Write">Who may <c>POST</c>, <c>PUT</c> or <c>DELETE</c> rows: <c>Create</c>, <c>Replace</c>, <c>Delete</c>.</param>
+/// <param name="Realtime">Whether the realtime hub offers the table and its writes send events.</param>
 public sealed record ExportEntity(
-    string Table, string ClassName, string SetName, IReadOnlyList<ExportProperty> Properties, AccessLevel Read, AccessLevel Write)
+    string Table, string ClassName, string SetName, IReadOnlyList<ExportProperty> Properties, AccessLevel Read, AccessLevel Write,
+    bool Realtime = true)
 {
     public string UniqueKeyName(ExportProperty property) => ConstraintNames.UniqueKey(Table, property.Column);
 }

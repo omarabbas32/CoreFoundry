@@ -211,6 +211,23 @@ public class ExportModelTests
     }
 
     [Fact]
+    public void Entities_get_realtime_from_the_draft_table_and_default_to_on()
+    {
+        var schema = new DataSchema(1, [new DataTable("books", []), new DataTable("authors", []), new DataTable("tags", [])]);
+        var books = new ProjectTable(1, "books");
+        books.SetRealtime(false);
+        books.MarkApplied();
+        var authors = new ProjectTable(1, "authors");
+        authors.MarkApplied();
+
+        var model = ExportModel.From("Shop", schema, [books, authors]);
+
+        model.Entity("books").Realtime.ShouldBeFalse();
+        model.Entity("authors").Realtime.ShouldBeTrue();
+        model.Entity("tags").Realtime.ShouldBeTrue(); // no draft: the default
+    }
+
+    [Fact]
     public void Two_drafts_with_the_same_AppliedName_do_not_fail_the_export()
     {
         var schema = new DataSchema(1, [new DataTable("books", [])]);
