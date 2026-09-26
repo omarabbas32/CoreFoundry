@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { FoundryPour } from "@/components/foundry-scene";
 import { Button } from "@/components/ui";
 
 export const textareaClass =
@@ -58,15 +59,7 @@ export function TypingBubble() {
         AI
       </span>
       <div className="flex items-center gap-3 rounded-2xl rounded-bl-sm border border-border bg-surface-muted px-3.5 py-2.5 text-sm text-muted">
-        <span aria-hidden className="flex gap-1">
-          {[0, 150, 300].map((delay) => (
-            <span
-              key={delay}
-              className="size-1.5 animate-bounce rounded-full bg-current motion-reduce:animate-none"
-              style={{ animationDelay: `${delay}ms` }}
-            />
-          ))}
-        </span>
+        <FoundryPour size={22} />
         <span>
           Thinking{seconds >= 3 ? ` · ${seconds}s` : "…"}
           {seconds >= 20 && <span className="block text-xs">Designing a schema can take up to a minute.</span>}
