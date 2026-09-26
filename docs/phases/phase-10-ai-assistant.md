@@ -75,4 +75,4 @@ Question/Answer/Proposal/Feedback, text, suggested answers), `AssistantUsage` (u
 Unit: `ProposalValidator`, the session's turn rules, `OpenAiCompatibleChatClient` (request shape, strict schema and
 its json_object fallback, key choice, error mapping, timeout). Integration (scripted model in place of the provider): the interview to confirmed drafts, the repair loop
 and its retry, provider failures, extending a schema, re-validation at confirm, revisions, one open conversation,
-membership, the daily cap and own keys. **Not yet run against the real Groq API** — needs a key (see the README).
+membership, the daily cap and own keys. **Checked by the user against the real Groq API (2026-09-26): it works.**
