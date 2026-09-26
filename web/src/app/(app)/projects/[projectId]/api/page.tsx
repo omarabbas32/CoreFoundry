@@ -22,7 +22,26 @@ function useOrigin() {
   );
 }
 
-/** How to call the project's Data API: auth, then every applied table's endpoints, fields and examples. */
+type Tab = "data-api" | "access" | "export";
+
+const tabs: { id: Tab; label: string }[] = [
+  { id: "data-api", label: "Try the Data API" },
+  { id: "access", label: "Exported backend: access & realtime" },
+  { id: "export", label: "Download" },
+];
+
+/** The tab (and table) a link points at: #access, #export, or #table-books. Old links keep working. */
+function fromHash(hash: string): { tab: Tab; table: string | null } {
+  if (hash === "#access") return { tab: "access", table: null };
+  if (hash === "#export") return { tab: "export", table: null };
+  if (hash.startsWith("#table-")) return { tab: "data-api", table: decodeURIComponent(hash.slice("#table-".length)) };
+  return { tab: "data-api", table: null };
+}
+
+/**
+ * Two different APIs, kept apart: CoreFoundry's own Data API (try the project's rows now, as a member) and the
+ * backend you export (who may use it, realtime, and the download).
+ */
 export default function ApiPage() {
   const projectId = Number(useParams<{ projectId: string }>().projectId);
   const project = useProject(projectId);
@@ -30,71 +49,127 @@ export default function ApiPage() {
   const { user } = useAuth();
   const origin = useOrigin();
   const base = `${origin}/api/projects/${projectId}/data`;
+  // Start where the link's #hash points (e.g. "Use the API" in the data browser opens that table). The page shows a
+  // spinner until its data loads, on the server too, so reading the hash here can't make hydration disagree.
+  const [initial] = useState(() => fromHash(typeof window === "undefined" ? "" : window.location.hash));
+  const [tab, setTab] = useState<Tab>(initial.tab);
+  const [chosen, setChosen] = useState<string | null>(initial.table);
+
+  function show(next: Tab, table: string | null = chosen) {
+    setTab(next);
+    setChosen(table);
+    const hash = next === "data-api" ? (table ? `#table-${table}` : "") : `#${next}`;
+    window.history.replaceState(null, "", `${window.location.pathname}${hash}`);
+  }
 
   if (schema.isPending || project.isPending) return <FullPageSpinner label="Loading the API…" />;
 
   const tables = schema.data?.tables ?? [];
+  const selected = tables.find((table) => table.name === chosen) ?? tables[0];
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">API</h1>
-          <p className="text-sm text-muted">
-            Every applied table gets REST endpoints automatically. They follow the last applied schema
-            {schema.data && <> (version {schema.data.schemaVersion})</>}: apply a plan and they change with it.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">API &amp; access</h1>
+        <p className="text-sm text-muted">
+          Use your data over HTTP now, decide who may use the backend you export, and download it.
+        </p>
+      </div>
+
+      <div role="tablist" aria-label="API sections" className="flex gap-1 overflow-x-auto border-b border-border">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`tab-${item.id}`}
+            aria-selected={tab === item.id}
+            aria-controls={`panel-${item.id}`}
+            onClick={() => show(item.id)}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors ${
+              tab === item.id ? "border-accent font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       {schema.error && <Alert>{schema.error.message}</Alert>}
 
-      <Card className="grid gap-3 p-5">
-        <h2 className="font-semibold">Base URL</h2>
-        <CodeBlock code={base} />
-        <p className="text-sm text-muted">
-          Requests and responses are JSON. Replace <span className="font-mono">{"{table}"}</span> with a table name and{" "}
-          <span className="font-mono">{"{id}"}</span> with a row id.
-        </p>
-      </Card>
+      {tab === "data-api" && (
+        <div role="tabpanel" id="panel-data-api" aria-labelledby="tab-data-api" className="grid gap-6">
+          <p className="text-sm text-muted">
+            CoreFoundry&apos;s own REST endpoints for this project&apos;s applied tables, for you and your team (any member,
+            Developer and up). They follow the last applied schema
+            {schema.data && <> (version {schema.data.schemaVersion})</>}. Your app should use the exported backend instead.
+          </p>
 
-      <AuthCard origin={origin} email={user?.email ?? "you@example.com"} />
-
-      <ExportCard projectId={projectId} />
-
-      <AccessSection projectId={projectId} />
-
-      {tables.length === 0 ? (
-        <Card className="grid justify-items-center gap-2 px-6 py-12 text-center">
-          <p className="font-medium">No endpoints yet</p>
-          <p className="text-sm text-muted">Design tables and apply the plan: each applied table gets its endpoints right away.</p>
-          <div className="flex gap-4 text-sm font-medium">
-            <Link href={`/projects/${projectId}/tables`} className="text-accent hover:underline">
-              Open table designer
-            </Link>
-            <Link href={`/projects/${projectId}/schema`} className="text-accent hover:underline">
-              Review the plan
-            </Link>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="grid content-start gap-3 p-5">
+              <h2 className="font-semibold">Base URL</h2>
+              <CodeBlock code={base} />
+              <p className="text-sm text-muted">
+                JSON in and out. Replace <span className="font-mono">{"{table}"}</span> with a table name and{" "}
+                <span className="font-mono">{"{id}"}</span> with a row id.
+              </p>
+            </Card>
+            <AuthCard origin={origin} email={user?.email ?? "you@example.com"} />
           </div>
-        </Card>
-      ) : (
-        <>
-          <nav aria-label="Tables" className="flex flex-wrap gap-2 text-sm">
-            {tables.map((table) => (
-              <a
-                key={table.name}
-                href={`#table-${table.name}`}
-                className="rounded-md border border-border bg-surface px-2.5 py-1 font-mono hover:bg-surface-muted"
-              >
-                {table.name}
-              </a>
-            ))}
-          </nav>
-          {tables.map((table) => (
-            <TableApi key={table.name} projectId={projectId} base={base} table={table} />
-          ))}
-          <RulesCard />
-        </>
+
+          {tables.length === 0 ? (
+            <Card className="grid justify-items-center gap-2 px-6 py-12 text-center">
+              <p className="font-medium">No endpoints yet</p>
+              <p className="text-sm text-muted">Design tables and apply the plan: each applied table gets its endpoints right away.</p>
+              <div className="flex gap-4 text-sm font-medium">
+                <Link href={`/projects/${projectId}/tables`} className="text-accent hover:underline">
+                  Open table designer
+                </Link>
+                <Link href={`/projects/${projectId}/schema`} className="text-accent hover:underline">
+                  Review the plan
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <>
+              <nav aria-label="Tables" className="flex flex-wrap gap-2 text-sm">
+                {tables.map((table) => (
+                  <button
+                    key={table.name}
+                    type="button"
+                    aria-current={table.name === selected?.name ? "true" : undefined}
+                    onClick={() => show("data-api", table.name)}
+                    className={`rounded-md border px-2.5 py-1 font-mono ${
+                      table.name === selected?.name
+                        ? "border-accent bg-accent-soft text-accent"
+                        : "border-border bg-surface hover:bg-surface-muted"
+                    }`}
+                  >
+                    {table.name}
+                  </button>
+                ))}
+              </nav>
+              {selected && <TableApi key={selected.name} projectId={projectId} base={base} table={selected} />}
+              <RulesCard />
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "access" && (
+        <div role="tabpanel" id="panel-access" aria-labelledby="tab-access" className="grid gap-4">
+          <p className="text-sm text-muted">
+            These rules are written into the backend you download: who may read and write each table, and which tables
+            send realtime events. They take effect on your next download, without an apply.
+          </p>
+          <AccessSection projectId={projectId} />
+        </div>
+      )}
+
+      {tab === "export" && (
+        <div role="tabpanel" id="panel-export" aria-labelledby="tab-export" className="grid gap-4">
+          <ExportCard projectId={projectId} onReviewAccess={() => show("access")} />
+        </div>
       )}
     </div>
   );
@@ -111,8 +186,8 @@ function AccessSection({ projectId }: { projectId: number }) {
       <div>
         <h2 className="font-semibold">Access</h2>
         <p className="text-sm text-muted">
-          Who may read and write each table in the exported API. Read also decides who may subscribe to the table&apos;s
-          changes over the realtime hub in the exported backend; turn Realtime off for tables that shouldn&apos;t send any.
+          Read also decides who may subscribe to a table&apos;s changes over the realtime hub; turn Realtime off for tables
+          that shouldn&apos;t send any.
         </p>
       </div>
 
@@ -198,7 +273,7 @@ function AuthCard({ origin, email }: { origin: string; email: string }) {
   }
 
   return (
-    <Card className="grid gap-3 p-5">
+    <Card className="grid content-start gap-3 p-5">
       <h2 className="font-semibold">Authentication</h2>
       <p className="text-sm text-muted">
         Send an access token as <span className="font-mono">Authorization: Bearer …</span>. Get one by signing in; it
@@ -273,7 +348,7 @@ const response = await fetch("${url}", {
 if (!response.ok) console.error(await response.json()); // errors: { column: ["message"] }`;
 
   return (
-    <Card id={`table-${table.name}`} className="grid scroll-mt-6 gap-4 p-5">
+    <Card className="grid gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-mono text-lg font-semibold">{table.name}</h2>
         <Link href={`/projects/${projectId}/data/${table.name}`} className="text-sm font-medium text-accent hover:underline">

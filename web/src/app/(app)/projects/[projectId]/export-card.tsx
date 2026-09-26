@@ -11,7 +11,8 @@ import { useDataSchema, useTables } from "@/lib/queries";
  * Downloads the project as a standalone .NET backend. The export follows the applied schema, so
  * unapplied draft changes are pointed out before downloading.
  */
-export function ExportCard({ projectId }: { projectId: number }) {
+/** @param onReviewAccess Where the page itself shows access (the API page's tab); otherwise the link goes there. */
+export function ExportCard({ projectId, onReviewAccess }: { projectId: number; onReviewAccess?: () => void }) {
   const schema = useDataSchema(projectId);
   const tables = useTables(projectId);
   const [downloading, setDownloading] = useState(false);
@@ -95,9 +96,15 @@ export function ExportCard({ projectId }: { projectId: number }) {
       {allDefaultAccess && (
         <p className="rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
           Every table still uses the default access (signed-in read and write).{" "}
-          <Link href={`/projects/${projectId}/api#access`} className="font-medium underline">
-            Review access
-          </Link>{" "}
+          {onReviewAccess ? (
+            <button type="button" className="font-medium underline" onClick={onReviewAccess}>
+              Review access
+            </button>
+          ) : (
+            <Link href={`/projects/${projectId}/api#access`} className="font-medium underline">
+              Review access
+            </Link>
+          )}{" "}
           before exporting.
         </p>
       )}
