@@ -191,6 +191,11 @@ namespace CoreFoundry.Infrastructure.Persistence.Migrations
                         .HasColumnType("tinyint unsigned")
                         .HasDefaultValue((byte)2);
 
+                    b.Property<bool>("Realtime")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasPrecision(6)
                         .HasColumnType("datetime(6)");

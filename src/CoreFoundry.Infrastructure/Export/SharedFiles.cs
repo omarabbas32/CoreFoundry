@@ -271,13 +271,16 @@ internal static class SharedFiles
 
             /// <summary>
             /// List, get, add, replace and delete for one table; each table's service supplies the mapping.
-            /// Each saved add, replace and delete is published to the table's realtime subscribers.
+            /// Each saved add, replace and delete is published to the table's realtime subscribers, unless realtime is off for it.
             /// </summary>
             public abstract class CrudService<TEntity, TDto, TInput>(IRepository<TEntity> repository, IChangePublisher changes)
                 where TEntity : class, IEntity, new()
             {
                 /// <summary>The table's name in the database, as realtime subscribers know it.</summary>
                 protected abstract string TableName { get; }
+
+                /// <summary>False: the table's writes send no realtime events (and the hub doesn't offer it).</summary>
+                protected virtual bool Realtime => true;
 
                 /// <summary>Column name (as in the API) → entity property, for <c>sort</c>.</summary>
                 protected abstract IReadOnlyDictionary<string, string> SortableColumns { get; }
@@ -352,7 +355,7 @@ internal static class SharedFiles
                 /// cancelled with the request: the row is saved, so subscribers hear about it even if the caller has gone.
                 /// </summary>
                 private Task PublishAsync(ChangeOperation operation, long id) =>
-                    changes.PublishAsync(new ChangeEvent(TableName, operation, id), CancellationToken.None);
+                    Realtime ? changes.PublishAsync(new ChangeEvent(TableName, operation, id), CancellationToken.None) : Task.CompletedTask;
             }
 
             """);

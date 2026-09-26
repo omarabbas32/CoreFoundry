@@ -358,6 +358,33 @@ public class ProjectTableTests
         context.StateOf(table).ShouldBe(SchemaObjectState.Applied);
     }
 
+    // ---- Realtime -----------------------------------------------------------------------------
+
+    [Fact]
+    public void A_new_table_has_realtime_on()
+    {
+        new ProjectTable(1, "books").Realtime.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Realtime_can_be_turned_off_and_on_again_bumping_the_version_but_not_the_schema_state()
+    {
+        var table = Applied(new ProjectTable(1, "books"));
+        var context = new SchemaContext(new Dictionary<long, TableName>(), SchemaSnapshot.FromJson(null));
+        var versionBefore = table.Version;
+
+        table.SetRealtime(false);
+
+        table.Realtime.ShouldBeFalse();
+        table.Version.ShouldBe(versionBefore + 1);
+        context.StateOf(table).ShouldBe(SchemaObjectState.Applied);
+
+        table.SetRealtime(true);
+
+        table.Realtime.ShouldBeTrue();
+        table.Version.ShouldBe(versionBefore + 2);
+    }
+
     private static ColumnDefinition Varchar(int length) =>
         ColumnDefinitionRules.Create(DataType.Varchar, length, null, null, isNullable: true, isUnique: false, defaultValue: null);
 

@@ -266,6 +266,27 @@ public sealed class TableEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task New_tables_have_realtime_on_and_it_can_be_turned_off_with_a_new_version()
+    {
+        var (owner, project) = await OwnedProjectAsync("RealtimeToggle");
+        var table = await CreateAsync(project, owner, "books");
+        table.Realtime.ShouldBeTrue();
+        (await OkAsync<List<TableSummaryDto>>(HttpMethod.Get, Tables(project), owner)).Single().Realtime.ShouldBeTrue();
+
+        var off = await OkAsync<TableDto>(HttpMethod.Put, $"{Tables(project)}/{table.Id}/realtime", owner,
+            new TableRealtimeRequest(table.Version, false));
+
+        off.Realtime.ShouldBeFalse();
+        off.Version.ShouldBeGreaterThan(table.Version);
+        (await OkAsync<TableDto>(HttpMethod.Get, $"{Tables(project)}/{table.Id}", owner)).Realtime.ShouldBeFalse();
+        (await OkAsync<List<TableSummaryDto>>(HttpMethod.Get, Tables(project), owner)).Single().Realtime.ShouldBeFalse();
+
+        (await _driver.SendAsync(HttpMethod.Put, $"{Tables(project)}/{table.Id}/realtime", owner,
+            new TableRealtimeRequest(table.Version, true)))
+            .StatusCode.ShouldBe(HttpStatusCode.Conflict); // stale version
+    }
+
+    [Fact]
     public async Task Setting_access_with_a_stale_version_is_409()
     {
         var (owner, project) = await OwnedProjectAsync("AccessStale");

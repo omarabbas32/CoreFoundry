@@ -93,7 +93,10 @@ public sealed class RealtimeEndpointsTests : IDisposable
         (await Should.ThrowAsync<HubException>(() => member.InvokeAsync("Subscribe", "authors", Ct)))
             .Message.ShouldContain("Only admins can subscribe to authors.");
         (await Should.ThrowAsync<HubException>(() => anonymous.InvokeAsync("Subscribe", "nope", Ct)))
-            .Message.ShouldContain("There is no table nope to subscribe to.");
+            .Message.ShouldContain("There is no realtime table nope to subscribe to.");
+        // reviews is Public to read, but its realtime is off: nobody may subscribe to it.
+        (await Should.ThrowAsync<HubException>(() => anonymous.InvokeAsync("Subscribe", "reviews", Ct)))
+            .Message.ShouldContain("There is no realtime table reviews to subscribe to.");
         await admin.InvokeAsync("Subscribe", "books", Ct);
         await admin.InvokeAsync("Subscribe", "authors", Ct);
 
@@ -117,6 +120,9 @@ public sealed class RealtimeEndpointsTests : IDisposable
         (await http.DeleteAsync(new Uri($"/api/books/{dune}", UriKind.Relative), Ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await adminChanges.NextAsync()).ShouldBe(new Change("books", "delete", dune));
         (await anonymousChanges.NextAsync()).ShouldBe(new Change("books", "delete", dune));
+
+        // A table with realtime off saves as usual and publishes nothing (checked by the ShouldBeEmpty calls below).
+        await CreateAsync(http, "/api/reviews", new { comment = "Great" });
 
         // A save that fails (a duplicate unique isbn, 409) publishes nothing.
         var emma = await CreateAsync(http, "/api/books", new { title = "Emma", isbn = "978-0141439587" });
@@ -208,7 +214,8 @@ public sealed class RealtimeEndpointsTests : IDisposable
 
     /// <summary>
     /// A project with <c>books</c> (Read Public, Write Admin; a unique <c>isbn</c>), <c>authors</c> (Read Admin,
-    /// Write Admin) and <c>categories</c> (left at Signed-in for both), applied.
+    /// Write Admin), <c>categories</c> (left at Signed-in for both) and <c>reviews</c> (Read Public, Write Admin,
+    /// realtime off), applied.
     /// </summary>
     private async Task<Shop> BookshopAsync()
     {
@@ -219,8 +226,11 @@ public sealed class RealtimeEndpointsTests : IDisposable
             new ColumnRequest("isbn", DataType.Varchar, 20, null, null, true, true, null));
         var authors = await CreateTableAsync(project, owner, "authors", new ColumnRequest("name", DataType.Text, null, null, null, true, false, null));
         await CreateTableAsync(project, owner, "categories", new ColumnRequest("name", DataType.Text, null, null, null, true, false, null));
+        var reviews = await CreateTableAsync(project, owner, "reviews", new ColumnRequest("comment", DataType.Text, null, null, null, true, false, null));
         await SetAccessAsync(project, owner, books, AccessLevel.Public, AccessLevel.Admin);
         await SetAccessAsync(project, owner, authors, AccessLevel.Admin, AccessLevel.Admin);
+        reviews = await SetAccessAsync(project, owner, reviews, AccessLevel.Public, AccessLevel.Admin);
+        await _driver.OkAsync<TableDto>(HttpMethod.Put, $"/api/projects/{project.Id}/tables/{reviews.Id}/realtime", owner, new TableRealtimeRequest(reviews.Version, false));
 
         var plan = await _driver.OkAsync<SchemaPlanDto>(HttpMethod.Get, $"/api/projects/{project.Id}/schema/plan", owner);
         await _driver.OkAsync<ApplyResultDto>(HttpMethod.Post, $"/api/projects/{project.Id}/schema/apply", owner, new ApplyRequest(plan.PlanHash, false));
