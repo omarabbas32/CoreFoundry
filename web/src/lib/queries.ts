@@ -229,16 +229,29 @@ export function useTableChange(projectId: number, tableId: number) {
   });
 }
 
+/** A change to a table's exported-API settings: its read/write access, or its realtime switch. */
+export type TableAccessChange =
+  | { tableId: number; version: number; read: AccessLevel; write: AccessLevel }
+  | { tableId: number; version: number; realtime: boolean };
+
 /**
- * Sets a table's read/write access in the exported API. Unlike {@link useTableChange} it doesn't need the
- * table already loaded (the API page sets access for tables it only has summaries of), so the caller passes
- * the version itself; a stale one gets 409, same as the other table mutations.
+ * Sets a table's read/write access, or turns its realtime on or off, in the exported API. Unlike
+ * {@link useTableChange} it doesn't need the table already loaded (the API page sets access for tables it only
+ * has summaries of), so the caller passes the version itself; a stale one gets 409, same as the other table mutations.
  */
 export function useSetTableAccess(projectId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ tableId, version, read, write }: { tableId: number; version: number; read: AccessLevel; write: AccessLevel }) =>
-      api<Table>(`/api/projects/${projectId}/tables/${tableId}/access`, { method: "PUT", body: { version, read, write } }),
+    mutationFn: (change: TableAccessChange) =>
+      "realtime" in change
+        ? api<Table>(`/api/projects/${projectId}/tables/${change.tableId}/realtime`, {
+            method: "PUT",
+            body: { version: change.version, enabled: change.realtime },
+          })
+        : api<Table>(`/api/projects/${projectId}/tables/${change.tableId}/access`, {
+            method: "PUT",
+            body: { version: change.version, read: change.read, write: change.write },
+          }),
     onSuccess: (table) => {
       queryClient.setQueryData(queryKeys.table(projectId, table.id), table);
       // Patch the tables-list row too so an immediate second edit has the new version, not a stale one
@@ -246,7 +259,7 @@ export function useSetTableAccess(projectId: number) {
       queryClient.setQueryData<TableSummary[]>(queryKeys.tables(projectId), (rows) =>
         rows?.map((row) =>
           row.id === table.id
-            ? { ...row, version: table.version, readAccess: table.readAccess, writeAccess: table.writeAccess }
+            ? { ...row, version: table.version, readAccess: table.readAccess, writeAccess: table.writeAccess, realtime: table.realtime }
             : row,
         ),
       );

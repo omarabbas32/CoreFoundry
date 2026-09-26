@@ -23,6 +23,8 @@ export function ExportCard({ projectId }: { projectId: number }) {
   const exported = (tables.data ?? []).filter((table) => table.state !== "New");
   const publicRead = exported.filter((table) => table.readAccess === "Public").length;
   const adminRead = exported.filter((table) => table.readAccess === "Admin").length;
+  const realtime = exported.filter((table) => table.realtime);
+  const realtimePublic = realtime.filter((table) => table.readAccess === "Public").length;
   const allDefaultAccess =
     exported.length > 0 && exported.every((table) => table.readAccess === "SignedIn" && table.writeAccess === "SignedIn");
 
@@ -83,7 +85,7 @@ export function ExportCard({ projectId }: { projectId: number }) {
       {exported.length > 0 && (
         <p className="text-sm text-muted">
           {publicRead === 1 ? "1 public table" : `${publicRead} public tables`}, {adminRead} admin-only. Realtime:{" "}
-          {exported.length === 1 ? "1 table" : `${exported.length} tables`} — {publicRead} public.
+          {realtime.length === 1 ? "1 table" : `${realtime.length} tables`} — {realtimePublic} public.
         </p>
       )}
       {allDefaultAccess && (

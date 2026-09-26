@@ -50,6 +50,57 @@ public class RealtimeGeneratorTests
         crud.ShouldContain("changes.PublishAsync(new ChangeEvent(TableName, operation, id)");
     }
 
+    [Fact]
+    public void CrudService_publishes_only_while_realtime_is_on_which_is_the_default()
+    {
+        var crud = File("src/Bookshop.Application/Common/CrudService.cs");
+        crud.ShouldContain("protected virtual bool Realtime => true;");
+        crud.ShouldContain("Realtime ? changes.PublishAsync(new ChangeEvent(TableName, operation, id), CancellationToken.None) : Task.CompletedTask;");
+        File("src/Bookshop.Application/Tables/Book/BookService.cs").ShouldNotContain("Realtime =>");
+    }
+
+    [Fact]
+    public void A_table_with_realtime_off_is_left_out_of_the_hub_and_its_service_publishes_nothing()
+    {
+        var files = new DotNetBackendGenerator().Generate(BackendGeneratorTests.Bookshop() with
+        {
+            Entities = [.. BackendGeneratorTests.Bookshop().Entities.Select(entity =>
+                entity.Table == "categories" ? entity with { Realtime = false } : entity)],
+        });
+        string Of(string path) => files.Single(file => file.Path == path).Content;
+
+        var hub = Of("src/Bookshop.Infrastructure/Realtime/RealtimeHub.cs");
+        hub.ShouldNotContain("[\"categories\"]");
+        hub.ShouldContain("[\"books\"] = Level.SignedIn,");
+        hub.ShouldContain("$\"There is no realtime table {table} to subscribe to.\"");
+
+        Of("src/Bookshop.Application/Tables/Category/CategoryService.cs")
+            .ShouldContain("protected override string TableName => \"categories\";\n\n    protected override bool Realtime => false;\n");
+        Of("src/Bookshop.Application/Tables/Book/BookService.cs").ShouldNotContain("Realtime =>");
+
+        var readme = Of("README.md");
+        var realtime = readme[readme.IndexOf("## Realtime", StringComparison.Ordinal)..readme.IndexOf("## Tables", StringComparison.Ordinal)];
+        realtime.ShouldNotContain("| `categories` |");
+        realtime.ShouldContain("| `books` | Signed-in |");
+        realtime.ShouldContain("Realtime is off for `categories`: subscribing is refused and their writes send no events.");
+    }
+
+    [Fact]
+    public void With_realtime_off_everywhere_the_hub_map_is_empty_and_the_README_says_so()
+    {
+        var files = new DotNetBackendGenerator().Generate(BackendGeneratorTests.Bookshop() with
+        {
+            Entities = [.. BackendGeneratorTests.Bookshop().Entities.Select(entity => entity with { Realtime = false })],
+        });
+        string Of(string path) => files.Single(file => file.Path == path).Content;
+
+        Of("src/Bookshop.Infrastructure/Realtime/RealtimeHub.cs")
+            .ShouldContain("new Dictionary<string, Level>(StringComparer.Ordinal)\n    {\n    };");
+        var readme = Of("README.md");
+        readme.ShouldContain("Realtime is off for every table, so there is nothing to subscribe to.");
+        readme.ShouldNotContain("| Table | Who may subscribe |");
+    }
+
     [Theory]
     [InlineData("Book", "books")]
     [InlineData("Author", "authors")]
