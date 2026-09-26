@@ -15,13 +15,13 @@ namespace CoreFoundry.Infrastructure.Data;
 public sealed partial class MySqlDataRepository(string engineConnectionString) : IDataRepository
 {
     public async Task<(IReadOnlyList<DataRow> Rows, long Total)> ListAsync(
-        string databaseName, DataTable table, SortOrder sort, int skip, int take, CancellationToken cancellationToken)
+        string databaseName, DataTable table, SortOrder sort, int skip, int take, string? search, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         return await Guard(table, [], async () =>
         {
-            var total = await connection.ExecuteScalarAsync<long>(Command(DataSql.Count(databaseName, table), cancellationToken));
-            var rows = await ReadAsync(connection, table, DataSql.Select(databaseName, table, sort, skip, take), cancellationToken);
+            var total = await connection.ExecuteScalarAsync<long>(Command(DataSql.Count(databaseName, table, search), cancellationToken));
+            var rows = await ReadAsync(connection, table, DataSql.Select(databaseName, table, sort, skip, take, search), cancellationToken);
             return ((IReadOnlyList<DataRow>)rows, total);
         });
     }

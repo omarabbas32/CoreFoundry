@@ -221,6 +221,23 @@ public sealed class DataEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Rows_can_be_searched_by_text_or_id_and_the_total_counts_the_matches()
+    {
+        var shop = await BookshopAsync();
+        var dune = (await CreateAsync(shop, "books", """{ "title": "Dune", "isbn": "111", "price": "9.99" }""")).GetProperty("id").GetInt64();
+        await CreateAsync(shop, "books", """{ "title": "Dune Messiah", "isbn": "222", "price": "9.99" }""");
+        await CreateAsync(shop, "books", """{ "title": "Emma", "isbn": "50%_off", "price": "5.00" }""");
+
+        var byTitle = await OkAsync<DataPage>(shop, HttpMethod.Get, "books?q=dune&pageSize=1");
+        (byTitle.Total, byTitle.Items.Count).ShouldBe((2, 1)); // case-insensitive, paged, total counts every match
+        (await OkAsync<DataPage>(shop, HttpMethod.Get, "books?q=50%25_")).Items.ShouldHaveSingleItem().GetProperty("title").GetString().ShouldBe("Emma");
+        (await OkAsync<DataPage>(shop, HttpMethod.Get, "books?q=%25")).Total.ShouldBe(1); // % is literal: only "50%_off"
+        (await OkAsync<DataPage>(shop, HttpMethod.Get, $"books?q={dune}")).Items.Select(row => row.GetProperty("id").GetInt64()).ShouldContain(dune);
+        (await OkAsync<DataPage>(shop, HttpMethod.Get, "books?q=%20%20")).Total.ShouldBe(3); // blank: no filter
+        (await ValidationAsync(await SendAsync(shop, HttpMethod.Get, $"books?q={new string('x', 101)}"))).Errors.Keys.ShouldBe(["q"]);
+    }
+
+    [Fact]
     public async Task Developers_can_write_rows_and_non_members_see_nothing()
     {
         var shop = await BookshopAsync();

@@ -20,12 +20,16 @@ public sealed class DataController(DataService data) : ControllerBase
     public Task<DataSchemaDto> Tables(long projectId, CancellationToken cancellationToken) =>
         data.TablesAsync(projectId, cancellationToken);
 
-    /// <summary>A page of rows. <c>sort</c> is a column name, <c>-</c> first for descending; ties are ordered by id.</summary>
+    /// <summary>
+    /// A page of rows. <c>sort</c> is a column name, <c>-</c> first for descending; ties are ordered by id.
+    /// <c>q</c> keeps rows whose text columns contain it, or whose id it is.
+    /// </summary>
     [HttpGet("{table}")]
     public Task<DataPageDto> List(
         long projectId, string table, CancellationToken cancellationToken,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = DataService.DefaultPageSize, [FromQuery] string? sort = null) =>
-        data.ListAsync(projectId, table, page, pageSize, sort, cancellationToken);
+        [FromQuery] int page = 1, [FromQuery] int pageSize = DataService.DefaultPageSize, [FromQuery] string? sort = null,
+        [FromQuery] string? q = null) =>
+        data.ListAsync(projectId, table, page, pageSize, sort, cancellationToken, q);
 
     /// <summary>Id and label of rows to pick for a reference column; <c>q</c> searches the label or matches the id.</summary>
     [HttpGet("{table}/lookup")]

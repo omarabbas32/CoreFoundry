@@ -25,7 +25,7 @@ public sealed record LookupItem(long Id, string? Label);
 public interface IDataRepository
 {
     Task<(IReadOnlyList<DataRow> Rows, long Total)> ListAsync(
-        string databaseName, DataTable table, SortOrder sort, int skip, int take, CancellationToken cancellationToken);
+        string databaseName, DataTable table, SortOrder sort, int skip, int take, string? search, CancellationToken cancellationToken);
 
     Task<DataRow?> FindAsync(string databaseName, DataTable table, long id, CancellationToken cancellationToken);
 

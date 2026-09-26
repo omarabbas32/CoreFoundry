@@ -14,20 +14,63 @@ public sealed record DataCommand(string Sql, IReadOnlyDictionary<string, object?
 /// </summary>
 public static class DataSql
 {
-    public static DataCommand Select(string database, DataTable table, SortOrder sort, int skip, int take)
+    /// <param name="search">Optional: see <see cref="SearchFilter"/>.</param>
+    public static DataCommand Select(string database, DataTable table, SortOrder sort, int skip, int take, string? search = null)
     {
         ArgumentNullException.ThrowIfNull(sort);
         var direction = sort.Descending ? " DESC" : "";
         var order = sort.Column is null
             ? $"`id`{direction}"
             : $"{Name(sort.Column.Name)}{direction}, `id`"; // id breaks ties, so pages are stable
-        return new(
-            $"SELECT {Columns(table)} FROM {Table(database, table)} ORDER BY {order} LIMIT @take OFFSET @skip",
-            new Dictionary<string, object?> { ["take"] = take, ["skip"] = skip });
+        var parameters = new Dictionary<string, object?> { ["take"] = take, ["skip"] = skip };
+        var where = SearchFilter(table, search, parameters);
+        return new($"SELECT {Columns(table)} FROM {Table(database, table)}{where} ORDER BY {order} LIMIT @take OFFSET @skip", parameters);
     }
 
-    public static DataCommand Count(string database, DataTable table) =>
-        new($"SELECT COUNT(*) FROM {Table(database, table)}", new Dictionary<string, object?>());
+    /// <param name="search">Optional: counts only the rows <see cref="SearchFilter"/> matches, for the same page count.</param>
+    public static DataCommand Count(string database, DataTable table, string? search = null)
+    {
+        var parameters = new Dictionary<string, object?>();
+        return new($"SELECT COUNT(*) FROM {Table(database, table)}{SearchFilter(table, search, parameters)}", parameters);
+    }
+
+    /// <summary>
+    /// A <c>WHERE</c> for a data-browser search: any text column (Varchar, Text, Uuid) containing the text
+    /// (<c>LIKE</c>, with the user's <c>%</c>, <c>_</c> and <c>\</c> escaped), or an exact id. Empty when there's no search;
+    /// <c>WHERE FALSE</c> when nothing can match (no text columns and not a number).
+    /// </summary>
+    public static string SearchFilter(DataTable table, string? search, Dictionary<string, object?> parameters)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(parameters);
+        if (string.IsNullOrEmpty(search))
+        {
+            return "";
+        }
+
+        var conditions = new List<string>();
+        var text = table.Columns
+            .Where(column => column.Type?.DataType is Domain.Schema.DataType.Varchar or Domain.Schema.DataType.Text or Domain.Schema.DataType.Uuid)
+            .ToList();
+        if (text.Count > 0)
+        {
+            parameters["search"] = Contains(search);
+            conditions.AddRange(text.Select(column => $"{Name(column.Name)} LIKE @search"));
+        }
+
+        if (long.TryParse(search, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id))
+        {
+            parameters["searchId"] = id;
+            conditions.Add("`id` = @searchId");
+        }
+
+        return conditions.Count == 0 ? " WHERE FALSE" : $" WHERE ({string.Join(" OR ", conditions)})";
+    }
+
+    /// <summary>A <c>LIKE</c> pattern for "contains", with the user's wildcards taken literally.</summary>
+    private static string Contains(string search) =>
+        "%" + search.Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal).Replace("_", @"\_", StringComparison.Ordinal) + "%";
 
     public static DataCommand SelectById(string database, DataTable table, long id) =>
         new($"SELECT {Columns(table)} FROM {Table(database, table)} WHERE `id` = @id", new Dictionary<string, object?> { ["id"] = id });
@@ -73,8 +116,7 @@ public static class DataSql
             var conditions = new List<string>();
             if (label is not null)
             {
-                parameters["search"] = "%" + search.Replace(@"\", @"\\", StringComparison.Ordinal)
-                    .Replace("%", @"\%", StringComparison.Ordinal).Replace("_", @"\_", StringComparison.Ordinal) + "%";
+                parameters["search"] = Contains(search);
                 conditions.Add($"{labelSql} LIKE @search");
             }
 

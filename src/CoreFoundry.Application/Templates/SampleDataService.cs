@@ -108,7 +108,7 @@ public sealed partial class SampleDataService(
             return $"column {missing} isn't applied";
         }
 
-        var (_, total) = await rows.ListAsync(databaseName, applied, SortOrder.ById, 0, 1, cancellationToken);
+        var (_, total) = await rows.ListAsync(databaseName, applied, SortOrder.ById, 0, 1, search: null, cancellationToken);
         return total > 0 ? "already has rows" : null;
     }
 
