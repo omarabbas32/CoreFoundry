@@ -24,7 +24,7 @@ export function AppHeader() {
 
   return (
     <header className="border-b border-border bg-surface">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
         <Link href="/projects" className="font-semibold tracking-tight">
           Core<span className="text-accent">Foundry</span>
         </Link>

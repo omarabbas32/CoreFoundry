@@ -38,9 +38,6 @@ export default function ApiPage() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-2">
-        <Link href={`/projects/${projectId}`} className="text-sm text-muted hover:text-foreground">
-          ← {project.data?.name ?? "Project"}
-        </Link>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">API</h1>
           <p className="text-sm text-muted">

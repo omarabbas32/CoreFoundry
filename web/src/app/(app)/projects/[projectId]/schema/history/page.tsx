@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { FullPageSpinner } from "@/components/full-page-spinner";
@@ -23,9 +22,6 @@ export default function HistoryPage() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-2">
-        <Link href={`/projects/${projectId}/schema`} className="text-sm text-muted hover:text-foreground">
-          ← Review plan
-        </Link>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Schema history</h1>
           <p className="text-sm text-muted">

@@ -8,7 +8,7 @@ import { FullPageSpinner } from "@/components/full-page-spinner";
 import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Button, Card, ConfirmDialog } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useProject, useSetTableAccess, useTable, useTableChange, useTables } from "@/lib/queries";
+import { useSetTableAccess, useTable, useTableChange, useTables } from "@/lib/queries";
 import { limits, rowBytes } from "@/lib/schema-rules";
 import type { Column, Table } from "@/lib/types";
 import { ColumnDialog } from "./column-dialog";
@@ -22,7 +22,6 @@ export default function TableDesignerPage() {
   const params = useParams<{ projectId: string; tableId: string }>();
   const projectId = Number(params.projectId);
   const tableId = Number(params.tableId);
-  const project = useProject(projectId);
   const table = useTable(projectId, tableId);
 
   if (table.isPending) return <FullPageSpinner label="Loading table…" />;
@@ -40,17 +39,15 @@ export default function TableDesignerPage() {
     );
   }
 
-  return <Designer projectId={projectId} projectName={project.data?.name} table={table.data} onReload={() => table.refetch()} />;
+  return <Designer projectId={projectId} table={table.data} onReload={() => table.refetch()} />;
 }
 
 function Designer({
   projectId,
-  projectName,
   table,
   onReload,
 }: {
   projectId: number;
-  projectName?: string;
   table: Table;
   onReload: () => void;
 }) {
@@ -108,7 +105,7 @@ function Designer({
     <div className="grid gap-6">
       <div className="grid gap-2">
         <Link href={`/projects/${projectId}/tables`} className="text-sm text-muted hover:text-foreground">
-          ← {projectName ? `${projectName} · tables` : "Tables"}
+          ← Tables
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">

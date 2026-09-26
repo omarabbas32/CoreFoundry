@@ -6,13 +6,12 @@ import { useState } from "react";
 import { FullPageSpinner } from "@/components/full-page-spinner";
 import { DraftBanner, StateBadge } from "@/components/schema-badges";
 import { Alert, Button, Card } from "@/components/ui";
-import { useProject, useTables } from "@/lib/queries";
+import { useTables } from "@/lib/queries";
 import { CreateTableDialog } from "./create-table-dialog";
 import { TemplateDialog } from "./template-dialog";
 
 export default function TablesPage() {
   const projectId = Number(useParams<{ projectId: string }>().projectId);
-  const project = useProject(projectId);
   const tables = useTables(projectId);
   const [creating, setCreating] = useState(false);
   const [choosingTemplate, setChoosingTemplate] = useState(false);
@@ -22,9 +21,6 @@ export default function TablesPage() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-2">
-        <Link href={`/projects/${projectId}`} className="text-sm text-muted hover:text-foreground">
-          ← {project.data?.name ?? "Project"}
-        </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Tables</h1>

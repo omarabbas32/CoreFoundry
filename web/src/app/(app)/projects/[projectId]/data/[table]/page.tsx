@@ -28,8 +28,8 @@ export default function DataViewerPage() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-2">
-        <Link href={`/projects/${projectId}`} className="text-sm text-muted hover:text-foreground">
-          ← {project.data?.name ?? "Project"}
+        <Link href={`/projects/${projectId}/data`} className="text-sm text-muted hover:text-foreground">
+          ← All tables
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

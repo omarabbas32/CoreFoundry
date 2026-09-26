@@ -6,7 +6,7 @@ import { Suspense, useState, type FormEvent } from "react";
 import { accessLevelLabels } from "@/components/access-controls";
 import { FullPageSpinner } from "@/components/full-page-spinner";
 import { Alert, Badge, Button, Card, Spinner } from "@/components/ui";
-import { useAssistantSession, useAssistantSessions, useAssistantStep, useConfirmProposal, useProject, useTables } from "@/lib/queries";
+import { useAssistantSession, useAssistantSessions, useAssistantStep, useConfirmProposal, useTables } from "@/lib/queries";
 import type { AssistantSession, ProposedColumn, ProposedTable, SchemaProposal } from "@/lib/types";
 
 const textareaClass =
@@ -28,7 +28,6 @@ export default function AssistantPage() {
 function Assistant() {
   const projectId = Number(useParams<{ projectId: string }>().projectId);
   const chosen = useSearchParams().get("session");
-  const project = useProject(projectId);
   const tables = useTables(projectId);
   const sessions = useAssistantSessions(projectId);
   const open = sessions.data?.find((session) => session.status === "Asking" || session.status === "Proposed");
@@ -43,9 +42,6 @@ function Assistant() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-2">
-        <Link href={`/projects/${projectId}/tables`} className="text-sm text-muted hover:text-foreground">
-          ← {project.data?.name ?? "Project"} tables
-        </Link>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{extending ? "Extend with AI" : "Design with AI"}</h1>
           <p className="text-sm text-muted">
