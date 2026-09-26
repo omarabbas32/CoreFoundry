@@ -82,6 +82,8 @@ export type Table = {
   /** Who may read/write this table in the exported API; also who may subscribe to its realtime changes (read). */
   readAccess: AccessLevel;
   writeAccess: AccessLevel;
+  /** Whether the exported API sends realtime events for this table; off, the hub refuses subscriptions to it. */
+  realtime: boolean;
 };
 
 export type TableSummary = {
@@ -93,6 +95,7 @@ export type TableSummary = {
   updatedAt: string;
   readAccess: AccessLevel;
   writeAccess: AccessLevel;
+  realtime: boolean;
 };
 
 export type ColumnInput = Pick<

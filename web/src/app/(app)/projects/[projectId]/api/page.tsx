@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
-import { AccessSelects, accessLevelHint } from "@/components/access-controls";
+import { AccessSelects, RealtimeToggle, accessLevelHint, realtimeHint } from "@/components/access-controls";
 import { FullPageSpinner } from "@/components/full-page-spinner";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { ApiError, refreshSession } from "@/lib/api";
@@ -115,7 +115,7 @@ function AccessSection({ projectId }: { projectId: number }) {
         <h2 className="font-semibold">Access</h2>
         <p className="text-sm text-muted">
           Who may read and write each table in the exported API. Read also decides who may subscribe to the table&apos;s
-          changes over the realtime hub in the exported backend.
+          changes over the realtime hub in the exported backend; turn Realtime off for tables that shouldn&apos;t send any.
         </p>
       </div>
 
@@ -151,22 +151,35 @@ function AccessSection({ projectId }: { projectId: number }) {
               className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0"
             >
               <span className="font-mono text-sm">{table.name}</span>
-              <AccessSelects
-                idPrefix={`access-${table.id}`}
-                read={table.readAccess}
-                write={table.writeAccess}
-                disabled={access.isPending || table.state === "PendingDrop"}
-                onChange={({ read, write }) => {
-                  access.reset();
-                  access.mutate({ tableId: table.id, version: table.version, read, write });
-                }}
-              />
+              <div className="flex flex-wrap items-end gap-3">
+                <AccessSelects
+                  idPrefix={`access-${table.id}`}
+                  read={table.readAccess}
+                  write={table.writeAccess}
+                  disabled={access.isPending || table.state === "PendingDrop"}
+                  onChange={({ read, write }) => {
+                    access.reset();
+                    access.mutate({ tableId: table.id, version: table.version, read, write });
+                  }}
+                />
+                <RealtimeToggle
+                  id={`realtime-${table.id}`}
+                  checked={table.realtime}
+                  disabled={access.isPending || table.state === "PendingDrop"}
+                  onChange={(realtime) => {
+                    access.reset();
+                    access.mutate({ tableId: table.id, version: table.version, realtime });
+                  }}
+                />
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      <p className="text-xs text-muted">{accessLevelHint}</p>
+      <p className="text-xs text-muted">
+        {accessLevelHint} · {realtimeHint}
+      </p>
     </Card>
   );
 }
