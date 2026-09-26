@@ -236,10 +236,25 @@ internal static class DeployFiles
     /// <summary>The README's Realtime section (phase-9-realtime-export.md §3): subscribing, reconnecting, CORS and the limits.</summary>
     private static string Realtime(ExportModel model)
     {
-        var subscribers = new StringBuilder("| Table | Who may subscribe |\n|---|---|\n");
-        foreach (var entity in model.Entities)
+        var subscribers = new StringBuilder();
+        var realtime = model.Entities.Where(entity => entity.Realtime).ToList();
+        if (realtime.Count > 0)
         {
-            subscribers.Append($"| `{entity.Table}` | {AccessName(entity.Read)} |\n");
+            subscribers.Append("| Table | Who may subscribe |\n|---|---|\n");
+            foreach (var entity in realtime)
+            {
+                subscribers.Append($"| `{entity.Table}` | {AccessName(entity.Read)} |\n");
+            }
+        }
+        else
+        {
+            subscribers.Append("Realtime is off for every table, so there is nothing to subscribe to.\n");
+        }
+
+        var off = model.Entities.Where(entity => !entity.Realtime).Select(entity => $"`{entity.Table}`").ToList();
+        if (realtime.Count > 0 && off.Count > 0)
+        {
+            subscribers.Append($"\nRealtime is off for {string.Join(", ", off)}: subscribing is refused and their writes send no events.\n");
         }
 
         return $$"""
@@ -279,7 +294,7 @@ internal static class DeployFiles
 
             A table's Read level (see Access) decides who may subscribe to it. Public tables need no token; for the others
             pass `accessTokenFactory` with a token from `/api/auth/login`. Subscribing to a table you may not read, or to a
-            name that isn't a table here, makes `invoke("Subscribe", …)` reject with the reason.
+            name that isn't a realtime table here, makes `invoke("Subscribe", …)` reject with the reason.
 
             {{subscribers}}
             - **Reconnecting:** a reconnect is a new connection, and the server forgets its subscriptions. Subscribe again in

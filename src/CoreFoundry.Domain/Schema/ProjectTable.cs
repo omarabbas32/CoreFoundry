@@ -44,6 +44,12 @@ public sealed class ProjectTable
     /// <summary>Who may write this table in the exported API. Never wider than <see cref="ReadAccess"/>.</summary>
     public AccessLevel WriteAccess { get; private set; } = AccessLevel.SignedIn;
 
+    /// <summary>
+    /// Whether the exported API sends realtime events for this table (subscribers need <see cref="ReadAccess"/>).
+    /// Metadata only, like the access levels.
+    /// </summary>
+    public bool Realtime { get; private set; } = true;
+
     /// <summary>All columns, including ones pending drop, in <see cref="ProjectColumn.OrdinalPosition"/> order.</summary>
     public IReadOnlyList<ProjectColumn> Columns => [.. _columns.OrderBy(column => column.OrdinalPosition).ThenBy(column => column.Id)];
 
@@ -239,6 +245,16 @@ public sealed class ProjectTable
 
         ReadAccess = read;
         WriteAccess = write;
+        Touch();
+    }
+
+    /// <summary>
+    /// Turns the exported API's realtime events for this table on or off. Metadata only, like
+    /// <see cref="SetAccess"/>: it only bumps <see cref="Version"/>.
+    /// </summary>
+    public void SetRealtime(bool enabled)
+    {
+        Realtime = enabled;
         Touch();
     }
 

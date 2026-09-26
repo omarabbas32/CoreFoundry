@@ -52,6 +52,9 @@ public sealed record ReorderColumnsRequest(int Version, IReadOnlyList<long> Colu
 /// <summary>The table's access levels in the exported API; <see cref="Version"/> is the table's version the caller last saw.</summary>
 public sealed record TableAccessRequest(int Version, AccessLevel Read, AccessLevel Write);
 
+/// <summary>Whether the exported API sends realtime events for the table; <see cref="Version"/> is the table's version the caller last saw.</summary>
+public sealed record TableRealtimeRequest(int Version, bool Enabled);
+
 /// <summary>
 /// The table designer. Edits only draft metadata; nothing is sent to the project's database until
 /// the schema engine applies it. Changes return the whole table with its new <c>version</c>.
@@ -129,4 +132,9 @@ public sealed class TablesController(TableService tables) : ControllerBase
     [HttpPut("{tableId:long}/access")]
     public Task<TableDto> SetAccess(long projectId, long tableId, TableAccessRequest request, CancellationToken cancellationToken) =>
         tables.SetAccessAsync(projectId, tableId, request.Version, request.Read, request.Write, cancellationToken);
+
+    /// <summary>Turns the exported API's realtime events for this table on or off. Metadata only; never appears in the schema plan.</summary>
+    [HttpPut("{tableId:long}/realtime")]
+    public Task<TableDto> SetRealtime(long projectId, long tableId, TableRealtimeRequest request, CancellationToken cancellationToken) =>
+        tables.SetRealtimeAsync(projectId, tableId, request.Version, request.Enabled, cancellationToken);
 }

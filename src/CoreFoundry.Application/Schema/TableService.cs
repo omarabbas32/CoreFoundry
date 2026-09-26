@@ -173,6 +173,18 @@ public sealed class TableService(
             return Task.CompletedTask;
         }, cancellationToken);
 
+    /// <summary>
+    /// Turns the exported API's realtime events for this table on or off. Metadata only, like
+    /// <see cref="SetAccessAsync"/>: never in the schema plan, but it still uses the table's <c>version</c>.
+    /// </summary>
+    public Task<TableDto> SetRealtimeAsync(
+        long projectId, long tableId, int version, bool enabled, CancellationToken cancellationToken) =>
+        ChangeAsync(projectId, tableId, version, table =>
+        {
+            table.SetRealtime(enabled);
+            return Task.CompletedTask;
+        }, cancellationToken);
+
     private async Task<TableDto> ChangeAsync(
         long projectId, long tableId, int version, Func<ProjectTable, Task> change, CancellationToken cancellationToken)
     {

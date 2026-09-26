@@ -35,7 +35,7 @@ internal static class RealtimeFiles
 
             """);
 
-        var levels = model.Entities.Select(entity => $"[{CSharp.String(entity.Table)}] = Level.{LevelName(entity.Read)},");
+        var levels = model.Entities.Where(entity => entity.Realtime).Select(entity => $"[{CSharp.String(entity.Table)}] = Level.{LevelName(entity.Read)},");
 
         yield return new($"src/{n}.Infrastructure/Realtime/RealtimeHub.cs", $$"""
             using Microsoft.AspNetCore.SignalR;
@@ -49,7 +49,7 @@ internal static class RealtimeFiles
             /// </summary>
             public sealed class RealtimeHub : Hub
             {
-                /// <summary>Who may read, and so subscribe to, each table. Any other name is refused.</summary>
+                /// <summary>Who may read, and so subscribe to, each table with realtime on. Any other name is refused.</summary>
                 private static readonly IReadOnlyDictionary<string, Level> Tables = new Dictionary<string, Level>(StringComparer.Ordinal)
                 {
             {{CSharp.Lines(levels, 8)}}
@@ -71,7 +71,7 @@ internal static class RealtimeFiles
                 {
                     if (table is null || !Tables.TryGetValue(table, out var level))
                     {
-                        throw new HubException($"There is no table {table} to subscribe to.");
+                        throw new HubException($"There is no realtime table {table} to subscribe to.");
                     }
 
                     var refusal = level switch
@@ -94,7 +94,7 @@ internal static class RealtimeFiles
                 {
                     if (table is null || !Tables.ContainsKey(table))
                     {
-                        throw new HubException($"There is no table {table} to unsubscribe from.");
+                        throw new HubException($"There is no realtime table {table} to unsubscribe from.");
                     }
 
                     await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(table));
