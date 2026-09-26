@@ -24,6 +24,7 @@ internal sealed class ProjectTableConfiguration : IEntityTypeConfiguration<Proje
         // The sentinel is the default itself, so an insert at SignedIn gets the same value from the database.
         builder.Property(table => table.ReadAccess).HasDefaultValue(AccessLevel.SignedIn).HasSentinel(AccessLevel.SignedIn);
         builder.Property(table => table.WriteAccess).HasDefaultValue(AccessLevel.SignedIn).HasSentinel(AccessLevel.SignedIn);
+        builder.Property(table => table.Realtime).HasDefaultValue(true).HasSentinel(true);
 
         builder.HasOne<Project>()
             .WithMany()
