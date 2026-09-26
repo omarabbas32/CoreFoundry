@@ -1,9 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Alert, Button, Dialog, Field, Input, Select } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { commonColumns, referencePresets, suggestFromName, type ColumnPreset } from "@/lib/column-suggestions";
 import { useTableChange } from "@/lib/queries";
 import { columnFormSchema, toColumnInput, typeInfo, type ColumnFormValues } from "@/lib/schema-rules";
 import { dataTypes, type Column, type DataType, type ReferenceAction, type TableSummary } from "@/lib/types";
@@ -99,9 +101,16 @@ function ColumnForm({
     setError,
     setValue,
     getValues,
+    reset,
+    setFocus,
     control,
-    formState: { errors },
+    formState: { errors, dirtyFields },
   } = useForm<ColumnFormValues>({ resolver: zodResolver(columnFormSchema), defaultValues: formFor(column) });
+  // Which button submitted: "Add and add another" keeps the dialog open for the next column.
+  const [action, setAction] = useState<"add" | "another">("add");
+  const [added, setAdded] = useState<string[]>([]);
+  const [suggested, setSuggested] = useState<string | null>(null);
+  const adding = column === null;
 
   const dataType = useWatch({ control, name: "dataType" });
   const referencesTableId = useWatch({ control, name: "referencesTableId" });
@@ -128,12 +137,46 @@ function ColumnForm({
     }
   }
 
-  const submit = handleSubmit(async (values) => {
+  /** Fills the whole form from a common column; the user can still change anything before adding it. */
+  function applyPreset(preset: ColumnPreset) {
+    reset(preset.values);
+    setSuggested(null);
+    setFocus("name");
+  }
+
+  /** When adding, guesses the type from the name (email, *_at, price, author_id…) unless the user already chose one. */
+  function onNameBlur(name: string) {
+    if (!adding || dirtyFields.dataType || dirtyFields.referencesTableId) return;
+    const suggestion = suggestFromName(name, tables, tableId);
+    if (!suggestion) {
+      setSuggested(null);
+      return;
+    }
+
+    const { reason, ...fields } = suggestion;
+    for (const [field, value] of Object.entries(fields) as [keyof ColumnFormValues, string | boolean][]) {
+      setValue(field, value as never);
+    }
+    if (fields.dataType) onTypeChange(fields.dataType);
+    setSuggested(reason);
+  }
+
+  const submit = handleSubmit(async (values, event) => {
+    const submitter = (event?.nativeEvent as SubmitEvent | undefined)?.submitter;
+    const again = submitter?.getAttribute("value") === "another";
+    setAction(again ? "another" : "add");
     const input = toColumnInput(values);
     try {
       await change.mutateAsync(
         column ? { kind: "updateColumn", columnId: column.id, column: input } : { kind: "addColumn", column: input },
       );
+      if (adding && again) {
+        setAdded((names) => [...names, input.name]);
+        setSuggested(null);
+        reset(formFor(null));
+        setFocus("name");
+        return;
+      }
       onDone();
     } catch (error) {
       if (!(error instanceof ApiError)) return;
@@ -150,7 +193,14 @@ function ColumnForm({
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-4">
+      {added.length > 0 && (
+        <p role="status" className="rounded-md bg-ok-soft px-3 py-2 text-sm text-ok">
+          Added <span className="font-mono">{added.join(", ")}</span>. Add the next column, or close when you&apos;re done.
+        </p>
+      )}
       {change.error && !fieldErrorShown && <Alert>{change.error.message}</Alert>}
+
+      {adding && <Presets tables={tables} tableId={tableId} onPick={applyPreset} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name" htmlFor="column-name" error={errors.name?.message}>
@@ -162,7 +212,7 @@ function ColumnForm({
             spellCheck={false}
             className="font-mono"
             aria-invalid={Boolean(errors.name)}
-            {...register("name")}
+            {...register("name", { onBlur: (event) => onNameBlur(event.target.value) })}
           />
         </Field>
         <Field label="Type" htmlFor="column-type" error={errors.dataType?.message}>
@@ -185,6 +235,12 @@ function ColumnForm({
           )}
         </Field>
       </div>
+
+      {suggested && (
+        <p className="-mt-2 text-xs text-muted">
+          Set up as {suggested}, from the name. Change anything below.
+        </p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="References" htmlFor="column-references" error={errors.referencesTableId?.message}>
@@ -264,13 +320,52 @@ function ColumnForm({
       )}
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onDone}>
-          Cancel
+        <Button type="button" variant="ghost" onClick={onDone}>
+          {added.length > 0 ? "Done" : "Cancel"}
         </Button>
-        <Button type="submit" loading={change.isPending}>
+        {/* First submit button, so Enter in a field adds the column and keeps the dialog open for the next one. */}
+        {adding && (
+          <Button type="submit" name="action" value="another" variant="secondary" loading={change.isPending && action === "another"}>
+            Add and add another
+          </Button>
+        )}
+        <Button type="submit" name="action" value="add" loading={change.isPending && action === "add"}>
           {column ? "Save column" : "Add column"}
         </Button>
       </div>
     </form>
+  );
+}
+
+/** One-click starting points for a new column: common ones, and a reference to each other table. */
+function Presets({ tables, tableId, onPick }: { tables: TableSummary[]; tableId: number; onPick: (preset: ColumnPreset) => void }) {
+  const references = referencePresets(tables, tableId);
+  const chip =
+    "rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-xs transition-colors hover:border-accent/50 hover:text-accent";
+  return (
+    <div className="grid gap-2 rounded-md bg-surface-muted p-3">
+      <div className="grid gap-1.5">
+        <p className="text-xs text-muted">Common columns</p>
+        <div className="flex flex-wrap gap-1.5">
+          {commonColumns.map((preset) => (
+            <button key={preset.label} type="button" className={chip} onClick={() => onPick(preset)}>
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {references.length > 0 && (
+        <div className="grid gap-1.5">
+          <p className="text-xs text-muted">Reference another table</p>
+          <div className="flex flex-wrap gap-1.5">
+            {references.map((preset) => (
+              <button key={preset.label} type="button" className={chip} onClick={() => onPick(preset)}>
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

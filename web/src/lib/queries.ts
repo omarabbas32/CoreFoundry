@@ -172,10 +172,12 @@ function invalidateTableLists(queryClient: ReturnType<typeof useQueryClient>, pr
   ]);
 }
 
+/** Creates a table, optionally with its first columns (validated like columns added later). */
 export function useCreateTable(projectId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => api<Table>(`/api/projects/${projectId}/tables`, { method: "POST", body: { name } }),
+    mutationFn: ({ name, columns = [] }: { name: string; columns?: ColumnInput[] }) =>
+      api<Table>(`/api/projects/${projectId}/tables`, { method: "POST", body: { name, columns } }),
     onSuccess: (table) => {
       queryClient.setQueryData(queryKeys.table(projectId, table.id), table);
       return invalidateTableLists(queryClient, projectId);

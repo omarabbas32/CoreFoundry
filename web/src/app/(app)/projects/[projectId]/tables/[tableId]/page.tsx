@@ -186,8 +186,36 @@ function Designer({
         </div>
       )}
 
+      <Card className="grid gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">
+            Columns <span className="font-normal text-muted tabular-nums">({liveColumns.length + 1})</span>
+          </h2>
+          <RowSize bytes={bytes} />
+        </div>
+
+        <ColumnsGrid
+          columns={table.columns}
+          editable={editable}
+          reordering={change.isPending}
+          onReorder={(columnIds) => run({ kind: "reorder", columnIds })}
+          onEdit={(column) => setEditing(column)}
+          onDelete={(column) => report(deleteColumn(column))}
+          onRestore={(column) => report(run({ kind: "restoreColumn", columnId: column.id }))}
+        />
+
+        {editable && (
+          <div>
+            <Button onClick={() => setEditing("new")}>Add column</Button>
+          </div>
+        )}
+      </Card>
+
       <Card className="grid gap-3 p-5">
-        <h2 className="font-semibold">Access in the exported API</h2>
+        <div>
+          <h2 className="font-semibold">API access</h2>
+          <p className="text-sm text-muted">Who may read and write this table in the backend you export, and whether it sends realtime events.</p>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <AccessSelects
             idPrefix="table-access"
@@ -212,31 +240,6 @@ function Designer({
         <p className="text-xs text-muted">
           {accessLevelHint} · {realtimeHint}
         </p>
-      </Card>
-
-      <Card className="grid gap-4 p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-semibold">Columns</h2>
-          <p className={`text-sm tabular-nums ${bytes > limits.maxRowBytes ? "text-danger" : "text-muted"}`}>
-            Row size {bytes.toLocaleString()} / {limits.maxRowBytes.toLocaleString()} bytes
-          </p>
-        </div>
-
-        <ColumnsGrid
-          columns={table.columns}
-          editable={editable}
-          reordering={change.isPending}
-          onReorder={(columnIds) => run({ kind: "reorder", columnIds })}
-          onEdit={(column) => setEditing(column)}
-          onDelete={(column) => report(deleteColumn(column))}
-          onRestore={(column) => report(run({ kind: "restoreColumn", columnId: column.id }))}
-        />
-
-        {editable && (
-          <div>
-            <Button onClick={() => setEditing("new")}>Add column</Button>
-          </div>
-        )}
       </Card>
 
       <ColumnDialog
@@ -266,6 +269,29 @@ function Designer({
           change.reset();
         }}
       />
+    </div>
+  );
+}
+
+/** How much of MySQL's row limit the columns use; it only matters near the limit, so it stays quiet until then. */
+function RowSize({ bytes }: { bytes: number }) {
+  const percent = Math.min(100, (bytes / limits.maxRowBytes) * 100);
+  const tone = bytes > limits.maxRowBytes ? "bg-danger" : percent > 80 ? "bg-warn" : "bg-accent";
+  return (
+    <div className="grid w-48 gap-1" title="MySQL rows are limited to 65,535 bytes (Text and Json count only a few bytes each).">
+      <p className={`text-xs tabular-nums ${bytes > limits.maxRowBytes ? "text-danger" : "text-muted"}`}>
+        Row size {bytes.toLocaleString()} / {limits.maxRowBytes.toLocaleString()} bytes
+      </p>
+      <div
+        className="h-1 overflow-hidden rounded-full bg-surface-muted"
+        role="meter"
+        aria-label="Row size"
+        aria-valuemin={0}
+        aria-valuemax={limits.maxRowBytes}
+        aria-valuenow={bytes}
+      >
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(percent, 1)}%` }} />
+      </div>
     </div>
   );
 }
