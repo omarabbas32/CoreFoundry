@@ -17,7 +17,8 @@ public sealed record UsedTemplateDto(string TemplateKey, bool SampleDataPending,
 /// through <see cref="TableService"/>, so they're checked exactly like tables made in the designer.
 /// Nothing reaches MySQL until the user reviews the plan and applies it.
 /// </summary>
-public sealed class TemplateService(IProjectRepository projects, ITableRepository tables, TableService tableService, IUnitOfWork unitOfWork)
+public sealed class TemplateService(
+    IProjectRepository projects, ITableRepository tables, TableService tableService, DraftSchemaWriter writer, IUnitOfWork unitOfWork)
 {
     public static IReadOnlyList<TemplateDto> List() => [.. SchemaTemplates.All.Select(template => new TemplateDto(
         template.Key,
@@ -43,53 +44,8 @@ public sealed class TemplateService(IProjectRepository projects, ITableRepositor
         project.UseTemplate(template.Key, withSampleData);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var created = new Dictionary<string, long>(StringComparer.Ordinal);
-        try
-        {
-            // Columns that reference a table not created yet (itself, or a later one) are added afterwards.
-            var deferred = new List<(string Table, TemplateColumn Column)>();
-            foreach (var table in template.Tables)
-            {
-                var now = table.Columns.Where(column => column.References is null || created.ContainsKey(column.References)).ToList();
-                deferred.AddRange(table.Columns.Except(now).Select(column => (table.Name, column)));
-                var dto = await tableService.CreateAsync(projectId, table.Name, [.. now.Select(column => Input(column, created))], cancellationToken);
-                created[table.Name] = dto.Id;
-                await tableService.SetAccessAsync(projectId, dto.Id, dto.Version, table.Read, table.Write, cancellationToken);
-            }
-
-            foreach (var (table, column) in deferred)
-            {
-                var current = await tableService.GetAsync(projectId, created[table], cancellationToken);
-                await tableService.AddColumnAsync(projectId, current.Id, current.Version, Input(column, created), cancellationToken);
-            }
-        }
-        catch
-        {
-            // Leave the project empty rather than half-templated. The tables are new, so deleting removes them.
-            foreach (var id in created.Values.Reverse())
-            {
-                if (await tables.FindAsync(projectId, id, cancellationToken) is { } table)
-                {
-                    tables.Remove(table);
-                }
-            }
-
-            await unitOfWork.SaveChangesAsync(CancellationToken.None);
-            throw;
-        }
+        await writer.WriteAsync(projectId, template.Tables, [], cancellationToken);
 
         return new UsedTemplateDto(template.Key, project.SampleDataPending, await tableService.ListAsync(projectId, cancellationToken));
     }
-
-    private static ColumnInput Input(TemplateColumn column, Dictionary<string, long> tableIds) => new(
-        column.Name,
-        column.Type,
-        column.Length,
-        column.Precision,
-        column.Scale,
-        column.Nullable,
-        column.Unique,
-        column.Default,
-        column.References is { } target ? tableIds[target] : null,
-        column.OnDelete);
 }

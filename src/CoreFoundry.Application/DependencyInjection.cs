@@ -1,3 +1,4 @@
+using CoreFoundry.Application.Assistant;
 using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Data;
 using CoreFoundry.Application.Export;
@@ -21,6 +22,9 @@ public static class DependencyInjection
         services.AddScoped<SchemaApplier>();
         services.AddScoped<DataService>();
         services.AddScoped<ExportService>();
+        services.AddScoped<DraftSchemaWriter>();
+        services.AddScoped<AssistantService>();
+        services.AddScoped<AiKeyService>();
         services.AddScoped<TemplateService>();
         services.AddScoped<SampleDataService>();
         return services;

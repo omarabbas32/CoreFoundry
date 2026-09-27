@@ -39,6 +39,13 @@ export default function TablesPage() {
             >
               Diagram
             </Link>
+            {/* Always shown (even if the list failed to load); the assistant page says "Extend" once there are tables. */}
+            <Link
+              href={`/projects/${projectId}/assistant`}
+              className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted"
+            >
+              {tables.data && tables.data.length > 0 ? "Extend with AI" : "Design with AI"}
+            </Link>
             <Button onClick={() => setCreating(true)} disabled={!tables.data}>
               New table
             </Button>
@@ -53,13 +60,17 @@ export default function TablesPage() {
         <Card className="grid justify-items-center gap-3 px-6 py-14 text-center">
           <p className="font-medium">No tables yet</p>
           <p className="max-w-sm text-sm text-muted">
-            Design your first table, for example authors or books, or start from a ready schema.
+            Design your first table, for example authors or books, start from a ready schema, or let the AI assistant
+            design one with you.
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <Button onClick={() => setCreating(true)}>Create a table</Button>
             <Button variant="secondary" onClick={() => setChoosingTemplate(true)}>
               Start from a template
             </Button>
+            <Link href={`/projects/${projectId}/assistant`} className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-muted">
+              Design with AI
+            </Link>
           </div>
         </Card>
       )}

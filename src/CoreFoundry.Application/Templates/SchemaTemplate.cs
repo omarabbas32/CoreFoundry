@@ -15,8 +15,13 @@ public sealed record SchemaTemplate(
 
 /// <param name="Read">Who may read this table once the template is applied. Defaults to today's behavior.</param>
 /// <param name="Write">Who may write this table. Never wider than <paramref name="Read"/>.</param>
+/// <param name="Realtime">Whether the exported API sends realtime events for this table.</param>
 public sealed record TemplateTable(
-    string Name, IReadOnlyList<TemplateColumn> Columns, AccessLevel Read = AccessLevel.SignedIn, AccessLevel Write = AccessLevel.SignedIn);
+    string Name,
+    IReadOnlyList<TemplateColumn> Columns,
+    AccessLevel Read = AccessLevel.SignedIn,
+    AccessLevel Write = AccessLevel.SignedIn,
+    bool Realtime = true);
 
 /// <param name="References">Another table of the same template (or this one), or null.</param>
 public sealed record TemplateColumn(

@@ -1,7 +1,9 @@
 using System.Text.RegularExpressions;
+using CoreFoundry.Application.Assistant;
 using CoreFoundry.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -108,7 +110,15 @@ public sealed partial class TestDatabaseApi : WebApplicationFactory<Program>, IA
         builder.UseSetting("ConnectionStrings:Engine", _connections?.Engine ?? "Server=127.0.0.1;Port=1;User=none;Password=none");
         builder.UseSetting("Jwt:SigningKey", "integration-test-signing-key-at-least-32-bytes!");
         builder.UseSetting("RateLimiting:AuthPermitLimit", "10000");
+        builder.UseSetting("RateLimiting:AssistantPermitLimit", "10000");
+        // A default key so the assistant runs; the scripted client below answers instead of the AI provider.
+        builder.UseSetting("Ai:ApiKey", "integration-test-default-key");
+        builder.UseSetting("Ai:DailyCallsPerUser", "10000");
+        builder.ConfigureTestServices(services => services.AddSingleton<IAiChatClient>(Ai));
     }
+
+    /// <summary>The AI the API talks to in tests; script its replies per test (<see cref="ScriptedAiChatClient.Reset"/> first).</summary>
+    public ScriptedAiChatClient Ai { get; } = new();
 
     public override async ValueTask DisposeAsync()
     {

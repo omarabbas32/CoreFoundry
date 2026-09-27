@@ -24,9 +24,10 @@ public sealed class MetadataModelTests : IDisposable
     public void Dispose() => _context.Dispose();
 
     [Fact]
-    public void Has_the_seven_metadata_tables() =>
-        Model.GetEntityTypes().Select(entity => entity.GetTableName()).Order().ShouldBe(
+    public void Has_the_eleven_metadata_tables() =>
+        Model.GetEntityTypes().Select(entity => entity.GetTableName()).Order(StringComparer.Ordinal).ShouldBe(
         [
+            "AssistantMessages", "AssistantSessions", "AssistantUsage", "DataProtectionKeys",
             "ProjectColumns", "ProjectMembers", "ProjectTables", "Projects",
             "RefreshTokens", "SchemaMigrations", "Users",
         ]);
