@@ -25,7 +25,7 @@ public sealed record LookupItem(long Id, string? Label);
 public interface IDataRepository
 {
     Task<(IReadOnlyList<DataRow> Rows, long Total)> ListAsync(
-        string databaseName, DataTable table, SortOrder sort, int skip, int take, CancellationToken cancellationToken);
+        string databaseName, DataTable table, SortOrder sort, int skip, int take, string? search, CancellationToken cancellationToken);
 
     Task<DataRow?> FindAsync(string databaseName, DataTable table, long id, CancellationToken cancellationToken);
 
@@ -38,6 +38,10 @@ public interface IDataRepository
     /// <summary>Up to <paramref name="take"/> (id, label) pairs for a reference picker. See <see cref="DataTable.LabelColumn"/>.</summary>
     Task<IReadOnlyList<LookupItem>> LookupAsync(
         string databaseName, DataTable table, string? search, int take, CancellationToken cancellationToken);
+
+    /// <summary>Id and label of exactly these rows; missing ids are left out.</summary>
+    Task<IReadOnlyList<LookupItem>> LabelsAsync(
+        string databaseName, DataTable table, IReadOnlyList<long> ids, CancellationToken cancellationToken);
 
     /// <returns>False if no row has that id.</returns>
     Task<bool> DeleteAsync(string databaseName, DataTable table, long id, CancellationToken cancellationToken);

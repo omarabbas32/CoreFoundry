@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useTables } from "@/lib/queries";
 import type { SchemaObjectState } from "@/lib/types";
 import { Badge } from "./ui";
 
@@ -14,13 +17,22 @@ export function StateBadge({ state }: { state: SchemaObjectState }) {
   return <Badge tone={stateTone[state]}>{stateLabel[state]}</Badge>;
 }
 
-/** Shown on designer pages: the draft reaches the database only when a plan is reviewed and applied. */
+/**
+ * Shown on designer pages while the draft differs from the database: it reaches the database only when a plan is
+ * reviewed and applied. Hidden when every table is applied, so it means something when it appears.
+ */
 export function DraftBanner({ projectId }: { projectId: number }) {
+  const tables = useTables(projectId);
+  const pending = (tables.data ?? []).filter((table) => table.state !== "Applied").length;
+  if (pending === 0) return null;
+
   return (
     <p className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
       <span>
-        <span className="font-medium">Draft changes aren&apos;t applied yet.</span> Review the plan to see the exact SQL
-        before anything changes in the project&apos;s database.
+        <span className="font-medium">
+          {pending === 1 ? "1 table has" : `${pending} tables have`} changes that aren&apos;t applied yet.
+        </span>{" "}
+        Review the plan to see the exact SQL before anything changes in the project&apos;s database.
       </span>
       <Link href={`/projects/${projectId}/schema`} className="font-medium underline underline-offset-2 hover:no-underline">
         Review plan →

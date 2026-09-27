@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useForm, type FieldValues, type Path } from "react-hook-form";
 import type { z } from "zod";
+import { PageTitle } from "@/components/page-title";
 import { Alert, Button, Card, Field, Input } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 
@@ -54,6 +55,7 @@ export function AuthForm<T extends FieldValues>({
 
   return (
     <Card className="grid gap-5 p-6">
+      <PageTitle title={`${title} · CoreFoundry`} />
       <h1 className="text-xl font-semibold">{title}</h1>
       {formError && <Alert>{formError}</Alert>}
       <form onSubmit={submit} noValidate className="grid gap-4">

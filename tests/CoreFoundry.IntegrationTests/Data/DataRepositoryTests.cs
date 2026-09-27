@@ -128,8 +128,8 @@ public sealed class DataRepositoryTests : IAsyncLifetime
             await InsertAsync(Books, $$"""{ "title": "t", "price": "{{price}}" }""");
         }
 
-        var (first, total) = await Repository.ListAsync(_database, Books, SortOrder.Parse(Books, "-price"), 0, 3, Ct);
-        var (second, _) = await Repository.ListAsync(_database, Books, SortOrder.Parse(Books, "-price"), 3, 3, Ct);
+        var (first, total) = await Repository.ListAsync(_database, Books, SortOrder.Parse(Books, "-price"), 0, 3, null, Ct);
+        var (second, _) = await Repository.ListAsync(_database, Books, SortOrder.Parse(Books, "-price"), 3, 3, null, Ct);
 
         total.ShouldBe(5);
         first.Select(row => (string)row["price"]!).ShouldBe(["3.00", "2.00", "2.00"]);
@@ -195,7 +195,7 @@ public sealed class DataRepositoryTests : IAsyncLifetime
     {
         await ExecuteAsync($"DROP TABLE `{_database}`.`books`");
 
-        var ex = await Should.ThrowAsync<ConflictException>(() => Repository.ListAsync(_database, Books, SortOrder.ById, 0, 10, Ct));
+        var ex = await Should.ThrowAsync<ConflictException>(() => Repository.ListAsync(_database, Books, SortOrder.ById, 0, 10, null, Ct));
         ex.Message.ShouldContain("schema drift");
     }
 

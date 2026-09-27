@@ -7,7 +7,7 @@ function cx(...classes: (string | false | null | undefined)[]) {
 }
 
 const buttonVariants = {
-  primary: "bg-accent text-on-accent hover:bg-accent-hover",
+  primary: "bg-accent-solid text-on-accent hover:bg-accent-solid-hover",
   secondary: "border border-border bg-surface text-foreground hover:bg-surface-muted",
   danger: "bg-danger text-on-danger hover:opacity-90",
   ghost: "text-muted hover:bg-surface-muted hover:text-foreground",

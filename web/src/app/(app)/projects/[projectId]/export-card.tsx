@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { FoundryScene, castNames } from "@/components/foundry-scene";
 import { Alert, Button, Card } from "@/components/ui";
 import { download } from "@/lib/api";
 import { useDataSchema, useTables } from "@/lib/queries";
@@ -10,12 +11,15 @@ import { useDataSchema, useTables } from "@/lib/queries";
  * Downloads the project as a standalone .NET backend. The export follows the applied schema, so
  * unapplied draft changes are pointed out before downloading.
  */
-export function ExportCard({ projectId }: { projectId: number }) {
+/** @param onReviewAccess Where the page itself shows access (the API page's tab); otherwise the link goes there. */
+export function ExportCard({ projectId, onReviewAccess }: { projectId: number; onReviewAccess?: () => void }) {
   const schema = useDataSchema(projectId);
   const tables = useTables(projectId);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // Each export replays the cast once (the key restarts it), using one of the exported tables' real names.
+  const [casts, setCasts] = useState(0);
 
   const applied = schema.data?.tables.length ?? 0;
   const unapplied = (tables.data ?? []).filter((table) => table.state !== "Applied").length;
@@ -29,6 +33,7 @@ export function ExportCard({ projectId }: { projectId: number }) {
     exported.length > 0 && exported.every((table) => table.readAccess === "SignedIn" && table.writeAccess === "SignedIn");
 
   async function exportCode() {
+    setCasts((count) => count + 1);
     setDownloading(true);
     setError(null);
     setDone(null);
@@ -91,15 +96,25 @@ export function ExportCard({ projectId }: { projectId: number }) {
       {allDefaultAccess && (
         <p className="rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
           Every table still uses the default access (signed-in read and write).{" "}
-          <Link href={`/projects/${projectId}/api#access`} className="font-medium underline">
-            Review access
-          </Link>{" "}
+          {onReviewAccess ? (
+            <button type="button" className="font-medium underline" onClick={onReviewAccess}>
+              Review access
+            </button>
+          ) : (
+            <Link href={`/projects/${projectId}/api#access`} className="font-medium underline">
+              Review access
+            </Link>
+          )}{" "}
           before exporting.
         </p>
       )}
+      {casts > 0 && !error && (
+        <FoundryScene key={casts} once names={castNames(schema.data?.tables[0]?.name)} className="mt-1 hidden sm:block" />
+      )}
       {done && (
         <p role="status" className="text-sm text-ok">
-          Downloaded <span className="font-mono">{done}</span>. Its README explains how to run it.
+          Downloaded <span className="font-mono">{done}</span>: the four layers above, ready to run. Its README explains how:
+          <code className="ml-1 rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-foreground">docker compose up --build</code>
         </p>
       )}
       {error && <Alert>{error}</Alert>}

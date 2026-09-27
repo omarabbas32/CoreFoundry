@@ -29,6 +29,7 @@ public sealed class DataService(IProjectRepository projects, ISnapshotProvider s
     public const int MaxPageSize = 100;
     public const int DefaultLookupSize = 20;
     public const int MaxLookupSize = 100;
+    public const int MaxSearchLength = 100;
 
     public async Task<DataSchemaDto> TablesAsync(long projectId, CancellationToken cancellationToken)
     {
@@ -36,10 +37,17 @@ public sealed class DataService(IProjectRepository projects, ISnapshotProvider s
         return new DataSchemaDto(schema.SchemaVersion, [.. schema.Tables.Select(ToDto)]);
     }
 
+    /// <param name="search">Optional: rows whose text columns contain it, or whose id it is.</param>
     public async Task<DataPageDto> ListAsync(
-        long projectId, string tableName, int page, int pageSize, string? sort, CancellationToken cancellationToken)
+        long projectId, string tableName, int page, int pageSize, string? sort, CancellationToken cancellationToken, string? search = null)
     {
         var errors = new Dictionary<string, string[]>();
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        if (search?.Length > MaxSearchLength)
+        {
+            errors["q"] = [$"Search for at most {MaxSearchLength} characters."];
+        }
+
         if (page < 1)
         {
             errors["page"] = ["Must be 1 or more."];
@@ -66,7 +74,7 @@ public sealed class DataService(IProjectRepository projects, ISnapshotProvider s
             throw new ValidationFailedException(errors);
         }
 
-        var (items, total) = await rows.ListAsync(project.DatabaseName, table, order!, (page - 1) * pageSize, pageSize, cancellationToken);
+        var (items, total) = await rows.ListAsync(project.DatabaseName, table, order!, (page - 1) * pageSize, pageSize, search, cancellationToken);
         return new DataPageDto(items, page, pageSize, total);
     }
 
@@ -118,6 +126,21 @@ public sealed class DataService(IProjectRepository projects, ISnapshotProvider s
 
         var (project, table) = await TableAsync(projectId, tableName, cancellationToken);
         return await rows.LookupAsync(project.DatabaseName, table, search?.Trim(), limit, cancellationToken);
+    }
+
+    /// <summary>Labels of exactly these rows, so references can be shown by name. At most <see cref="MaxLookupSize"/> ids.</summary>
+    public async Task<IReadOnlyList<LookupItem>> LabelsAsync(
+        long projectId, string tableName, IReadOnlyList<long> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var distinct = ids.Distinct().ToList();
+        if (distinct.Count > MaxLookupSize)
+        {
+            throw new ValidationFailedException("ids", $"Ask for at most {MaxLookupSize} ids at a time.");
+        }
+
+        var (project, table) = await TableAsync(projectId, tableName, cancellationToken);
+        return await rows.LabelsAsync(project.DatabaseName, table, distinct, cancellationToken);
     }
 
     private async Task<(Project Project, DataSchema Schema)> SchemaAsync(long projectId, CancellationToken cancellationToken)

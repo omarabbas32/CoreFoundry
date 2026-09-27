@@ -1,46 +1,54 @@
 @import "tailwindcss";
 
-/* Same palette family as docs/*.html: cool neutrals, indigo accent for "metadata", semantic ok/warn/danger. */
+/*
+ * "Ocean blue": GitHub-like slate neutrals and a clear blue. Two blues on purpose: --accent is for text, links and
+ * highlights (readable on the page background); --accent-solid fills buttons behind white text (readable too).
+ * Brand colors for the logo live in components/logo.tsx and don't change with the theme.
+ */
 :root {
-  --background: #f5f7f7;
+  --background: #f6f8fa;
   --surface: #ffffff;
-  --surface-muted: #eef1f2;
-  --foreground: #141b20;
-  --muted: #5a6670;
-  --border: #d5dcde;
-  --accent: #2e48b0;
-  --accent-hover: #243a94;
-  --accent-soft: #e3e8fa;
+  --surface-muted: #eff2f5;
+  --foreground: #1f2328;
+  --muted: #59636e;
+  --border: #d1d9e0;
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-soft: #ddf4ff;
+  --accent-solid: #0969da;
+  --accent-solid-hover: #0860ca;
   --on-accent: #ffffff;
-  --ok: #1d7646;
-  --ok-soft: #dff1e6;
-  --warn: #8f5b00;
-  --warn-soft: #fbefd6;
-  --danger: #b42318;
-  --danger-soft: #fbe3e0;
+  --ok: #1a7f37;
+  --ok-soft: #dafbe1;
+  --warn: #9a6700;
+  --warn-soft: #fff8c5;
+  --danger: #d1242f;
+  --danger-soft: #ffebe9;
   --on-danger: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --background: #0d1316;
-    --surface: #141c21;
-    --surface-muted: #19232a;
-    --foreground: #e3e8ea;
-    --muted: #93a0a8;
-    --border: #2b3941;
-    --accent: #93a5ff;
-    --accent-hover: #b2beff;
-    --accent-soft: #1c2548;
-    --on-accent: #0d1316;
-    --ok: #62c98e;
-    --ok-soft: #14301f;
-    --warn: #e3a945;
-    --warn-soft: #352812;
-    --danger: #f2786e;
-    --danger-soft: #3a1916;
-    --on-danger: #0d1316;
+    --background: #0d1117;
+    --surface: #151b23;
+    --surface-muted: #212830;
+    --foreground: #e6edf3;
+    --muted: #9198a1;
+    --border: #30363d;
+    --accent: #4493f8;
+    --accent-hover: #79b8ff;
+    --accent-soft: #14243b;
+    --accent-solid: #1f6feb;
+    --accent-solid-hover: #388bfd;
+    --on-accent: #ffffff;
+    --ok: #3fb950;
+    --ok-soft: #12261e;
+    --warn: #d29922;
+    --warn-soft: #2b2111;
+    --danger: #f85149;
+    --danger-soft: #2d1316;
+    --on-danger: #0d1117;
   }
 }
 
@@ -54,6 +62,8 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-hover: var(--accent-solid-hover);
   --color-on-accent: var(--on-accent);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);

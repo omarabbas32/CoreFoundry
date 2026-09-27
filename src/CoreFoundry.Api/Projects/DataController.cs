@@ -20,19 +20,28 @@ public sealed class DataController(DataService data) : ControllerBase
     public Task<DataSchemaDto> Tables(long projectId, CancellationToken cancellationToken) =>
         data.TablesAsync(projectId, cancellationToken);
 
-    /// <summary>A page of rows. <c>sort</c> is a column name, <c>-</c> first for descending; ties are ordered by id.</summary>
+    /// <summary>
+    /// A page of rows. <c>sort</c> is a column name, <c>-</c> first for descending; ties are ordered by id.
+    /// <c>q</c> keeps rows whose text columns contain it, or whose id it is.
+    /// </summary>
     [HttpGet("{table}")]
     public Task<DataPageDto> List(
         long projectId, string table, CancellationToken cancellationToken,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = DataService.DefaultPageSize, [FromQuery] string? sort = null) =>
-        data.ListAsync(projectId, table, page, pageSize, sort, cancellationToken);
+        [FromQuery] int page = 1, [FromQuery] int pageSize = DataService.DefaultPageSize, [FromQuery] string? sort = null,
+        [FromQuery] string? q = null) =>
+        data.ListAsync(projectId, table, page, pageSize, sort, cancellationToken, q);
 
-    /// <summary>Id and label of rows to pick for a reference column; <c>q</c> searches the label or matches the id.</summary>
+    /// <summary>
+    /// Id and label of rows to pick for a reference column; <c>q</c> searches the label or matches the id. With
+    /// <c>ids</c> (<c>?ids=3&amp;ids=7</c>), the labels of exactly those rows instead, to show references by name.
+    /// </summary>
     [HttpGet("{table}/lookup")]
     public Task<IReadOnlyList<LookupItem>> Lookup(
         long projectId, string table, CancellationToken cancellationToken,
-        [FromQuery] string? q = null, [FromQuery] int limit = DataService.DefaultLookupSize) =>
-        data.LookupAsync(projectId, table, q, limit, cancellationToken);
+        [FromQuery] string? q = null, [FromQuery] int limit = DataService.DefaultLookupSize, [FromQuery] long[]? ids = null) =>
+        ids is { Length: > 0 }
+            ? data.LabelsAsync(projectId, table, ids, cancellationToken)
+            : data.LookupAsync(projectId, table, q, limit, cancellationToken);
 
     [HttpGet("{table}/{id:long}")]
     public Task<DataRow> Get(long projectId, string table, long id, CancellationToken cancellationToken) =>

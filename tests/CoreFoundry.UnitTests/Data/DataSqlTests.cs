@@ -56,6 +56,41 @@ public class DataSqlTests
             (object?)5L));
 
     [Fact]
+    public void A_search_matches_text_columns_with_escaped_wildcards_or_the_exact_id_in_both_select_and_count()
+    {
+        var select = DataSql.Select(Db, Books, SortOrder.ById, 0, 25, "42");
+        var count = DataSql.Count(Db, Books, "42");
+
+        select.Sql.ShouldBe(
+            "SELECT `id`, `title`, `price_usd`, `published_on` FROM `cf_p_7`.`books` WHERE (`title` LIKE @search OR `id` = @searchId) ORDER BY `id` LIMIT @take OFFSET @skip");
+        count.Sql.ShouldBe("SELECT COUNT(*) FROM `cf_p_7`.`books` WHERE (`title` LIKE @search OR `id` = @searchId)");
+        select.Parameters["search"].ShouldBe("%42%");
+        select.Parameters["searchId"].ShouldBe(42L);
+        DataSql.Select(Db, Books, SortOrder.ById, 0, 25, @"50%_\").Parameters["search"].ShouldBe(@"%50\%\_\\%");
+        DataSql.Count(Db, Books, "dune").Parameters.ShouldNotContainKey("searchId");
+    }
+
+    [Fact]
+    public void Labels_select_exactly_the_given_ids_one_parameter_each()
+    {
+        var command = DataSql.Labels(Db, Books, Books.LabelColumn, [3, 7]);
+
+        command.Sql.ShouldBe("SELECT `id`, `title` FROM `cf_p_7`.`books` WHERE `id` IN (@id_0, @id_1)");
+        command.Parameters.ShouldBe(new Dictionary<string, object?> { ["id_0"] = 3L, ["id_1"] = 7L });
+        DataSql.Labels(Db, Books, null, []).Sql.ShouldBe("SELECT `id`, NULL FROM `cf_p_7`.`books` WHERE FALSE");
+    }
+
+    [Fact]
+    public void No_search_adds_no_filter_and_a_search_nothing_can_match_finds_nothing()
+    {
+        DataSql.Count(Db, Books, null).Sql.ShouldBe("SELECT COUNT(*) FROM `cf_p_7`.`books`");
+        DataSql.Count(Db, Books, "").Sql.ShouldBe("SELECT COUNT(*) FROM `cf_p_7`.`books`");
+        var numbers = new DataTable("numbers", [new DataColumn("n", new ColumnType(DataType.Int), "Int", false, false, null, null)]);
+        DataSql.Count(Db, numbers, "abc").Sql.ShouldEndWith(" WHERE FALSE");
+        DataSql.Count(Db, numbers, "7").Sql.ShouldEndWith(" WHERE (`id` = @searchId)");
+    }
+
+    [Fact]
     public void Insert_uses_ordinal_parameters_and_dates_become_date_times()
     {
         var command = DataSql.Insert(Db, Books,

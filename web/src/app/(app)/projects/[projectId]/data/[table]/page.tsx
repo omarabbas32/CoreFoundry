@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
-import { FullPageSpinner } from "@/components/full-page-spinner";
-import { Alert, Button, Card, ConfirmDialog, Select } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { PageSkeleton } from "@/components/page-skeleton";
+import { Alert, Button, Card, ConfirmDialog, Input, Select } from "@/components/ui";
 import { formatCell } from "@/lib/data-form";
-import { useDataSchema, useDeleteRow, useLoadSampleData, useProject, useRows } from "@/lib/queries";
+import { useDataSchema, useDeleteRow, useLoadSampleData, useProject, useReferenceLabels, useRows } from "@/lib/queries";
 import type { DataColumn, DataRow, DataTable } from "@/lib/types";
 import { RowPanel } from "./row-panel";
 
@@ -20,7 +20,7 @@ export default function DataViewerPage() {
   const project = useProject(projectId);
   const schema = useDataSchema(projectId);
 
-  if (schema.isPending) return <FullPageSpinner label="Loading tables…" />;
+  if (schema.isPending) return <PageSkeleton label="Loading tables…" variant="table" />;
 
   const tables = schema.data?.tables ?? [];
   const table = tables.find((candidate) => candidate.name === tableName);
@@ -28,8 +28,8 @@ export default function DataViewerPage() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-2">
-        <Link href={`/projects/${projectId}`} className="text-sm text-muted hover:text-foreground">
-          ← {project.data?.name ?? "Project"}
+        <Link href={`/projects/${projectId}/data`} className="text-sm text-muted hover:text-foreground">
+          ← All tables
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -95,7 +95,17 @@ function TableData({ projectId, table, fromTemplate }: { projectId: number; tabl
   const [editing, setEditing] = useState<Editing>(null);
   const [deleting, setDeleting] = useState<DataRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const rows = useRows(projectId, table.name, page, pageSize, sort, true);
+  // What's typed, and what's searched: the search waits until typing pauses, so each keystroke isn't a request.
+  const [typed, setTyped] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(typed.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [typed]);
+  const rows = useRows(projectId, table.name, page, pageSize, sort, true, search);
   const remove = useDeleteRow(projectId, table.name);
   const loadSample = useLoadSampleData(projectId);
 
@@ -120,9 +130,28 @@ function TableData({ projectId, table, fromTemplate }: { projectId: number; tabl
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted" aria-live="polite">
-          {rows.data ? (total === 0 ? "No rows" : `Rows ${first}–${last} of ${total}`) : "Loading rows…"}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label htmlFor="row-search" className="sr-only">
+            Search rows
+          </label>
+          <Input
+            id="row-search"
+            type="search"
+            placeholder="Search text or id…"
+            className="w-full sm:w-64"
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+          />
+          <p className="text-sm text-muted" aria-live="polite">
+            {rows.data
+              ? total === 0
+                ? search
+                  ? "No matches"
+                  : "No rows"
+                : `${search ? "Matches" : "Rows"} ${first}–${last} of ${total}`
+              : "Loading rows…"}
+          </p>
+        </div>
         <Button
           onClick={() => {
             setNotice(null);
@@ -140,7 +169,15 @@ function TableData({ projectId, table, fromTemplate }: { projectId: number; tabl
       )}
       {rows.error && <Alert>{rows.error.message}</Alert>}
 
-      {rows.data && total === 0 ? (
+      {rows.data && total === 0 && search ? (
+        <Card className="grid justify-items-center gap-2 px-6 py-10 text-center">
+          <p className="font-medium">No rows match “{search}”</p>
+          <p className="text-sm text-muted">Search looks in the text columns and matches an exact id.</p>
+          <Button variant="secondary" onClick={() => setTyped("")}>
+            Clear search
+          </Button>
+        </Card>
+      ) : rows.data && total === 0 ? (
         <Card className="grid justify-items-center gap-3 px-6 py-12 text-center">
           <p className="font-medium">No rows yet</p>
           <p className="text-sm text-muted">Add the first one{fromTemplate ? ", or load the template's sample data" : ""}.</p>
@@ -192,9 +229,19 @@ function TableData({ projectId, table, fromTemplate }: { projectId: number; tabl
               {rows.data?.items.map((row) => (
                 <tr key={row.id} className="border-b border-border last:border-0 hover:bg-surface-muted/50">
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-muted">{row.id}</td>
-                  {table.columns.map((column) => (
-                    <Cell key={column.name} column={column} value={row[column.name]} />
-                  ))}
+                  {table.columns.map((column) =>
+                    column.references ? (
+                      <ReferenceCell
+                        key={column.name}
+                        projectId={projectId}
+                        column={column}
+                        value={row[column.name]}
+                        rows={rows.data.items}
+                      />
+                    ) : (
+                      <Cell key={column.name} column={column} value={row[column.name]} />
+                    ),
+                  )}
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
                     <Button
                       variant="ghost"
@@ -341,6 +388,32 @@ function Cell({ column, value }: { column: DataColumn; value: unknown }) {
   return (
     <td className={`${base} ${column.dataType === "Uuid" || column.dataType === "DateTime" || column.dataType === "Date" ? "font-mono text-xs" : ""}`} title={text}>
       {text}
+    </td>
+  );
+}
+
+/**
+ * A reference shows the referenced row's label with its id, and links to that table. Labels for the whole page come
+ * from one request per referenced table (React Query shares it between the cells of a column).
+ */
+function ReferenceCell({ projectId, column, value, rows }: { projectId: number; column: DataColumn; value: unknown; rows: DataRow[] }) {
+  const ids = rows.map((row) => row[column.name]).filter((id): id is number => typeof id === "number");
+  const labels = useReferenceLabels(projectId, column.references, ids);
+  const base = "max-w-[18rem] truncate px-3 py-2";
+  if (typeof value !== "number") return <td className={`${base} text-xs italic text-muted`}>NULL</td>;
+
+  const label = labels.data?.get(value);
+  return (
+    <td className={base} title={`${column.references} #${value}`}>
+      <Link href={`/projects/${projectId}/data/${column.references}`} className="hover:text-accent hover:underline">
+        {label ? (
+          <>
+            {label} <span className="font-mono text-xs text-muted">#{value}</span>
+          </>
+        ) : (
+          <span className="font-mono tabular-nums">#{value}</span>
+        )}
+      </Link>
     </td>
   );
 }
