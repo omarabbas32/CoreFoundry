@@ -220,6 +220,34 @@ public sealed class AssistantEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_member_has_their_own_conversations_and_can_not_see_anyone_elses()
+    {
+        var (owner, project) = await ProjectAsync("Private chats");
+        var developer = await _driver.SignUpAsync();
+        await _driver.AddMemberAsync(project.Id, owner, developer, ProjectRole.Developer);
+
+        _api.Ai.Question("What do you sell?", "Books");
+        var ownersChat = await StartAsync(project, owner, "Owner's shop");
+
+        // The developer sees none of it, can't open it or answer in it, and can start their own at the same time.
+        (await _driver.OkAsync<List<AssistantSessionSummaryDto>>(HttpMethod.Get, Sessions(project), developer)).ShouldBeEmpty();
+        (await _driver.SendAsync(HttpMethod.Get, $"{Sessions(project)}/{ownersChat.Id}", developer)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await _driver.SendAsync(HttpMethod.Post, $"{Sessions(project)}/{ownersChat.Id}/answers", developer,
+            new AssistantAnswerRequest(ownersChat.Version, "Hijack"))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await _driver.SendAsync(HttpMethod.Post, $"{Sessions(project)}/{ownersChat.Id}/cancel", developer,
+            new AssistantVersionRequest(ownersChat.Version))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        _api.Ai.Question("Who reads the blog?", "Everyone");
+        var developersChat = await StartAsync(project, developer, "Developer's blog");
+
+        (await _driver.OkAsync<List<AssistantSessionSummaryDto>>(HttpMethod.Get, Sessions(project), owner))
+            .ShouldHaveSingleItem().Id.ShouldBe(ownersChat.Id);
+        (await _driver.OkAsync<List<AssistantSessionSummaryDto>>(HttpMethod.Get, Sessions(project), developer))
+            .ShouldHaveSingleItem().Id.ShouldBe(developersChat.Id);
+        (await _driver.OkAsync<AssistantSessionDto>(HttpMethod.Get, $"{Sessions(project)}/{ownersChat.Id}", owner)).Goal.ShouldBe("Owner's shop");
+    }
+
+    [Fact]
     public async Task Non_members_get_404_and_developers_may_use_the_assistant()
     {
         var (owner, project) = await ProjectAsync("Private");

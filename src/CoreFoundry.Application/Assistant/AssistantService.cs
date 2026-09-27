@@ -33,7 +33,7 @@ public sealed record ConfirmedProposalDto(AssistantSessionDto Session, IReadOnly
 
 /// <summary>
 /// The AI schema assistant (M10): an interview, one question at a time, then a proposal the user confirms into
-/// draft tables. Each user message is saved before the model is called, so a failed call loses nothing and can be
+/// draft tables. Conversations are private: each member of a project has their own, and can't see anyone else's. Each user message is saved before the model is called, so a failed call loses nothing and can be
 /// retried with <see cref="ContinueAsync"/>. The model's replies are data: a proposal must pass
 /// <see cref="ProposalValidator"/>, and invalid replies are sent back to the model to fix (<see cref="MaxAttempts"/>).
 /// </summary>
@@ -57,24 +57,24 @@ public sealed class AssistantService(
     public const int MaxOptions = 5;
     public const int OptionMaxLength = 200;
 
-    public async Task<IReadOnlyList<AssistantSessionSummaryDto>> ListAsync(long projectId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AssistantSessionSummaryDto>> ListAsync(long projectId, long userId, CancellationToken cancellationToken)
     {
         await SchemaPlanService.VisibleProjectAsync(projects, projectId, cancellationToken);
-        return [.. (await sessions.ListAsync(projectId, 50, cancellationToken))
+        return [.. (await sessions.ListAsync(projectId, userId, 50, cancellationToken))
             .Select(session => new AssistantSessionSummaryDto(session.Id, session.Goal, session.Status, session.CreatedAt, session.UpdatedAt))];
     }
 
-    public async Task<AssistantSessionDto> GetAsync(long projectId, long sessionId, CancellationToken cancellationToken) =>
-        ToDto(await FindAsync(projectId, sessionId, cancellationToken));
+    public async Task<AssistantSessionDto> GetAsync(long projectId, long sessionId, long userId, CancellationToken cancellationToken) =>
+        ToDto(await FindAsync(projectId, sessionId, userId, cancellationToken));
 
     /// <summary>Starts a conversation and gets the first question (or, if the goal says enough, a proposal).</summary>
-    /// <exception cref="ConflictException">The project already has an open conversation.</exception>
+    /// <exception cref="ConflictException">The user already has an open conversation in this project.</exception>
     public async Task<AssistantSessionDto> StartAsync(long projectId, long userId, string goal, CancellationToken cancellationToken)
     {
         await SchemaPlanService.VisibleProjectAsync(projects, projectId, cancellationToken);
-        if (await sessions.FindOpenAsync(projectId, cancellationToken) is not null)
+        if (await sessions.FindOpenAsync(projectId, userId, cancellationToken) is not null)
         {
-            throw new ConflictException("This project already has an open conversation with the assistant. Finish or cancel it first.");
+            throw new ConflictException("You already have an open conversation with the assistant in this project. Finish or cancel it first.");
         }
 
         var session = Validated(() => new AssistantSession(projectId, userId, goal), "goal");
@@ -86,7 +86,7 @@ public sealed class AssistantService(
     public async Task<AssistantSessionDto> AnswerAsync(
         long projectId, long sessionId, long userId, int version, string answer, CancellationToken cancellationToken)
     {
-        var session = await FindForChangeAsync(projectId, sessionId, version, cancellationToken);
+        var session = await FindForChangeAsync(projectId, sessionId, userId, version, cancellationToken);
         Validated(() => session.Answer(answer), "text");
         await SaveAsync(cancellationToken);
         return await TurnAsync(session, userId, cancellationToken);
@@ -96,7 +96,7 @@ public sealed class AssistantService(
     public async Task<AssistantSessionDto> ReviseAsync(
         long projectId, long sessionId, long userId, int version, string feedback, CancellationToken cancellationToken)
     {
-        var session = await FindForChangeAsync(projectId, sessionId, version, cancellationToken);
+        var session = await FindForChangeAsync(projectId, sessionId, userId, version, cancellationToken);
         Validated(() => session.RequestChanges(feedback), "feedback");
         await SaveAsync(cancellationToken);
         return await TurnAsync(session, userId, cancellationToken);
@@ -106,7 +106,7 @@ public sealed class AssistantService(
     public async Task<AssistantSessionDto> ContinueAsync(
         long projectId, long sessionId, long userId, int version, CancellationToken cancellationToken)
     {
-        var session = await FindForChangeAsync(projectId, sessionId, version, cancellationToken);
+        var session = await FindForChangeAsync(projectId, sessionId, userId, version, cancellationToken);
         if (!AwaitingAssistant(session))
         {
             throw new ConflictException("The assistant isn't waiting to answer: answer its question, or ask for changes to its proposal.");
@@ -120,9 +120,9 @@ public sealed class AssistantService(
     /// The proposal is checked again against the current drafts, which may have changed since it was made.
     /// </summary>
     public async Task<ConfirmedProposalDto> ConfirmAsync(
-        long projectId, long sessionId, int version, CancellationToken cancellationToken)
+        long projectId, long sessionId, long userId, int version, CancellationToken cancellationToken)
     {
-        var session = await FindForChangeAsync(projectId, sessionId, version, cancellationToken);
+        var session = await FindForChangeAsync(projectId, sessionId, userId, version, cancellationToken);
         var proposal = session.Status == AssistantSessionStatus.Proposed ? Proposal(session)! : throw new ConflictException("There is no proposal to confirm.");
         var problems = ProposalValidator.Validate(proposal, await tables.ListAsync(projectId, cancellationToken));
         if (problems.Count > 0)
@@ -142,9 +142,10 @@ public sealed class AssistantService(
         return new ConfirmedProposalDto(ToDto(session), await tableService.ListAsync(projectId, cancellationToken));
     }
 
-    public async Task<AssistantSessionDto> CancelAsync(long projectId, long sessionId, int version, CancellationToken cancellationToken)
+    public async Task<AssistantSessionDto> CancelAsync(
+        long projectId, long sessionId, long userId, int version, CancellationToken cancellationToken)
     {
-        var session = await FindForChangeAsync(projectId, sessionId, version, cancellationToken);
+        var session = await FindForChangeAsync(projectId, sessionId, userId, version, cancellationToken);
         Validated(session.Cancel, "version");
         await SaveAsync(cancellationToken);
         return ToDto(session);
@@ -317,16 +318,18 @@ public sealed class AssistantService(
         session.CreatedAt,
         session.UpdatedAt);
 
-    private async Task<AssistantSession> FindAsync(long projectId, long sessionId, CancellationToken cancellationToken)
+    /// <summary>The user's own conversation; anyone else's is "not found", so it can't even be seen to exist.</summary>
+    private async Task<AssistantSession> FindAsync(long projectId, long sessionId, long userId, CancellationToken cancellationToken)
     {
         await SchemaPlanService.VisibleProjectAsync(projects, projectId, cancellationToken);
-        return await sessions.FindAsync(projectId, sessionId, cancellationToken)
+        return await sessions.FindAsync(projectId, userId, sessionId, cancellationToken)
             ?? throw new NotFoundException("Conversation not found.");
     }
 
-    private async Task<AssistantSession> FindForChangeAsync(long projectId, long sessionId, int version, CancellationToken cancellationToken)
+    private async Task<AssistantSession> FindForChangeAsync(
+        long projectId, long sessionId, long userId, int version, CancellationToken cancellationToken)
     {
-        var session = await FindAsync(projectId, sessionId, cancellationToken);
+        var session = await FindAsync(projectId, sessionId, userId, cancellationToken);
         return session.Version == version ? session : throw StaleVersion();
     }
 

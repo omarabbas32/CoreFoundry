@@ -6,22 +6,23 @@ namespace CoreFoundry.Infrastructure.Persistence;
 
 internal sealed class AssistantSessionRepository(MetadataDbContext db) : IAssistantSessionRepository
 {
-    public Task<AssistantSession?> FindAsync(long projectId, long sessionId, CancellationToken cancellationToken) =>
+    public Task<AssistantSession?> FindAsync(long projectId, long userId, long sessionId, CancellationToken cancellationToken) =>
         db.AssistantSessions
             .Include(session => session.Messages)
-            .SingleOrDefaultAsync(session => session.ProjectId == projectId && session.Id == sessionId, cancellationToken);
+            .SingleOrDefaultAsync(
+                session => session.ProjectId == projectId && session.UserId == userId && session.Id == sessionId, cancellationToken);
 
-    public Task<AssistantSession?> FindOpenAsync(long projectId, CancellationToken cancellationToken) =>
+    public Task<AssistantSession?> FindOpenAsync(long projectId, long userId, CancellationToken cancellationToken) =>
         db.AssistantSessions
             .Include(session => session.Messages)
-            .Where(session => session.ProjectId == projectId
+            .Where(session => session.ProjectId == projectId && session.UserId == userId
                 && (session.Status == AssistantSessionStatus.Asking || session.Status == AssistantSessionStatus.Proposed))
             .OrderByDescending(session => session.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<AssistantSession>> ListAsync(long projectId, int take, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyList<AssistantSession>> ListAsync(long projectId, long userId, int take, CancellationToken cancellationToken) =>
         await db.AssistantSessions
-            .Where(session => session.ProjectId == projectId)
+            .Where(session => session.ProjectId == projectId && session.UserId == userId)
             .OrderByDescending(session => session.Id)
             .Take(take)
             .ToListAsync(cancellationToken);
