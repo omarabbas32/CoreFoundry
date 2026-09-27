@@ -152,6 +152,39 @@ public class OpenAiCompatibleChatClientTests
     }
 
     [Fact]
+    public async Task Asks_for_a_generous_token_budget_and_low_reasoning_and_leaves_reasoning_out_when_unset()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, Completion("{}"));
+        await Client(handler, "k").CompleteAsync(Request, Ct);
+        using (var body = JsonDocument.Parse(handler.Body!))
+        {
+            body.RootElement.GetProperty("max_completion_tokens").GetInt32().ShouldBe(32_768);
+            body.RootElement.GetProperty("reasoning_effort").GetString().ShouldBe("low");
+        }
+
+        var plain = new FakeHandler(HttpStatusCode.OK, Completion("{}"));
+        var client = new OpenAiCompatibleChatClient(
+            new HttpClient(plain), Options.Create(new AiOptions { ApiKey = "k", ReasoningEffort = "" }), NullLogger<OpenAiCompatibleChatClient>.Instance);
+        await client.CompleteAsync(Request, Ct);
+        using var withoutEffort = JsonDocument.Parse(plain.Body!);
+        withoutEffort.RootElement.TryGetProperty("reasoning_effort", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_cut_off_answer_is_reported_plainly_and_not_handed_back_for_repair()
+    {
+        var handler = new FakeHandler(HttpStatusCode.BadRequest,
+            """{"error":{"message":"max completion tokens reached before generating a valid document: the output was truncated to fit max_completion_tokens","failed_generation":"{\"kind\":\"propo"}}""");
+
+        var failure = await Should.ThrowAsync<AiProviderException>(() => Client(handler, "k").CompleteAsync(Request, Ct));
+
+        failure.Failure.ShouldBe(AiFailure.BadResponse);
+        failure.Message.ShouldContain("too long");
+        failure.Message.ShouldContain("Ai:MaxCompletionTokens");
+        handler.Bodies.Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Other_bad_requests_are_not_retried()
     {
         var handler = new FakeHandler(HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"The model `nope` does not exist\"}}");
