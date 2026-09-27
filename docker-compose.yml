@@ -33,6 +33,7 @@ services:
       ConnectionStrings__Engine: Server=db;Port=3306;User=cf_engine;Password=${CF_ENGINE_PASSWORD}
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env (at least 32 characters)}
       Database__MigrateOnStartup: "true"
+      Ai__ApiKey: ${AI_API_KEY:-}
       # Only the web container can reach the API, so it may trust X-Forwarded-For (per-user rate limits).
       ForwardedHeaders__TrustAllProxies: "true"
     depends_on:
