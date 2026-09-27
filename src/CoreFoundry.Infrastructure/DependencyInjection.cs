@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<IInvitationRepository, InvitationRepository>();
         services.AddScoped<ITableRepository, TableRepository>();
         services.AddSingleton<IProjectDatabaseProvisioner>(new MySqlProjectDatabaseProvisioner(engine));
         services.AddScoped<ISchemaMigrationRepository, SchemaMigrationRepository>();

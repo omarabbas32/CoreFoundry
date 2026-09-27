@@ -33,36 +33,10 @@ public class MemberServiceTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Adds_an_existing_account_by_email()
-    {
-        var added = await _members.AddAsync(_project.Id, " Alice@Test.dev ", ProjectRole.Developer, Ct);
-
-        added.UserId.ShouldBe(_alice.Id);
-        added.Email.ShouldBe("alice@test.dev");
-        _project.FindMember(_alice.Id)!.Role.ShouldBe(ProjectRole.Developer);
-    }
-
-    [Fact]
-    public async Task Adding_an_unknown_email_is_not_found() =>
-        await Should.ThrowAsync<NotFoundException>(() => _members.AddAsync(_project.Id, "nobody@test.dev", ProjectRole.Developer, Ct));
-
-    [Fact]
-    public async Task Adding_someone_twice_is_a_conflict()
-    {
-        await _members.AddAsync(_project.Id, _alice.Email, ProjectRole.Developer, Ct);
-
-        await Should.ThrowAsync<ConflictException>(() => _members.AddAsync(_project.Id, _alice.Email, ProjectRole.Admin, Ct));
-    }
-
-    [Fact]
-    public async Task Adding_as_owner_is_rejected() =>
-        await Should.ThrowAsync<DomainException>(() => _members.AddAsync(_project.Id, _alice.Email, ProjectRole.Owner, Ct));
-
-    [Fact]
     public async Task List_puts_the_owner_first_then_admins_then_developers()
     {
-        await _members.AddAsync(_project.Id, _bob.Email, ProjectRole.Developer, Ct);
-        await _members.AddAsync(_project.Id, _alice.Email, ProjectRole.Admin, Ct);
+        _project.AddMember(_bob.Id, ProjectRole.Developer);
+        _project.AddMember(_alice.Id, ProjectRole.Admin);
 
         var list = await _members.ListAsync(_project.Id, Ct);
 
@@ -72,8 +46,8 @@ public class MemberServiceTests
     [Fact]
     public async Task A_developer_can_leave_but_cannot_remove_others()
     {
-        await _members.AddAsync(_project.Id, _alice.Email, ProjectRole.Developer, Ct);
-        await _members.AddAsync(_project.Id, _bob.Email, ProjectRole.Developer, Ct);
+        _project.AddMember(_alice.Id, ProjectRole.Developer);
+        _project.AddMember(_bob.Id, ProjectRole.Developer);
 
         await Should.ThrowAsync<ForbiddenException>(() => _members.RemoveAsync(_project.Id, callerId: _alice.Id, userId: _bob.Id, Ct));
         await _members.RemoveAsync(_project.Id, callerId: _alice.Id, userId: _alice.Id, Ct);
@@ -85,8 +59,8 @@ public class MemberServiceTests
     [Fact]
     public async Task An_admin_can_remove_a_member_but_nobody_can_remove_the_owner()
     {
-        await _members.AddAsync(_project.Id, _alice.Email, ProjectRole.Admin, Ct);
-        await _members.AddAsync(_project.Id, _bob.Email, ProjectRole.Developer, Ct);
+        _project.AddMember(_alice.Id, ProjectRole.Admin);
+        _project.AddMember(_bob.Id, ProjectRole.Developer);
 
         await _members.RemoveAsync(_project.Id, callerId: _alice.Id, userId: _bob.Id, Ct);
         await Should.ThrowAsync<DomainException>(() => _members.RemoveAsync(_project.Id, callerId: _alice.Id, userId: _owner.Id, Ct));
@@ -100,7 +74,7 @@ public class MemberServiceTests
     [Fact]
     public async Task Transfer_swaps_owner_and_admin()
     {
-        await _members.AddAsync(_project.Id, _alice.Email, ProjectRole.Developer, Ct);
+        _project.AddMember(_alice.Id, ProjectRole.Developer);
 
         var members = await _members.TransferOwnershipAsync(_project.Id, _alice.Id, Ct);
 

@@ -45,7 +45,8 @@ function Assistant() {
           <h1 className="text-2xl font-semibold tracking-tight">{extending ? "Extend with AI" : "Design with AI"}</h1>
           <p className="max-w-2xl text-sm text-muted">
             Describe your app. The AI asks a few questions, one at a time, then proposes tables. Nothing is created until
-            you confirm, and then only as drafts you review and apply.
+            you confirm, and then only as drafts you review and apply. Your conversations are yours: other members have
+            their own.
           </p>
         </div>
         {viewingPast && (
@@ -69,7 +70,7 @@ function Assistant() {
 
       {past.length > 0 && (
         <Card className="grid gap-3 p-5">
-          <h2 className="font-semibold">Earlier conversations</h2>
+          <h2 className="font-semibold">Your earlier conversations</h2>
           <ul className="grid divide-y divide-border">
             {past.map((summary) => (
               <li key={summary.id}>

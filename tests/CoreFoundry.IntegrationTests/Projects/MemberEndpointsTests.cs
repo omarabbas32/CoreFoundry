@@ -49,7 +49,7 @@ public sealed class MemberEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task Adding_unknown_email_is_404_duplicate_is_409_and_owner_role_is_400()
+    public async Task Inviting_an_unknown_email_is_404_a_member_is_409_and_the_owner_role_is_400()
     {
         var (owner, project) = await OwnedProjectAsync();
         var developer = await _driver.SignUpAsync();
@@ -61,7 +61,7 @@ public sealed class MemberEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_developer_cannot_add_members()
+    public async Task A_developer_cannot_invite_members()
     {
         var (owner, project) = await OwnedProjectAsync();
         var developer = await _driver.SignUpAsync();
@@ -159,7 +159,7 @@ public sealed class MemberEndpointsTests : IDisposable
     }
 
     private Task<HttpResponseMessage> Add(ProjectDto project, SignedIn caller, string email, ProjectRole role) =>
-        _driver.SendAsync(HttpMethod.Post, Members(project), caller, new AddMemberRequest(email, role));
+        _driver.SendAsync(HttpMethod.Post, $"/api/projects/{project.Id}/invitations", caller, new InviteMemberRequest(email, role));
 
     private static string Members(ProjectDto project) => $"/api/projects/{project.Id}/members";
 

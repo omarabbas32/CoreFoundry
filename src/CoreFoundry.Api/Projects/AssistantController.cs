@@ -19,7 +19,8 @@ public sealed record AssistantVersionRequest(int Version);
 public sealed record AiKeyRequest(string ApiKey);
 
 /// <summary>
-/// The AI schema assistant (M10): an interview that ends in a proposal the user confirms into draft tables.
+/// The AI schema assistant (M10): an interview that ends in a proposal the user confirms into draft tables. Each member
+/// sees and uses only their own conversations.
 /// Calls that reach the model are rate limited per user; they can take a while (the model may be retried).
 /// </summary>
 [ApiController]
@@ -29,11 +30,11 @@ public sealed class AssistantController(AssistantService assistant) : Controller
 {
     [HttpGet]
     public Task<IReadOnlyList<AssistantSessionSummaryDto>> List(long projectId, CancellationToken cancellationToken) =>
-        assistant.ListAsync(projectId, cancellationToken);
+        assistant.ListAsync(projectId, UserId, cancellationToken);
 
     [HttpGet("{sessionId:long}")]
     public Task<AssistantSessionDto> Get(long projectId, long sessionId, CancellationToken cancellationToken) =>
-        assistant.GetAsync(projectId, sessionId, cancellationToken);
+        assistant.GetAsync(projectId, sessionId, UserId, cancellationToken);
 
     /// <summary>Starts a conversation from a one-line goal; answers with the first question. 409 if one is open.</summary>
     [HttpPost]
@@ -61,11 +62,11 @@ public sealed class AssistantController(AssistantService assistant) : Controller
     /// <summary>Creates the proposal's tables and columns as drafts. Nothing reaches MySQL until the plan is applied.</summary>
     [HttpPost("{sessionId:long}/confirm")]
     public Task<ConfirmedProposalDto> Confirm(long projectId, long sessionId, AssistantVersionRequest request, CancellationToken cancellationToken) =>
-        assistant.ConfirmAsync(projectId, sessionId, request.Version, cancellationToken);
+        assistant.ConfirmAsync(projectId, sessionId, UserId, request.Version, cancellationToken);
 
     [HttpPost("{sessionId:long}/cancel")]
     public Task<AssistantSessionDto> Cancel(long projectId, long sessionId, AssistantVersionRequest request, CancellationToken cancellationToken) =>
-        assistant.CancelAsync(projectId, sessionId, request.Version, cancellationToken);
+        assistant.CancelAsync(projectId, sessionId, UserId, request.Version, cancellationToken);
 
     /// <summary>The policy guarantees a signed-in member, so the id is there.</summary>
     private long UserId => User.GetUserId() ?? throw new InvalidOperationException("The signed-in user has no id.");

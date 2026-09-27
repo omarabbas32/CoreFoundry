@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { AiKeyDialog } from "./ai-key-dialog";
 import { Logo } from "./logo";
+import { Notifications } from "./notifications";
 import { Button } from "./ui";
 
 export function AppHeader() {
@@ -30,7 +31,8 @@ export function AppHeader() {
           <Logo />
         </Link>
         <div className="flex min-w-0 items-center gap-3">
-          <span className="truncate text-sm text-muted">{user?.email}</span>
+          <span className="hidden truncate text-sm text-muted sm:inline">{user?.email}</span>
+          <Notifications />
           <Button variant="ghost" onClick={() => setEditingKey(true)}>
             AI key
           </Button>

@@ -1,10 +1,34 @@
 # CoreFoundry
 
-Design a database schema in the browser, preview the exact SQL, and apply it
-to real MySQL tables safely. A portfolio project focused on dynamic schema
-management, safe SQL generation, and clean backend architecture.
+Design a database schema in the browser (by hand, from a template, or with an AI assistant), preview the exact
+SQL, apply it to real MySQL tables safely, and export a C# Clean Architecture backend for it. A portfolio project
+focused on dynamic schema management, safe SQL generation, and clean backend architecture.
 
-> Status: **M7 built: schema templates**. Start a project from a ready E-commerce schema, with sample rows. Before that, M6: download any project as a deployable .NET backend. M4 (Data API) is built too; the hands-on UI checks of M4 and M6 are still open. Next: M5 polish. See [the phases](docs/phases/README.md).
+> Status: **M0–M4 and M6–M10 built**: schema designer, schema engine, Data API, code export, templates, access
+> rules, realtime in the export, and the AI schema assistant; plus team invitations with notifications and a UI
+> pass (project menu, ocean-blue theme, logo). Next: M5 polish. See [the phases](docs/phases/README.md).
+
+## What you can do
+
+- **Projects and teams.** Each project gets its own MySQL database (`cf_p_<id>`). Invite teammates as Admin or
+  Developer: they get a notification (the bell in the header) and join when they accept. Roles decide what each
+  member can do; the API enforces them.
+- **Design the schema** three ways:
+  - **Table designer:** tables and typed columns, references between tables (foreign keys with on-delete rules),
+    drag to reorder, undo. Adding a column offers common columns (`email`, `created_at`, `price`…) and guesses the
+    type from the name. A **diagram** shows the tables and their relations.
+  - **Templates:** start from a ready E-commerce schema (8 tables), optionally with sample rows.
+  - **AI assistant:** describe your app; it asks a few questions, one at a time, then proposes tables and columns
+    (checked against the same rules as the designer). Confirm and they're created as drafts. Each member has their
+    own conversations. See [AI assistant](#ai-assistant).
+- **Plan & apply.** Draft changes reach the database only through a reviewed plan: a plain summary (with data loss
+  called out), each operation, and the exact SQL. Applies are locked, journaled and resumable; changes made to the
+  database outside CoreFoundry are detected.
+- **Use the data.** Browse, search, sort and edit the rows of applied tables (references show the referenced row's
+  name), or call the project's REST Data API.
+- **Export a backend.** Download a .NET 10 Clean Architecture solution (Domain, Application, Infrastructure, Api)
+  with EF Core, JWT, Swagger UI and Docker. Each table's **access rules** (who may read and write) and **realtime**
+  switch (a SignalR hub that pushes changes) are written into it.
 
 ## Stack
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Api / Application / Domain / Infrastructure)
@@ -20,6 +44,9 @@ Needs only Docker. From the repository root:
 cp .env.example .env      # then change every password and the signing key
 docker compose up --build
 ```
+
+In Docker the AI assistant has no shared key: each user adds their own [Groq](https://console.groq.com) key in the
+app (**AI key** in the header).
 
 Open http://localhost:3100 (change `WEB_PORT` in `.env` if that port is taken). The first start builds the images
 and creates the database: MySQL 8.4, the `corefoundry` metadata database and the two least-privilege accounts
@@ -76,28 +103,25 @@ npm run dev
 The browser only talks to the web app: `next.config.ts` proxies `/api/*` to the API, so the
 refresh cookie and CORS behave like the single-origin production setup.
 
-Pages: sign in / register, your projects (status, role, retry failed database creation, create),
-and a project page with details, members (add, change role, remove, leave, transfer ownership),
-rename, and delete (confirmed by typing the project name). Controls your role can't use are hidden;
-the API enforces the same rules.
-The table designer (`/projects/<id>/tables`) edits the draft schema: tables, columns with their
-type parameters and defaults, drag-to-reorder, delete with undo. Columns can reference other
-tables, and the schema diagram shows the relations (pan, zoom, drag). Draft changes reach the
-project's database only through **Review plan** (`/projects/<id>/schema`): it shows every
-operation and the exact SQL, and Admins apply it from there. **History** lists every apply with
-its SQL and any error, and the project page warns when the database was changed outside CoreFoundry.
-**Browse data** (`/projects/<id>/data/<table>`) shows the rows of applied tables: sortable columns,
-paging, and a side panel to add or edit a row. The form is generated from the applied columns,
-reference columns get a picker that searches the other table, and deletes ask for confirmation first.
-**Templates:** the New project dialog (and an empty project's designer) can start from a ready schema, for now
-**E-commerce** (customers, addresses, categories, products, orders, order items, payments, reviews). The tables
-are created as drafts to edit, review and apply like any other; optional sample rows are added right after the
-first apply (or later with "Load sample data" on an empty table).
-**Export code** (project page and API page) downloads the project as a standalone backend, enforcing each
-table's read/write access level and generating a realtime hub for the tables it can read; see below.
-The **API** page (`/projects/<id>/api`) documents the project's own endpoints: base URL, how to get a
-token, and for every applied table its routes, fields and ready-to-copy curl and JavaScript examples.
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
+
+**Where things are.** Sign in or register, then **Projects** (a card per project; create one, or retry a failed
+database). Inside a project, the menu on the left (a strip on phones) has:
+
+| Menu | Page | What it's for |
+|---|---|---|
+| Overview | `/projects/<id>` | details, what to do next with the schema, export |
+| Tables | `/projects/<id>/tables` | the table designer (a table: `/tables/<tableId>`) |
+| Design with AI | `/projects/<id>/assistant` | the AI schema assistant |
+| Diagram | `/projects/<id>/tables/diagram` | tables and relations (pan, zoom, drag) |
+| Plan & apply | `/projects/<id>/schema` | the reviewed plan and its SQL; Admins apply |
+| History | `/projects/<id>/schema/history` | every apply with its SQL and any error |
+| Data | `/projects/<id>/data` | browse, search and edit rows |
+| API & access | `/projects/<id>/api` | try the Data API; access and realtime for the export; download |
+| Settings | `/projects/<id>/settings` | members, invitations, rename, delete |
+
+The header has **AI key** (your own Groq key, optional) and the **notifications** bell (invitations to answer).
+Controls your role can't use are hidden; the API enforces the same rules.
 
 ### Tests
 ```bash
@@ -113,7 +137,7 @@ The tests reuse the API's `ConnectionStrings:Metadata` and `Engine` user-secrets
 database swapped to `corefoundry_test`. Test projects get ids from 1,000,000, so their `cf_p_<id>`
 databases never collide with dev ones; leftovers are dropped at the start of each run. Without it (e.g. in CI) those tests are skipped.
 
-## API so far
+## API
 | Method | Route | Notes |
 |---|---|---|
 | POST | `/api/auth/register` | `{ email, password }` → 201 + access token; refresh token in `cf_refresh` cookie |
@@ -128,7 +152,12 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | DELETE | `/api/projects/{id}` | Owner; drops the `cf_p_<id>` database |
 | POST | `/api/projects/{id}/retry-provisioning` | Owner; for projects whose database creation failed |
 | GET | `/api/projects/{id}/members` | Developer+; Owner first, then Admins, then Developers |
-| POST | `/api/projects/{id}/members` | `{ email, role }` Admin+; existing accounts only; role Admin or Developer |
+| GET | `/api/projects/{id}/invitations` | Developer+; invitations waiting for an answer |
+| POST | `/api/projects/{id}/invitations` | `{ email, role }` Admin+ → 201; existing accounts only; role Admin or Developer; 409 if already a member or invited |
+| DELETE | `/api/projects/{id}/invitations/{invitationId}` | Admin+; withdraws a pending invitation |
+| GET | `/api/me/invitations` | signed in; my pending invitations (the notifications), with project and inviter |
+| POST | `/api/me/invitations/{invitationId}/accept` | joins the project with the invited role → the project |
+| POST | `/api/me/invitations/{invitationId}/decline` | 204; someone else's invitation is 404 |
 | PUT | `/api/projects/{id}/members/{userId}` | `{ role }` Admin+; Admin ↔ Developer, never the Owner |
 | DELETE | `/api/projects/{id}/members/{userId}` | Admin+ for others; any member may remove themselves |
 | POST | `/api/projects/{id}/transfer-ownership` | `{ userId }` Owner; the old Owner becomes Admin |
@@ -138,6 +167,8 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | PUT | `/api/projects/{id}/tables/{tableId}` | `{ version, name }` rename |
 | DELETE | `/api/projects/{id}/tables/{tableId}?version=` | never applied → 204 (deleted); applied → 200, marked `PendingDrop` |
 | POST | `/api/projects/{id}/tables/{tableId}/restore` | `{ version }` undoes a pending drop |
+| PUT | `/api/projects/{id}/tables/{tableId}/access` | `{ version, read, write }`: `Public` / `SignedIn` / `Admin`, write never wider than read (for the export) |
+| PUT | `/api/projects/{id}/tables/{tableId}/realtime` | `{ version, enabled }`: whether the exported backend sends realtime events for the table |
 | POST | `/api/projects/{id}/tables/{tableId}/columns` | `{ version, name, dataType, length, precision, scale, isNullable, isUnique, defaultValue, referencesTableId?, onDelete? }` |
 | PUT | `/api/projects/{id}/tables/{tableId}/columns/{columnId}` | same body; update |
 | DELETE | `/api/projects/{id}/tables/{tableId}/columns/{columnId}?version=` | never applied → removed; applied → `PendingDrop` |
@@ -150,7 +181,7 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | GET | `/api/projects/{id}/schema/migrations/{migrationId}` | Developer+; statements, status, `statementsApplied`, `failedStatement`, error |
 | GET | `/api/projects/{id}/schema/drift` | Developer+; changes made to the database outside CoreFoundry since the last apply |
 | GET | `/api/projects/{id}/data` | Developer+; the applied tables and their columns (type, nullable, unique, default, references, writable) |
-| GET | `/api/projects/{id}/data/{table}?page=&pageSize=&sort=` | Developer+; `{ items, page, pageSize, total }`; `pageSize` 1–100 (default 25), `sort` a column, `-` first for descending |
+| GET | `/api/projects/{id}/data/{table}?page=&pageSize=&sort=&q=` | Developer+; `{ items, page, pageSize, total }`; `pageSize` 1–100 (default 25), `sort` a column, `-` first for descending; `q` keeps rows whose text columns contain it, or whose id it is |
 | GET | `/api/projects/{id}/data/{table}/{rowId}` | Developer+; one row |
 | POST | `/api/projects/{id}/data/{table}` | Developer+; JSON object of column values → 201 + the row |
 | PUT | `/api/projects/{id}/data/{table}/{rowId}` | Developer+; full replace: columns left out get their default, or NULL |
@@ -160,6 +191,16 @@ databases never collide with dev ones; leftovers are dropped at the start of eac
 | POST | `/api/projects/{id}/sample-data` | Developer+; inserts the template's sample rows into applied tables that are still empty |
 | GET | `/api/projects/{id}/export` | Developer+; zip of a .NET backend for the applied tables; 409 if nothing is applied |
 | GET | `/api/projects/{id}/data/{table}/lookup?q=&limit=` | Developer+; `[{ id, label }]` for reference pickers (label = first Varchar column) |
+| GET | `/api/projects/{id}/data/{table}/lookup?ids=3&ids=7` | Developer+; the labels of exactly those rows (at most 100), to show references by name |
+| GET | `/api/projects/{id}/assistant/sessions` | Developer+; **my** conversations with the AI assistant in this project |
+| POST | `/api/projects/{id}/assistant/sessions` | `{ goal }` → 201 with the first question; 409 if I already have an open one |
+| GET | `/api/projects/{id}/assistant/sessions/{sessionId}` | my conversation: messages, current question or proposal; anyone else's is 404 |
+| POST | `/api/projects/{id}/assistant/sessions/{sessionId}/answers` | `{ version, text }` → the next question or a proposal |
+| POST | `/api/projects/{id}/assistant/sessions/{sessionId}/revise` | `{ version, feedback }` → a new proposal |
+| POST | `/api/projects/{id}/assistant/sessions/{sessionId}/continue` | `{ version }` retries the AI's turn after a failed call |
+| POST | `/api/projects/{id}/assistant/sessions/{sessionId}/confirm` | `{ version }` creates the proposal as draft tables |
+| POST | `/api/projects/{id}/assistant/sessions/{sessionId}/cancel` | `{ version }` |
+| GET · PUT · DELETE | `/api/me/ai-key` | my own Groq key: status (last 4 characters only), `{ apiKey }` to set, remove |
 
 Every table change carries the `version` the client last saw and returns the whole table with
 its new version; a stale version gets **409**.
@@ -202,13 +243,33 @@ in Clean Architecture generated from the applied tables.
   API page) becomes `[AllowAnonymous]` / `[Authorize]` / `[Authorize(Roles = "Admin")]` on its endpoints; the
   first account to register the exported API becomes Admin.
 - **Realtime:** the export also generates a SignalR hub at `/hubs/realtime` that pushes `insert` / `update` /
-  `delete` notifications per table; a table's Read level decides who may subscribe to it.
+  `delete` notifications per table; a table's Read level decides who may subscribe to it, and a table with its
+  Realtime switch off sends none.
 
 Unapplied draft changes are not exported (the export matches the running database). A test exports a Bookshop,
 builds it, checks its migration with `dotnet ef`, runs it against MySQL, uses it over HTTP and compares its tables
 with CoreFoundry's. Two more exports are built and run the same way: one checks the access levels and roles
 (`AccessEndpointsTests`), the other the realtime hub with SignalR clients (`RealtimeEndpointsTests`). Set
 `CF_SKIP_EXPORT_BUILD=1` to skip these three slow tests.
+
+### AI assistant
+
+**Design with AI** interviews you about your app, one question at a time with suggested answers, then proposes
+new tables and new columns on existing tables, with access levels and realtime. It only adds; nothing existing is
+renamed or dropped. Every proposal is checked against the designer's rules, and problems are sent back to the model
+to fix before you see it. **Confirm** creates the changes as drafts, which you review and apply like any other.
+Each member's conversations are their own, and are saved, so you can leave and resume.
+
+It uses [Groq](https://console.groq.com) (an OpenAI-compatible API; model `openai/gpt-oss-120b` by default):
+
+- **Server key** (optional, local runs only): `Ai:ApiKey` in user-secrets (see step 2 above). Each user may make
+  up to `Ai:DailyCallsPerUser` (60) calls a day on it. Docker doesn't set one.
+- **Your own key:** **AI key** in the header. It's stored encrypted (ASP.NET Core Data Protection, keys in the
+  metadata database) and never shown again; your own key isn't capped.
+- Other settings: `Ai:Model`, `Ai:BaseUrl` (any OpenAI-compatible API), `Ai:TimeoutSeconds`, and the per-user rate
+  limit `RateLimiting:AssistantPermitLimit` per `AssistantWindowSeconds`.
+
+Details: [phase 10](docs/phases/phase-10-ai-assistant.md).
 
 ### Data API with curl
 

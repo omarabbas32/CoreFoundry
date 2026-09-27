@@ -4,14 +4,16 @@ namespace CoreFoundry.Application.Assistant;
 
 public interface IAssistantSessionRepository
 {
-    /// <summary>The session with its messages, or null if it isn't in this project.</summary>
-    Task<AssistantSession?> FindAsync(long projectId, long sessionId, CancellationToken cancellationToken);
+    // Conversations are private: every query is for one user's own conversations in one project.
 
-    /// <summary>The project's open session (Asking or Proposed) with its messages, if any.</summary>
-    Task<AssistantSession?> FindOpenAsync(long projectId, CancellationToken cancellationToken);
+    /// <summary>The user's session with its messages, or null if it isn't theirs or isn't in this project.</summary>
+    Task<AssistantSession?> FindAsync(long projectId, long userId, long sessionId, CancellationToken cancellationToken);
 
-    /// <summary>The project's sessions, newest first, without their messages.</summary>
-    Task<IReadOnlyList<AssistantSession>> ListAsync(long projectId, int take, CancellationToken cancellationToken);
+    /// <summary>The user's open session (Asking or Proposed) in the project, with its messages, if any.</summary>
+    Task<AssistantSession?> FindOpenAsync(long projectId, long userId, CancellationToken cancellationToken);
+
+    /// <summary>The user's sessions in the project, newest first, without their messages.</summary>
+    Task<IReadOnlyList<AssistantSession>> ListAsync(long projectId, long userId, int take, CancellationToken cancellationToken);
 
     void Add(AssistantSession session);
 }

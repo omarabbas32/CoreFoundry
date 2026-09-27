@@ -66,11 +66,12 @@ public sealed class ApiDriver(HttpClient client)
         return await ReadAsync<ProjectDto>(response);
     }
 
+    /// <summary>Makes <paramref name="member"/> a member the only way there is: the admin invites, the member accepts.</summary>
     public async Task AddMemberAsync(long projectId, SignedIn admin, SignedIn member, ProjectRole role)
     {
-        var response = await SendAsync(
-            HttpMethod.Post, $"/api/projects/{projectId}/members", admin, new AddMemberRequest(member.Email, role));
-        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var invitation = await OkAsync<InvitationDto>(HttpMethod.Post, $"/api/projects/{projectId}/invitations", admin,
+            new InviteMemberRequest(member.Email, role), HttpStatusCode.Created);
+        await OkAsync<ProjectDto>(HttpMethod.Post, $"/api/me/invitations/{invitation.Id}/accept", member);
     }
 
     public static async Task<T> ReadAsync<T>(HttpResponseMessage response) =>

@@ -18,6 +18,7 @@ public sealed class MetadataDbContext(DbContextOptions<MetadataDbContext> option
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
+    public DbSet<ProjectInvitation> ProjectInvitations => Set<ProjectInvitation>();
     public DbSet<ProjectTable> ProjectTables => Set<ProjectTable>();
     public DbSet<ProjectColumn> ProjectColumns => Set<ProjectColumn>();
     public DbSet<SchemaMigration> SchemaMigrations => Set<SchemaMigration>();
