@@ -32,7 +32,10 @@ const gap = 2.7;
 const column = (100 - 2 * margin - 3 * gap) / 4;
 const centers = layers.map((_, index) => margin + column / 2 + index * (column + gap));
 const ladleWidth = 11.5;
-const spout = 0.67; // where the stream leaves the ladle, as a share of its width
+const spout = 0.93; // the lip, where the stream leaves the ladle, as a share of its width
+const lipTop = 22; // the lip's height in the ladle, in % (the ladle tips around this point)
+const level = -6; // the ladle's angle while it moves (deg)
+const tipped = 30; // and while it pours
 
 // Timeline, in % of one loop: mold i is poured from pours[i] for 10%, glows, and has cooled 24% later.
 const pours = [4, 22, 40, 58];
@@ -49,9 +52,26 @@ function keyframes(prefix: string, once: boolean) {
     `78% { left: calc(${ladleLeft(3)} + 12cqw); opacity: 0; }`,
     `100% { left: calc(${ladleLeft(3)} + 12cqw); opacity: 0; }`,
   ].join(" ");
+  // Over each mold the ladle tips toward its lip, pours, and levels again before it moves on.
+  const tilt = [
+    `0% { transform: rotate(${level}deg); }`,
+    ...pours.flatMap((p) => [
+      `${p - 0.5}% { transform: rotate(${level}deg); }`,
+      `${p + 1.5}% { transform: rotate(${tipped}deg); }`,
+      `${p + 8.5}% { transform: rotate(${tipped}deg); }`,
+      `${p + 10.5}% { transform: rotate(${level}deg); }`,
+    ]),
+    `100% { transform: rotate(${level}deg); }`,
+  ].join(" ");
+  // The metal only runs while the ladle is tipped.
   const stream = [
     `0% { transform: scaleY(0); }`,
-    ...pours.flatMap((p) => [`${p}% { transform: scaleY(0); }`, `${p + 1}% { transform: scaleY(1); }`, `${p + 9}% { transform: scaleY(1); }`, `${p + 10}% { transform: scaleY(0); }`]),
+    ...pours.flatMap((p) => [
+      `${p + 1}% { transform: scaleY(0); }`,
+      `${p + 2}% { transform: scaleY(1); }`,
+      `${p + 8.5}% { transform: scaleY(1); }`,
+      `${p + 9.5}% { transform: scaleY(0); }`,
+    ]),
     `100% { transform: scaleY(0); }`,
   ].join(" ");
 
@@ -88,6 +108,7 @@ function keyframes(prefix: string, once: boolean) {
   return `
     @keyframes ${prefix}-ladle { ${ladle} }
     @keyframes ${prefix}-stream { ${stream} }
+    @keyframes ${prefix}-tilt { ${tilt} }
     ${perMold}
     @keyframes ${prefix}-answer {
       0%, ${answerAt}% { opacity: 0; transform: translateY(6%); }
@@ -101,6 +122,7 @@ const styles = (prefix: string, once: boolean, seconds: number) => `
   .${prefix} { --run: ${seconds}s ${once ? "1 forwards" : "infinite"}; }
   .${prefix} .cf-ladle { animation: ${prefix}-ladle var(--run) ease-in-out; }
   .${prefix} .cf-stream { animation: ${prefix}-stream var(--run) linear; }
+  .${prefix} .cf-tilt { animation: ${prefix}-tilt var(--run) ease-in-out; }
   .${prefix} .cf-terminal { animation: ${prefix}-answer var(--run) ease-out; }
   ${pours
     .map(
@@ -123,14 +145,15 @@ const base = `
     border-radius: 14px; background: radial-gradient(ellipse at 50% 105%, #3a1c08 0%, #0d1117 62%); color: #e6edf3; isolation: isolate; }
   .cf-bg { position: absolute; inset: 0; padding: 1.5cqw 2cqw; font: 1.2cqw/1.9cqw ui-monospace, "Cascadia Code", Consolas, monospace;
     color: #4493f8; opacity: .11; white-space: pre; overflow: hidden; mask-image: linear-gradient(#000 40%, #0000); }
-  .cf-ladle { position: absolute; top: 3cqw; width: ${ladleWidth}cqw; height: 7.3cqw; z-index: 2; }
-  .cf-bowl { position: absolute; inset: 0; border-radius: .7cqw .7cqw 4cqw 4cqw; transform: rotate(-14deg);
+  .cf-ladle { position: absolute; top: 7.5cqw; width: ${ladleWidth}cqw; height: 7.3cqw; z-index: 2; }
+  .cf-tilt { position: absolute; inset: 0; transform-origin: ${spout * 100}% ${lipTop}%; transform: rotate(${level}deg); }
+  .cf-bowl { position: absolute; inset: 0; border-radius: .7cqw .7cqw 4cqw 4cqw;
     background: linear-gradient(#434a54, #1c2026); border: .2cqw solid #5b636e; }
   .cf-bowl::after { content: ""; position: absolute; left: .9cqw; right: .9cqw; top: .6cqw; height: 1.3cqw; border-radius: 50%;
     background: radial-gradient(#fff6c2, #ffb640 60%, #ff7b39); box-shadow: 0 0 2cqw #ff9d2e; }
   .cf-handle { position: absolute; top: 1.5cqw; left: -7.5cqw; width: 8.5cqw; height: .65cqw; border-radius: .4cqw;
-    background: #5b636e; transform: rotate(-14deg); }
-  .cf-stream { position: absolute; top: 6.8cqw; left: calc(${spout * 100}% - .4cqw); width: .85cqw; height: 15.6cqw; border-radius: .5cqw;
+    background: #5b636e; transform: rotate(-8deg); transform-origin: right center; }
+  .cf-stream { position: absolute; top: ${lipTop}%; left: calc(${spout * 100}% - .4cqw); width: .85cqw; height: 16.2cqw; border-radius: .5cqw;
     transform-origin: top; transform: scaleY(0);
     background: linear-gradient(#fff6c2, #ffb640 35%, #ff7b39); box-shadow: 0 0 1.4cqw #ff9d2e, 0 0 3cqw #ff7b3988; }
   .cf-molds { position: absolute; left: ${margin}cqw; right: ${margin}cqw; top: 25cqw; display: grid;
@@ -196,8 +219,10 @@ export function FoundryScene({ names = castNames(), once = false, className }: {
       </div>
 
       <div className="cf-ladle" aria-hidden>
-        <div className="cf-handle" />
-        <div className="cf-bowl" />
+        <div className="cf-tilt">
+          <div className="cf-handle" />
+          <div className="cf-bowl" />
+        </div>
         <div className="cf-stream" />
       </div>
 
