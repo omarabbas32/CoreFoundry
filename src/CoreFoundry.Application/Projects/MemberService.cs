@@ -9,7 +9,7 @@ namespace CoreFoundry.Application.Projects;
 public sealed record MemberDto(long UserId, string Email, ProjectRole Role, DateTime JoinedAt);
 
 /// <summary>
-/// Project membership. The API's role policies run first; this adds the rules a policy can't express
+/// Project membership (joining is by invitation: <see cref="InvitationService"/>). The API's role policies run first; this adds the rules a policy can't express
 /// (e.g. a Developer may remove only themselves). Invariants such as "exactly one Owner" live in <see cref="Project"/>.
 /// </summary>
 public sealed class MemberService(IProjectRepository projects, IUserRepository users, IUnitOfWork unitOfWork)
@@ -28,23 +28,6 @@ public sealed class MemberService(IProjectRepository projects, IUserRepository u
                 .ThenBy(member => emails.GetValueOrDefault(member.UserId), StringComparer.Ordinal)
                 .Select(member => ToDto(member, emails.GetValueOrDefault(member.UserId) ?? string.Empty)),
         ];
-    }
-
-    /// <summary>Adds an existing account to the project as Admin or Developer.</summary>
-    public async Task<MemberDto> AddAsync(long projectId, string email, ProjectRole role, CancellationToken cancellationToken)
-    {
-        var project = await FindVisibleAsync(projectId, cancellationToken);
-        var user = await users.FindByEmailAsync(NormalizedEmail(email), cancellationToken)
-            ?? throw new NotFoundException("There is no account with this email. Ask them to register first.");
-
-        if (project.FindMember(user.Id) is not null)
-        {
-            throw new ConflictException("This user is already a member of the project.");
-        }
-
-        var member = project.AddMember(user.Id, role);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToDto(member, user.Email);
     }
 
     public async Task<MemberDto> ChangeRoleAsync(long projectId, long userId, ProjectRole role, CancellationToken cancellationToken)
@@ -99,18 +82,6 @@ public sealed class MemberService(IProjectRepository projects, IUserRepository u
     {
         var user = (await users.ListByIdsAsync([userId], cancellationToken)).SingleOrDefault();
         return ToDto(RequireMember(project, userId), user?.Email ?? string.Empty);
-    }
-
-    private static string NormalizedEmail(string email)
-    {
-        try
-        {
-            return User.NormalizeEmail(email);
-        }
-        catch (DomainException ex)
-        {
-            throw new ValidationFailedException("email", ex.Message);
-        }
     }
 
     private static MemberDto ToDto(ProjectMember member, string email) =>

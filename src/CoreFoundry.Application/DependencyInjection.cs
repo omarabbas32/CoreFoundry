@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<DataService>();
         services.AddScoped<ExportService>();
         services.AddScoped<DraftSchemaWriter>();
+        services.AddScoped<InvitationService>();
         services.AddScoped<AssistantService>();
         services.AddScoped<AiKeyService>();
         services.AddScoped<TemplateService>();

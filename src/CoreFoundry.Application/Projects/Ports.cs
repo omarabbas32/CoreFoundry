@@ -22,6 +22,24 @@ public interface IProjectRepository
     void Remove(Project project);
 }
 
+/// <summary>Pending invitations to join projects (see <see cref="InvitationService"/>).</summary>
+public interface IInvitationRepository
+{
+    Task<ProjectInvitation?> FindAsync(long invitationId, CancellationToken cancellationToken);
+
+    Task<bool> ExistsAsync(long projectId, long userId, CancellationToken cancellationToken);
+
+    /// <summary>The project's pending invitations, oldest first.</summary>
+    Task<IReadOnlyList<ProjectInvitation>> ListForProjectAsync(long projectId, CancellationToken cancellationToken);
+
+    /// <summary>The user's pending invitations with their projects, newest first; projects being deleted are left out.</summary>
+    Task<IReadOnlyList<(ProjectInvitation Invitation, Project Project)>> ListForUserAsync(long userId, CancellationToken cancellationToken);
+
+    void Add(ProjectInvitation invitation);
+
+    void Remove(ProjectInvitation invitation);
+}
+
 /// <summary>Creates and drops a project's physical database (<c>cf_p_{Id}</c>). Both operations are idempotent.</summary>
 public interface IProjectDatabaseProvisioner
 {

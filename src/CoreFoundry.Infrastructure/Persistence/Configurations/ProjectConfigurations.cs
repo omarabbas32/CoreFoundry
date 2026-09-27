@@ -34,6 +34,36 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
     }
 }
 
+internal sealed class ProjectInvitationConfiguration : IEntityTypeConfiguration<ProjectInvitation>
+{
+    public void Configure(EntityTypeBuilder<ProjectInvitation> builder)
+    {
+        builder.ToTable("ProjectInvitations");
+        builder.HasKey(invitation => invitation.Id);
+
+        // One pending invitation per user and project; also catches two admins inviting at once.
+        builder.HasIndex(invitation => new { invitation.ProjectId, invitation.UserId }).IsUnique();
+        // Index for "my invitations" (the notifications).
+        builder.HasIndex(invitation => invitation.UserId);
+
+        builder.HasOne<Project>()
+            .WithMany()
+            .HasForeignKey(invitation => invitation.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(invitation => invitation.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The invitation stays valid if whoever sent it deletes their account.
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(invitation => invitation.InvitedBy)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
 internal sealed class ProjectMemberConfiguration : IEntityTypeConfiguration<ProjectMember>
 {
     public void Configure(EntityTypeBuilder<ProjectMember> builder)
