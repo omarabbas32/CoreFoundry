@@ -85,7 +85,21 @@ export default function ApiPage() {
             id={`tab-${item.id}`}
             aria-selected={tab === item.id}
             aria-controls={`panel-${item.id}`}
+            tabIndex={tab === item.id ? 0 : -1}
             onClick={() => show(item.id)}
+            onKeyDown={(event) => {
+              const index = tabs.findIndex((candidate) => candidate.id === tab);
+              const next =
+                event.key === "ArrowRight" ? (index + 1) % tabs.length
+                : event.key === "ArrowLeft" ? (index - 1 + tabs.length) % tabs.length
+                : event.key === "Home" ? 0
+                : event.key === "End" ? tabs.length - 1
+                : null;
+              if (next === null) return;
+              event.preventDefault();
+              show(tabs[next].id);
+              document.getElementById(`tab-${tabs[next].id}`)?.focus();
+            }}
             className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors ${
               tab === item.id ? "border-accent font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"
             }`}

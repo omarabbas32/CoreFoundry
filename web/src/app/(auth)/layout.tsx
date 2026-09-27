@@ -27,9 +27,9 @@ function RedirectIfSignedIn({ children }: { children: React.ReactNode }) {
         <section className="hidden gap-5 lg:grid" aria-labelledby="hero-title">
           <Logo size={40} className="text-xl" />
           <div className="grid gap-2">
-            <h1 id="hero-title" className="text-3xl font-semibold tracking-tight">
+            <h2 id="hero-title" className="text-3xl font-semibold tracking-tight">
               Design your database. Cast your backend.
-            </h1>
+            </h2>
             <p className="max-w-xl text-muted">
               Design tables in the browser or with the AI assistant, apply them to MySQL safely, and export a C# Clean
               Architecture API: Domain, Application, Infrastructure and controllers, ready to run.

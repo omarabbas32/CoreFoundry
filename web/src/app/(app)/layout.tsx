@@ -23,8 +23,16 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
 
   return (
     <>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-accent-solid focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-on-accent"
+      >
+        Skip to content
+      </a>
       <AppHeader />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 focus:outline-none">
+        {children}
+      </main>
     </>
   );
 }

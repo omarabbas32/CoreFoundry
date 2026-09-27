@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { FoundryScene } from "@/components/foundry-scene";
+import { PageTitle } from "@/components/page-title";
 import { RoleBadge, StatusBadge } from "@/components/project-badges";
 import { Alert, Badge, Button, Card, Input } from "@/components/ui";
 import { useProjects, useRetryProvisioning } from "@/lib/queries";
@@ -22,6 +23,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="grid gap-6">
+      <PageTitle title="Projects · CoreFoundry" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>

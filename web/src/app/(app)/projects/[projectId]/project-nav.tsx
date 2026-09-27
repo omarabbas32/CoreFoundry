@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { PageTitle } from "@/components/page-title";
 import { RoleBadge, StatusBadge } from "@/components/project-badges";
 import type { Project } from "@/lib/types";
 
@@ -52,9 +53,11 @@ export function ProjectNav({ project }: { project: Project }) {
   const base = `/projects/${project.id}`;
   const pathname = usePathname();
   const rest = pathname.startsWith(base) ? pathname.slice(base.length).replace(/\/$/, "") : "";
+  const section = groups.flatMap((group) => group.items).find((item) => item.matches(rest))?.label ?? "Overview";
 
   return (
     <aside className="grid content-start gap-4 md:sticky md:top-6 md:self-start" data-testid="project-nav">
+      <PageTitle title={`${section} · ${project.name} · CoreFoundry`} />
       <div className="grid gap-2">
         <Link href="/projects" className="text-sm text-muted hover:text-foreground">
           ← All projects

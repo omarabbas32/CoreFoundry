@@ -109,10 +109,15 @@ export function ColumnsGrid({
                     </Button>
                   ) : (
                     <>
-                      <Button variant="secondary" className="h-9 flex-1" onClick={() => onEdit(column)}>
+                      <Button variant="secondary" className="h-9 flex-1" aria-label={`Edit ${column.name}`} onClick={() => onEdit(column)}>
                         Edit
                       </Button>
-                      <Button variant="secondary" className="h-9 flex-1 hover:text-danger" onClick={() => onDelete(column)}>
+                      <Button
+                        variant="secondary"
+                        className="h-9 flex-1 hover:text-danger"
+                        aria-label={`Delete ${column.name}`}
+                        onClick={() => onDelete(column)}
+                      >
                         Delete
                       </Button>
                     </>
@@ -248,7 +253,7 @@ function SortableRow({
             </Button>
           ) : (
             <>
-              <Button variant="ghost" className="h-7 px-2.5 text-xs" onClick={() => onEdit(column)}>
+              <Button variant="ghost" className="h-7 px-2.5 text-xs" aria-label={`Edit ${column.name}`} onClick={() => onEdit(column)}>
                 Edit
               </Button>
               <Button
