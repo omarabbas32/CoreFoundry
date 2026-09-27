@@ -266,8 +266,10 @@ It uses [Groq](https://console.groq.com) (an OpenAI-compatible API; model `opena
   up to `Ai:DailyCallsPerUser` (60) calls a day on it. Docker doesn't set one.
 - **Your own key:** **AI key** in the header. It's stored encrypted (ASP.NET Core Data Protection, keys in the
   metadata database) and never shown again; your own key isn't capped.
-- Other settings: `Ai:Model`, `Ai:BaseUrl` (any OpenAI-compatible API), `Ai:TimeoutSeconds`, and the per-user rate
-  limit `RateLimiting:AssistantPermitLimit` per `AssistantWindowSeconds`.
+- Other settings: `Ai:Model`, `Ai:BaseUrl` (any OpenAI-compatible API), `Ai:TimeoutSeconds`,
+  `Ai:MaxCompletionTokens` (32768; a reasoning model's thinking counts too), `Ai:ReasoningEffort` (`low`; empty for
+  models without reasoning), and the per-user rate limit `RateLimiting:AssistantPermitLimit` per
+  `AssistantWindowSeconds`.
 
 Details: [phase 10](docs/phases/phase-10-ai-assistant.md).
 
