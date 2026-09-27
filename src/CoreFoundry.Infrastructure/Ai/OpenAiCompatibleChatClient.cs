@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CoreFoundry.Application.Assistant;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace CoreFoundry.Infrastructure.Ai;
@@ -14,7 +15,8 @@ namespace CoreFoundry.Infrastructure.Ai;
 /// refuses that format (400) is asked once more in JSON mode with the schema in the prompt; the assistant checks the
 /// shape either way. The key is sent as a bearer token and never logged or put in an error message.
 /// </summary>
-public sealed class OpenAiCompatibleChatClient(HttpClient http, IOptions<AiOptions> options) : IAiChatClient
+public sealed partial class OpenAiCompatibleChatClient(HttpClient http, IOptions<AiOptions> options, ILogger<OpenAiCompatibleChatClient> logger)
+    : IAiChatClient
 {
     public async Task<string> CompleteAsync(AiChatRequest request, CancellationToken cancellationToken)
     {
@@ -27,14 +29,63 @@ public sealed class OpenAiCompatibleChatClient(HttpClient http, IOptions<AiOptio
         }
 
         var (status, text) = await SendAsync(settings, key, Body(settings.Model, request, strictSchema: true), cancellationToken);
+        string? refusal = null;
         if (status == HttpStatusCode.BadRequest && RefusedSchemaFormat(ProviderError(text)))
         {
+            refusal = ProviderError(text);
+            LogSchemaRefused(logger, settings.Model, refusal);
             (status, text) = await SendAsync(settings, key, Body(settings.Model, request, strictSchema: false), cancellationToken);
         }
 
-        return status == HttpStatusCode.OK
-            ? Content(text)
-            : throw Failed(status, request.ApiKey is not null, ProviderError(text));
+        if (status == HttpStatusCode.OK)
+        {
+            return Content(text);
+        }
+
+        // The model wrote something that isn't the JSON asked for. That's the model's mistake, not the request's:
+        // hand its attempt to the caller, whose repair loop tells the model what's wrong and asks again.
+        if (status == HttpStatusCode.BadRequest && FailedGeneration(text) is { } attempt)
+        {
+            LogGenerationFailed(logger, settings.Model, ProviderError(text));
+            return attempt;
+        }
+
+        LogRequestFailed(logger, settings.Model, (int)status, ProviderError(text));
+        var detail = ProviderError(text);
+        throw Failed(status, request.ApiKey is not null, refusal is null ? detail : $"{detail} (after refusing the strict schema: {refusal})");
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Model} refused the strict JSON schema ({Error}); asking again in JSON mode.")]
+    private static partial void LogSchemaRefused(ILogger logger, string model, string? error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Model} produced JSON that didn't validate ({Error}); returning it for repair.")]
+    private static partial void LogGenerationFailed(ILogger logger, string model, string? error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Model} request failed with {Status}: {Error}")]
+    private static partial void LogRequestFailed(ILogger logger, string model, int status, string? error);
+
+    /// <summary>
+    /// What the model generated when the provider couldn't validate it as JSON (Groq's <c>failed_generation</c>), or
+    /// null. Never empty: an empty attempt is nothing to repair.
+    /// </summary>
+    private static string? FailedGeneration(string text)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.Object
+                && error.TryGetProperty("failed_generation", out var generation)
+                && generation.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(generation.GetString())
+                    ? generation.GetString()
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private async Task<(HttpStatusCode Status, string Text)> SendAsync(

@@ -123,7 +123,9 @@ public static class AssistantPrompt
     {
         static object Nullable(string type) => new { type = new[] { type, "null" } };
         static object Enum(IEnumerable<string> values) => new { type = "string", @enum = values.ToArray() };
-        static object NullableEnum(IEnumerable<string> values) => new { type = new[] { "string", "null" }, @enum = values.Cast<string?>().Append(null).ToArray() };
+        // An optional choice as strict structured output documents it: one of the values, or null.
+        static object NullableEnum(IEnumerable<string> values) =>
+            new { anyOf = new object[] { new { type = "string", @enum = values.ToArray() }, new { type = "null" } } };
 
         var column = new
         {

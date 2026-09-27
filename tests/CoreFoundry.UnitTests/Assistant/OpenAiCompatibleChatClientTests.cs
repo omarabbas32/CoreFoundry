@@ -4,6 +4,7 @@ using System.Text.Json;
 using CoreFoundry.Application.Assistant;
 using CoreFoundry.Domain.Schema;
 using CoreFoundry.Infrastructure.Ai;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Shouldly;
 
@@ -114,6 +115,43 @@ public class OpenAiCompatibleChatClientTests
     }
 
     [Fact]
+    public async Task A_generation_the_provider_could_not_validate_is_returned_for_the_repair_loop()
+    {
+        var handler = new FakeHandler(HttpStatusCode.BadRequest,
+            """{"error":{"message":"Failed to generate JSON. Please adjust your prompt.","code":"json_validate_failed","failed_generation":"{\"kind\":\"question\",\"question\":\"Who?\"}"}}""");
+
+        var content = await Client(handler, "k").CompleteAsync(Request, Ct);
+
+        content.ShouldBe("""{"kind":"question","question":"Who?"}""");
+    }
+
+    [Fact]
+    public async Task When_json_mode_fails_too_the_error_names_both_the_failure_and_the_schema_refusal()
+    {
+        var handler = new FakeHandler(
+            (HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"invalid json_schema: enum not allowed here\"}}"),
+            (HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"Something else went wrong\"}}"));
+
+        var failure = await Should.ThrowAsync<AiProviderException>(() => Client(handler, "k").CompleteAsync(Request, Ct));
+
+        failure.Message.ShouldContain("Something else went wrong");
+        failure.Message.ShouldContain("invalid json_schema: enum not allowed here");
+    }
+
+    [Fact]
+    public void Optional_choices_in_the_reply_schema_use_anyOf_as_strict_mode_documents()
+    {
+        using var schema = JsonDocument.Parse(AssistantPrompt.ReplySchema);
+        var onDelete = schema.RootElement.GetProperty("properties").GetProperty("newTables").GetProperty("items")
+            .GetProperty("properties").GetProperty("columns").GetProperty("items").GetProperty("properties").GetProperty("onDelete");
+
+        var options = onDelete.GetProperty("anyOf");
+        options[0].GetProperty("enum").GetArrayLength().ShouldBe(3);
+        options[1].GetProperty("type").GetString().ShouldBe("null");
+        onDelete.TryGetProperty("enum", out _).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Other_bad_requests_are_not_retried()
     {
         var handler = new FakeHandler(HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"The model `nope` does not exist\"}}");
@@ -128,7 +166,8 @@ public class OpenAiCompatibleChatClientTests
     public async Task A_timeout_is_unavailable()
     {
         var handler = new FakeHandler(HttpStatusCode.OK, Completion("{}")) { Delay = TimeSpan.FromSeconds(5) };
-        var client = new OpenAiCompatibleChatClient(new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(50) }, Options.Create(new AiOptions { ApiKey = "k" }));
+        var client = new OpenAiCompatibleChatClient(
+            new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(50) }, Options.Create(new AiOptions { ApiKey = "k" }), NullLogger<OpenAiCompatibleChatClient>.Instance);
 
         (await Should.ThrowAsync<AiProviderException>(() => client.CompleteAsync(Request, Ct))).Failure.ShouldBe(AiFailure.Unavailable);
     }
@@ -147,7 +186,7 @@ public class OpenAiCompatibleChatClientTests
     }
 
     private static OpenAiCompatibleChatClient Client(FakeHandler handler, string? defaultKey) =>
-        new(new HttpClient(handler), Options.Create(new AiOptions { ApiKey = defaultKey }));
+        new(new HttpClient(handler), Options.Create(new AiOptions { ApiKey = defaultKey }), NullLogger<OpenAiCompatibleChatClient>.Instance);
 
     private static string Completion(string content) =>
         JsonSerializer.Serialize(new { choices = new[] { new { message = new { role = "assistant", content } } } });
