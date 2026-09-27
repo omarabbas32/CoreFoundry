@@ -45,8 +45,8 @@ cp .env.example .env      # then change every password and the signing key
 docker compose up --build
 ```
 
-To use the AI assistant with a shared key, set `AI_API_KEY` in `.env` to a [Groq](https://console.groq.com) key
-(`gsk_...`); without it, each user adds their own key in the app.
+In Docker the AI assistant has no shared key: each user adds their own [Groq](https://console.groq.com) key in the
+app (**AI key** in the header).
 
 Open http://localhost:3100 (change `WEB_PORT` in `.env` if that port is taken). The first start builds the images
 and creates the database: MySQL 8.4, the `corefoundry` metadata database and the two least-privilege accounts
@@ -262,8 +262,8 @@ Each member's conversations are their own, and are saved, so you can leave and r
 
 It uses [Groq](https://console.groq.com) (an OpenAI-compatible API; model `openai/gpt-oss-120b` by default):
 
-- **Server key** (optional): `Ai:ApiKey` in user-secrets (see step 2 above) or `AI_API_KEY` for Docker. Each user
-  may make up to `Ai:DailyCallsPerUser` (60) calls a day on it.
+- **Server key** (optional, local runs only): `Ai:ApiKey` in user-secrets (see step 2 above). Each user may make
+  up to `Ai:DailyCallsPerUser` (60) calls a day on it. Docker doesn't set one.
 - **Your own key:** **AI key** in the header. It's stored encrypted (ASP.NET Core Data Protection, keys in the
   metadata database) and never shown again; your own key isn't capped.
 - Other settings: `Ai:Model`, `Ai:BaseUrl` (any OpenAI-compatible API), `Ai:TimeoutSeconds`, and the per-user rate
