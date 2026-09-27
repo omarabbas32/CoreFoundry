@@ -6,10 +6,18 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { RoleBadge } from "@/components/project-badges";
-import { Alert, Button, Card, ConfirmDialog, Field, Input, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, ConfirmDialog, Field, Input, Select } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAddMember, useChangeMemberRole, useMembers, useRemoveMember, useTransferOwnership } from "@/lib/queries";
+import {
+  useCancelInvitation,
+  useChangeMemberRole,
+  useInviteMember,
+  useMembers,
+  useProjectInvitations,
+  useRemoveMember,
+  useTransferOwnership,
+} from "@/lib/queries";
 import { atLeast, type Member, type Project, type ProjectRole } from "@/lib/types";
 
 type PendingAction = { kind: "remove" | "leave" | "transfer"; member: Member } | null;
@@ -109,7 +117,8 @@ export function MembersSection({ project }: { project: Project }) {
         })}
       </ul>
 
-      {canManage && <AddMemberForm projectId={project.id} />}
+      <PendingInvitations projectId={project.id} canManage={canManage} />
+      {canManage && <InviteForm projectId={project.id} />}
 
       <ConfirmDialog
         open={pending?.kind === "remove"}
@@ -130,7 +139,7 @@ export function MembersSection({ project }: { project: Project }) {
       <ConfirmDialog
         open={pending?.kind === "leave"}
         title={`Leave ${project.name}?`}
-        description="You lose access right away. An admin has to add you again to come back."
+        description="You lose access right away. An admin has to invite you again to come back."
         confirmLabel="Leave project"
         danger
         pending={remove.isPending}
@@ -162,8 +171,45 @@ const addSchema = z.object({
   role: z.enum(["Admin", "Developer"]),
 });
 
-function AddMemberForm({ projectId }: { projectId: number }) {
-  const add = useAddMember(projectId);
+/** Invitations nobody has answered yet; admins can take one back. */
+function PendingInvitations({ projectId, canManage }: { projectId: number; canManage: boolean }) {
+  const invitations = useProjectInvitations(projectId);
+  const cancel = useCancelInvitation(projectId);
+  if (!invitations.data || invitations.data.length === 0) return null;
+
+  return (
+    <div className="grid gap-2 border-t border-border pt-4" data-testid="pending-invitations">
+      <h3 className="text-sm font-semibold">Waiting for an answer</h3>
+      {cancel.error && <Alert>{cancel.error.message}</Alert>}
+      <ul className="grid gap-2">
+        {invitations.data.map((invitation) => (
+          <li key={invitation.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span className="min-w-0 flex-1 truncate">{invitation.email}</span>
+            <Badge tone="warn">Invited · {invitation.role}</Badge>
+            <span className="text-xs text-muted">
+              {new Date(invitation.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" })}
+            </span>
+            {canManage && (
+              <Button
+                variant="ghost"
+                className="h-8"
+                loading={cancel.isPending && cancel.variables === invitation.id}
+                aria-label={`Cancel the invitation for ${invitation.email}`}
+                onClick={() => cancel.mutate(invitation.id)}
+              >
+                Cancel
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function InviteForm({ projectId }: { projectId: number }) {
+  const add = useInviteMember(projectId);
+  const [sent, setSent] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -177,10 +223,11 @@ function AddMemberForm({ projectId }: { projectId: number }) {
 
   const submit = handleSubmit(async (values) => {
     try {
-      await add.mutateAsync(values);
+      const invitation = await add.mutateAsync(values);
+      setSent(invitation.email);
       reset();
     } catch (error) {
-      // 404 (no account) and 409 (already a member) are about the email the user typed.
+      // 404 (no account) and 409 (already a member or already invited) are about the email the user typed.
       if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
         setError("email", { message: error.message });
       }
@@ -191,7 +238,13 @@ function AddMemberForm({ projectId }: { projectId: number }) {
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-3 border-t border-border pt-4">
-      <h3 className="text-sm font-semibold">Add a member</h3>
+      <h3 className="text-sm font-semibold">Invite a member</h3>
+      {sent && (
+        <p role="status" className="rounded-md bg-ok-soft px-3 py-2 text-sm text-ok">
+          Invitation sent to <span className="font-medium">{sent}</span>. They join once they accept it from their
+          notifications.
+        </p>
+      )}
       {otherError && <Alert>{otherError}</Alert>}
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-56 flex-1">
@@ -214,11 +267,11 @@ function AddMemberForm({ projectId }: { projectId: number }) {
         <div className="grid gap-1.5">
           <span aria-hidden className="text-sm">&nbsp;</span>
           <Button type="submit" loading={add.isPending}>
-            Add member
+            Send invitation
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted">They need a CoreFoundry account first.</p>
+      <p className="text-xs text-muted">They need a CoreFoundry account first, and join when they accept.</p>
     </form>
   );
 }

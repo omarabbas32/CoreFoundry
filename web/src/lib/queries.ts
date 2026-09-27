@@ -8,6 +8,7 @@ import type {
   AssistantSession,
   AssistantSessionSummary,
   ConfirmedProposal,
+  Invitation,
   ApplyResult,
   ColumnInput,
   DataPage,
@@ -43,6 +44,9 @@ export const queryKeys = {
   assistantSessions: (projectId: number) => ["projects", projectId, "assistant"] as const,
   assistantSession: (projectId: number, id: number) => ["projects", projectId, "assistant", id] as const,
   aiKey: ["me", "ai-key"] as const,
+  myInvitations: ["me", "invitations"] as const,
+  // Under the project, so member changes (which invalidate the project) refresh them too.
+  projectInvitations: (projectId: number) => ["projects", projectId, "invitations"] as const,
   data: (projectId: number) => ["projects", projectId, "data"] as const,
   rows: (projectId: number, table: string, page: number, pageSize: number, sort: string, search: string) =>
     ["projects", projectId, "data", table, "rows", page, pageSize, sort, search] as const,
@@ -106,12 +110,56 @@ export function useRetryProvisioning() {
   });
 }
 
-export function useAddMember(projectId: number) {
+/** Who has been invited to the project and hasn't answered yet. */
+export function useProjectInvitations(projectId: number) {
+  return useQuery({
+    queryKey: queryKeys.projectInvitations(projectId),
+    queryFn: () => api<Invitation[]>(`/api/projects/${projectId}/invitations`),
+  });
+}
+
+/** Invites an existing account; they become a member only when they accept. */
+export function useInviteMember(projectId: number) {
   const invalidate = useInvalidateProjects();
   return useMutation({
     mutationFn: (input: { email: string; role: ProjectRole }) =>
-      api<Member>(`/api/projects/${projectId}/members`, { method: "POST", body: input }),
+      api<Invitation>(`/api/projects/${projectId}/invitations`, { method: "POST", body: input }),
     onSuccess: invalidate,
+  });
+}
+
+export function useCancelInvitation(projectId: number) {
+  const invalidate = useInvalidateProjects();
+  return useMutation({
+    mutationFn: (invitationId: number) => api<void>(`/api/projects/${projectId}/invitations/${invitationId}`, { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * The signed-in user's invitations: their notifications. Checked every 30 seconds and whenever the tab is back in
+ * focus, so a new invitation shows up without a reload.
+ */
+export function useMyInvitations() {
+  return useQuery({
+    queryKey: queryKeys.myInvitations,
+    queryFn: () => api<Invitation[]>("/api/me/invitations"),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Accepts (joins the project) or declines an invitation; the notifications and the projects list refresh. */
+export function useAnswerInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invitation, accept }: { invitation: Invitation; accept: boolean }) =>
+      api<Project | undefined>(`/api/me/invitations/${invitation.id}/${accept ? "accept" : "decline"}`, { method: "POST" }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.myInvitations }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projects }),
+      ]),
   });
 }
 

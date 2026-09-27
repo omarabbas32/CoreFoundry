@@ -24,6 +24,19 @@ export type Project = {
 
 export type Member = { userId: number; email: string; role: ProjectRole; joinedAt: string };
 
+/** A pending invitation to join a project: the invitee accepts or declines it from their notifications. */
+export type Invitation = {
+  id: number;
+  projectId: number;
+  projectName: string;
+  /** The invited user's email. */
+  email: string;
+  role: ProjectRole;
+  /** Who sent it, or null if that account is gone. */
+  invitedByEmail: string | null;
+  createdAt: string;
+};
+
 const rank: Record<ProjectRole, number> = { Owner: 3, Admin: 2, Developer: 1 };
 
 /** Mirrors the API's ProjectRole.AtLeast: the UI hides what the API would refuse anyway. */
