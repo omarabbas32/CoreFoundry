@@ -35,6 +35,19 @@ public class ProjectServiceTests
     }
 
     [Fact]
+    public async Task A_name_used_by_more_than_50_projects_gets_a_random_suffix_instead_of_failing()
+    {
+        for (var i = 1; i <= 50; i++)
+        {
+            await _projects.Service.CreateAsync(Owner, "Shop", Ct);
+        }
+
+        var slug = (await _projects.Service.CreateAsync(Owner, "Shop", Ct)).Slug;
+
+        slug.ShouldMatch("^shop-[0-9a-f]{6}$");
+    }
+
+    [Fact]
     public async Task Create_keeps_the_project_as_failed_when_the_database_cannot_be_created()
     {
         _projects.Provisioner.FailCreate = true;

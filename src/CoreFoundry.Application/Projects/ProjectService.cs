@@ -18,6 +18,7 @@ public sealed partial class ProjectService(
     ILogger<ProjectService> logger)
 {
     private const int MaxSlugAttempts = 50;
+    private const int MaxRandomSlugAttempts = 5;
 
     public async Task<IReadOnlyList<ProjectDto>> ListForUserAsync(long userId, CancellationToken cancellationToken) =>
         [.. (await projects.ListForMemberAsync(userId, cancellationToken))
@@ -152,11 +153,24 @@ public sealed partial class ProjectService(
         await projects.GetMemberRoleAsync(projectId, userId, cancellationToken)
         ?? throw new NotFoundException("Project not found.");
 
+    /// <summary>
+    /// "shop", then "shop-2", "shop-3"… and, once those are all taken, "shop-" plus 6 random hex digits, so a popular
+    /// name never blocks creating a project. The random suffix fits the room <see cref="Project.SlugBaseMaxLength"/> leaves.
+    /// </summary>
     private async Task<string> AvailableSlugAsync(string baseSlug, CancellationToken cancellationToken)
     {
         for (var attempt = 1; attempt <= MaxSlugAttempts; attempt++)
         {
             var candidate = Project.SlugCandidate(baseSlug, attempt);
+            if (!await projects.SlugExistsAsync(candidate, cancellationToken))
+            {
+                return candidate;
+            }
+        }
+
+        for (var attempt = 0; attempt < MaxRandomSlugAttempts; attempt++)
+        {
+            var candidate = $"{baseSlug}-{Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(3))}";
             if (!await projects.SlugExistsAsync(candidate, cancellationToken))
             {
                 return candidate;
