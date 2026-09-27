@@ -28,13 +28,13 @@ public sealed partial class OpenAiCompatibleChatClient(HttpClient http, IOptions
             throw new AiProviderException(AiFailure.NotConfigured, "The AI assistant isn't set up: add your own Groq key, or ask the administrator to set a default one.");
         }
 
-        var (status, text) = await SendAsync(settings, key, Body(settings.Model, request, strictSchema: true), cancellationToken);
+        var (status, text) = await SendAsync(settings, key, Body(settings, request, strictSchema: true), cancellationToken);
         string? refusal = null;
         if (status == HttpStatusCode.BadRequest && RefusedSchemaFormat(ProviderError(text)))
         {
             refusal = ProviderError(text);
             LogSchemaRefused(logger, settings.Model, refusal);
-            (status, text) = await SendAsync(settings, key, Body(settings.Model, request, strictSchema: false), cancellationToken);
+            (status, text) = await SendAsync(settings, key, Body(settings, request, strictSchema: false), cancellationToken);
         }
 
         if (status == HttpStatusCode.OK)
@@ -44,7 +44,8 @@ public sealed partial class OpenAiCompatibleChatClient(HttpClient http, IOptions
 
         // The model wrote something that isn't the JSON asked for. That's the model's mistake, not the request's:
         // hand its attempt to the caller, whose repair loop tells the model what's wrong and asks again.
-        if (status == HttpStatusCode.BadRequest && FailedGeneration(text) is { } attempt)
+        // A cut-off answer can't be repaired (asking again hits the same limit), so it isn't handed back.
+        if (status == HttpStatusCode.BadRequest && !Truncated(ProviderError(text)) && FailedGeneration(text) is { } attempt)
         {
             LogGenerationFailed(logger, settings.Model, ProviderError(text));
             return attempt;
@@ -117,7 +118,7 @@ public sealed partial class OpenAiCompatibleChatClient(HttpClient http, IOptions
     /// True: <c>json_schema</c> with <c>strict</c>. False: <c>json_object</c> mode, with the schema appended to the
     /// system message so the model still knows the shape.
     /// </param>
-    private static JsonObject Body(string model, AiChatRequest request, bool strictSchema)
+    private static JsonObject Body(AiOptions settings, AiChatRequest request, bool strictSchema)
     {
         var messages = request.Messages.Select((message, index) => (JsonNode)new JsonObject
         {
@@ -133,10 +134,11 @@ public sealed partial class OpenAiCompatibleChatClient(HttpClient http, IOptions
                 : message.Content,
         });
 
-        return new JsonObject
+        var body = new JsonObject
         {
-            ["model"] = model,
+            ["model"] = settings.Model,
             ["temperature"] = 0.2,
+            ["max_completion_tokens"] = settings.MaxCompletionTokens,
             ["messages"] = new JsonArray([.. messages]),
             ["response_format"] = strictSchema
                 ? new JsonObject
@@ -151,6 +153,13 @@ public sealed partial class OpenAiCompatibleChatClient(HttpClient http, IOptions
                 }
                 : new JsonObject { ["type"] = "json_object" },
         };
+
+        if (!string.IsNullOrEmpty(settings.ReasoningEffort))
+        {
+            body["reasoning_effort"] = settings.ReasoningEffort;
+        }
+
+        return body;
     }
 
     /// <summary>True when a 400 is about the structured-output format (the model doesn't support it), not the request.</summary>
@@ -183,9 +192,19 @@ public sealed partial class OpenAiCompatibleChatClient(HttpClient http, IOptions
             AiFailure.KeyRejected,
             ownKey ? "Groq rejected your key. Check it, or remove it to use CoreFoundry's key." : "Groq rejected the server's key. Ask the administrator to check it."),
         HttpStatusCode.TooManyRequests => new(AiFailure.RateLimited, "The AI is busy or the key's limit is reached. Wait a moment and try again."),
+        HttpStatusCode.BadRequest when Truncated(detail) => new(
+            AiFailure.BadResponse,
+            "The AI's answer was too long and was cut off. Try again with a smaller goal, or raise Ai:MaxCompletionTokens (or lower Ai:ReasoningEffort)."),
         >= HttpStatusCode.InternalServerError => new(AiFailure.Unavailable, "The AI service is unavailable right now. Try again."),
         _ => new(AiFailure.Unavailable, $"The AI service refused the request ({(int)status}){(detail is null ? "." : $": {detail}")}"),
     };
+
+    /// <summary>True when the provider stopped the answer at its token limit (Groq: "max completion tokens reached").</summary>
+    private static bool Truncated(string? detail) =>
+        detail is not null
+        && (detail.Contains("max completion tokens", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("max_completion_tokens", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("truncated", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The provider's own error message, if it sent one (it never contains the key).</summary>
     private static string? ProviderError(string text)

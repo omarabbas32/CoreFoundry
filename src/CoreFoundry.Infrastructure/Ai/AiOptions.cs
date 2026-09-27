@@ -25,6 +25,20 @@ public sealed class AiOptions
     [Range(5, 300)]
     public int TimeoutSeconds { get; set; } = 90;
 
+    /// <summary>
+    /// The most tokens an answer may use (<c>max_completion_tokens</c>). A reasoning model's thinking counts too, so this
+    /// is generous: too low and the answer is cut off before its JSON is complete.
+    /// </summary>
+    [Range(1024, 131_072)]
+    public int MaxCompletionTokens { get; set; } = 32_768;
+
+    /// <summary>
+    /// <c>reasoning_effort</c> for reasoning models (gpt-oss: <c>low</c>, <c>medium</c>, <c>high</c>). Low keeps answers
+    /// fast and leaves the token budget for the JSON. Empty: not sent (models without reasoning reject it).
+    /// </summary>
+    [RegularExpression("^(low|medium|high)?$")]
+    public string? ReasoningEffort { get; set; } = "low";
+
     /// <summary>AI calls a user may make per UTC day on the default key. Users' own keys aren't capped here.</summary>
     [Range(1, 10_000)]
     public int DailyCallsPerUser { get; set; } = 60;
