@@ -5,6 +5,7 @@ using CoreFoundry.Api.Authorization;
 using CoreFoundry.Api.Errors;
 using CoreFoundry.Api.Projects;
 using CoreFoundry.Application;
+using CoreFoundry.Application.Demo;
 using CoreFoundry.Infrastructure;
 using CoreFoundry.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -64,6 +65,18 @@ var app = builder.Build();
 if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 {
     await app.Services.MigrateMetadataDatabaseAsync();
+}
+
+// `dotnet run -- seed` (or `docker compose exec api dotnet CoreFoundry.Api.dll seed`): add the demo data and exit.
+if (args is ["seed"])
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var result = await scope.ServiceProvider.GetRequiredService<DemoSeeder>().SeedAsync(CancellationToken.None);
+    Console.WriteLine(result.Seeded
+        ? $"Demo data added: project \"{DemoSeeder.ProjectName}\" (id {result.ProjectId}) with {result.SampleRows} sample rows. " +
+          $"Sign in as {DemoSeeder.OwnerEmail} or {DemoSeeder.DeveloperEmail}, password {DemoSeeder.Password}."
+        : $"Nothing to do: {DemoSeeder.OwnerEmail} already exists.");
+    return;
 }
 
 app.UseForwardedHeaders();

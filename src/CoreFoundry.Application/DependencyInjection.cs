@@ -1,6 +1,7 @@
 using CoreFoundry.Application.Assistant;
 using CoreFoundry.Application.Auth;
 using CoreFoundry.Application.Data;
+using CoreFoundry.Application.Demo;
 using CoreFoundry.Application.Export;
 using CoreFoundry.Application.Projects;
 using CoreFoundry.Application.Schema;
@@ -28,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<AiKeyService>();
         services.AddScoped<TemplateService>();
         services.AddScoped<SampleDataService>();
+        services.AddScoped<DemoSeeder>();
         return services;
     }
 }
