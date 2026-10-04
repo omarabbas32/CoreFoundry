@@ -24,11 +24,12 @@ from the README, can run it with one command, and can try a live demo.
 
 ## 2. Demo data
 
-- [ ] `seed` command (`dotnet run --project src/CoreFoundry.Api -- seed`) that creates:
-  - `demo@corefoundry.dev` (Owner) and `dev@corefoundry.dev` (Developer)
-  - project **Bookshop** with `authors` and `books` applied and ~50 rows
+- [x] `seed` command (`dotnet run --project src/CoreFoundry.Api -- seed`) that creates:
+  - `demo@corefoundry.dev` (Owner) and `dev@corefoundry.dev` (Developer), password `corefoundry-demo`
+  - ~~project **Bookshop** with `authors` and `books` applied and ~50 rows~~ **Built:** project **Demo shop** from
+    the E-commerce template (M7): 8 tables applied, with its 68 sample rows (`Application/Demo/DemoSeeder.cs`)
   - one pending draft change (rename + add + drop) so the Review plan screen isn't empty
-- [ ] Live demo resets the seed nightly (cron job or a scheduled container)
+- ~~Live demo resets the seed nightly (cron job or a scheduled container)~~ cut: no deploy (user's choice, 2026-10-04)
 
 ## 3. README (the most-read file in the repo)
 
