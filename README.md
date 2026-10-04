@@ -105,6 +105,16 @@ refresh cookie and CORS behave like the single-origin production setup.
 
 Open http://localhost:3100 (port 3000 is avoided: it is often taken by other local services).
 
+### Demo data (optional)
+```bash
+dotnet run --project src/CoreFoundry.Api --launch-profile http -- seed     # locally
+docker compose exec api dotnet CoreFoundry.Api.dll seed                    # in Docker, while it runs
+```
+Adds `demo@corefoundry.dev` (Owner) and `dev@corefoundry.dev` (Developer), both with the password
+`corefoundry-demo`, and a **Demo shop** project: the E-commerce template applied, with its sample rows, and one
+pending change (a rename, a new column and a dropped one) waiting in Plan & apply. Runs once: if the demo account
+exists, it does nothing. For local use only: the password is public.
+
 **Where things are.** Sign in or register, then **Projects** (a card per project; create one, or retry a failed
 database). Inside a project, the menu on the left (a strip on phones) has:
 
