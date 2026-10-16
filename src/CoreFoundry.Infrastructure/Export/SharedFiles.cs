@@ -8,15 +8,15 @@ internal static class SharedFiles
     /// <summary>Package versions of the generated project: the same ones CoreFoundry itself is built and tested with.</summary>
     public static readonly IReadOnlyDictionary<string, string> Packages = new SortedDictionary<string, string>(StringComparer.Ordinal)
     {
-        ["Microsoft.AspNetCore.Authentication.JwtBearer"] = "10.0.12",
-        ["Microsoft.AspNetCore.OpenApi"] = "10.0.12",
-        ["Microsoft.EntityFrameworkCore.Design"] = "10.0.12",
-        ["Microsoft.Extensions.DependencyInjection.Abstractions"] = "10.0.12",
+        ["Microsoft.AspNetCore.Authentication.JwtBearer"] = "10.0.13",
+        ["Microsoft.AspNetCore.OpenApi"] = "10.0.13",
+        ["Microsoft.EntityFrameworkCore.Design"] = "10.0.13",
+        ["Microsoft.Extensions.DependencyInjection.Abstractions"] = "10.0.13",
         ["MySql.EntityFrameworkCore"] = "10.0.9",
         ["Swashbuckle.AspNetCore.SwaggerUI"] = "10.2.3",
     };
 
-    public const string DotnetEfVersion = "10.0.12";
+    public const string DotnetEfVersion = "10.0.13";
 
     public static IEnumerable<GeneratedFile> For(ExportModel model)
     {

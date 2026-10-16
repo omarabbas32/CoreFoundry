@@ -14,7 +14,7 @@ namespace CoreFoundry.Infrastructure.Export;
 /// </summary>
 internal static class EfMigrationWriter
 {
-    public const string ProductVersion = "10.0.12";
+    public const string ProductVersion = "10.0.13";
 
     public static IEnumerable<GeneratedFile> For(ExportModel model)
     {
